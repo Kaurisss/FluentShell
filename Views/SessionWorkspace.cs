@@ -26,6 +26,7 @@ public sealed class SessionWorkspace : UserControl
     private readonly IntPtr _windowHandle;
     private readonly Func<HostFingerprintRequiredEventArgs, Task<bool>> _fingerprintConfirmation;
     private readonly Func<Task<string?>> _passwordProvider;
+    private readonly ElementTheme _workspaceTheme;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
     private readonly List<string> _history = [];
     private readonly DispatcherQueue _dispatcherQueue;
@@ -36,6 +37,8 @@ public sealed class SessionWorkspace : UserControl
     private readonly TextBlock _connectionState = new();
     private readonly Button _reconnectButton = new();
     private readonly TextBox _sftpPathBox = new();
+    private readonly ProgressRing _directoryProgress = new();
+    private readonly TextBlock _directoryStatus = new();
     private readonly TableView _remoteTable = new();
     private readonly TextBlock _sftpSelectionStatus = new();
     private readonly AppBarButton _downloadButton = new();
@@ -59,13 +62,16 @@ public sealed class SessionWorkspace : UserControl
     private CancellationTokenSource? _metricsCts;
     private CancellationTokenSource? _transferCts;
     private bool _isConnecting;
+    private bool _isDirectoryLoading;
 
-    public SessionWorkspace(ServerProfile profile, IntPtr windowHandle, Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation, Func<Task<string?>> passwordProvider)
+    public SessionWorkspace(ServerProfile profile, IntPtr windowHandle, Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation, Func<Task<string?>> passwordProvider, ElementTheme workspaceTheme)
     {
         _profile = profile;
         _windowHandle = windowHandle;
         _fingerprintConfirmation = fingerprintConfirmation;
         _passwordProvider = passwordProvider;
+        _workspaceTheme = workspaceTheme == ElementTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        RequestedTheme = _workspaceTheme;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _showHiddenFiles = profile.ShowHiddenFiles;
         Content = BuildLayout();
@@ -77,6 +83,14 @@ public sealed class SessionWorkspace : UserControl
     public bool IsTransferActive => _transferCts is not null;
     public event EventHandler<ServerMetrics?>? MetricsUpdated;
     public event EventHandler<string>? StatusChanged;
+
+    private Brush ThemeBrush(string key)
+    {
+        var themeKey = _workspaceTheme == ElementTheme.Dark ? "Dark" : "Light";
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictionary) && dictionary is ResourceDictionary themeDictionary && themeDictionary.ContainsKey(key))
+            return (Brush)themeDictionary[key];
+        return (Brush)Application.Current.Resources[key];
+    }
 
     public void SetActive(bool active)
     {
@@ -95,7 +109,7 @@ public sealed class SessionWorkspace : UserControl
     private UIElement BuildLayout()
     {
         var root = _workspaceGrid;
-        root.Background = (Brush)Application.Current.Resources["PanelSurfaceBrush"];
+        root.Background = ThemeBrush("PanelSurfaceBrush");
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(65, GridUnitType.Star), MinHeight = 180 });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(35, GridUnitType.Star), MinHeight = 120 });
@@ -105,7 +119,7 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetRow(terminalGrid, 0);
         root.Children.Add(terminalGrid);
 
-        var splitter = new Thumb { Background = (Brush)Application.Current.Resources["SubtleStrokeBrush"], Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var splitter = new Thumb { Background = ThemeBrush("SubtleStrokeBrush"), Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch };
         splitter.DragDelta += Splitter_DragDelta;
         splitter.DoubleTapped += (_, _) => ToggleSftp();
         Grid.SetRow(splitter, 1);
@@ -115,7 +129,7 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetRow(sftpPanel, 2);
         root.Children.Add(sftpPanel);
 
-        var restoreRow = new Grid { Padding = new Thickness(12, 4, 12, 4), Background = (Brush)Application.Current.Resources["PanelSurfaceBrush"] };
+        var restoreRow = new Grid { Padding = new Thickness(12, 4, 12, 4), Background = ThemeBrush("PanelSurfaceBrush") };
         _sftpRestoreButton.Content = "显示 SFTP 文件管理器";
         _sftpRestoreButton.Click += (_, _) => ToggleSftp();
         _sftpRestoreButton.Visibility = Visibility.Collapsed;
@@ -139,7 +153,7 @@ public sealed class SessionWorkspace : UserControl
 
         var statePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 4, 4, 0) };
         _connectionState.Text = "未连接";
-        _connectionState.Foreground = (Brush)Application.Current.Resources["MutedTextBrush"];
+        _connectionState.Foreground = ThemeBrush("MutedTextBrush");
         _connectionState.VerticalAlignment = VerticalAlignment.Center;
         statePanel.Children.Add(_connectionState);
         _reconnectButton.Content = "重新连接";
@@ -150,7 +164,7 @@ public sealed class SessionWorkspace : UserControl
         Canvas.SetZIndex(statePanel, 1);
         grid.Children.Add(statePanel);
 
-        var composerBorder = new Border { Background = (Brush)Application.Current.Resources["PageSurfaceBrush"], BorderBrush = (Brush)Application.Current.Resources["SubtleStrokeBrush"], BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Padding = new Thickness(8, 4, 8, 4) };
+        var composerBorder = new Border { Background = ThemeBrush("PageSurfaceBrush"), BorderBrush = ThemeBrush("SubtleStrokeBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Padding = new Thickness(8, 4, 8, 4) };
         var composerGrid = new Grid { ColumnSpacing = 6 };
         composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         for (var i = 0; i < 5; i++) composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -304,7 +318,7 @@ public sealed class SessionWorkspace : UserControl
         headingText.Children.Add(new TextBlock { Text = "SFTP 文件管理器", FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         _sftpSelectionStatus.Text = "0 项";
         _sftpSelectionStatus.FontSize = 12;
-        _sftpSelectionStatus.Foreground = (Brush)Application.Current.Resources["MutedTextBrush"];
+        _sftpSelectionStatus.Foreground = ThemeBrush("MutedTextBrush");
         _sftpSelectionStatus.VerticalAlignment = VerticalAlignment.Center;
         headingText.Children.Add(_sftpSelectionStatus);
         heading.Children.Add(headingText);
@@ -350,6 +364,7 @@ public sealed class SessionWorkspace : UserControl
 
         var pathBar = new Grid();
         pathBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        pathBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _sftpPathBox.Text = "/";
         _sftpPathBox.PlaceholderText = "远程路径";
         _sftpPathBox.FontFamily = new FontFamily("Cascadia Mono");
@@ -357,6 +372,25 @@ public sealed class SessionWorkspace : UserControl
         _sftpPathBox.IsSpellCheckEnabled = false;
         _sftpPathBox.KeyDown += SftpPathBox_KeyDown;
         pathBar.Children.Add(_sftpPathBox);
+        var directoryStatusPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(10, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _directoryProgress.Width = 16;
+        _directoryProgress.Height = 16;
+        _directoryProgress.IsActive = false;
+        _directoryProgress.Visibility = Visibility.Collapsed;
+        _directoryStatus.FontSize = 12;
+        _directoryStatus.Foreground = ThemeBrush("MutedTextBrush");
+        _directoryStatus.MaxWidth = 220;
+        _directoryStatus.TextTrimming = TextTrimming.CharacterEllipsis;
+        directoryStatusPanel.Children.Add(_directoryProgress);
+        directoryStatusPanel.Children.Add(_directoryStatus);
+        Grid.SetColumn(directoryStatusPanel, 1);
+        pathBar.Children.Add(directoryStatusPanel);
         Grid.SetRow(pathBar, 1);
         panel.Children.Add(pathBar);
 
@@ -366,7 +400,7 @@ public sealed class SessionWorkspace : UserControl
 
         _transferStatus.Text = "暂无文件传输";
         _transferStatus.FontSize = 12;
-        _transferStatus.Foreground = (Brush)Application.Current.Resources["MutedTextBrush"];
+        _transferStatus.Foreground = ThemeBrush("MutedTextBrush");
         _transferStatus.TextTrimming = TextTrimming.CharacterEllipsis;
         _transferProgress.Visibility = Visibility.Collapsed;
         _transferProgress.IsIndeterminate = true;
@@ -404,14 +438,17 @@ public sealed class SessionWorkspace : UserControl
         _remoteTable.CanReorderColumns = true;
         _remoteTable.GridLinesVisibility = TableViewGridLinesVisibility.Horizontal;
         _remoteTable.HeaderGridLinesVisibility = TableViewGridLinesVisibility.Horizontal;
-        _remoteTable.HorizontalGridLinesStroke = (Brush)Application.Current.Resources["SubtleStrokeBrush"];
+        _remoteTable.HorizontalGridLinesStroke = ThemeBrush("SubtleStrokeBrush");
         _remoteTable.HeaderRowHeight = 36;
         _remoteTable.RowHeight = 36;
         _remoteTable.FontSize = 13;
         _remoteTable.RowDoubleTapped += RemoteTable_RowDoubleTapped;
+        _remoteTable.CellDoubleTapped += RemoteTable_CellDoubleTapped;
         _remoteTable.RowContextFlyoutOpening += (_, args) => _remoteTable.SelectedItem = args.Item;
         _remoteTable.SelectionChanged += RemoteTable_SelectionChanged;
-        _remoteTable.KeyDown += RemoteTable_KeyDown;
+        // TableView handles Enter for its own navigation first. Listen to handled key events
+        // as well so Enter can open the selected directory in the workspace.
+        _remoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
         _remoteTable.RowContextFlyout = BuildRemoteRowMenu();
 
         var iconStyle = new Style(typeof(TextBlock));
@@ -660,7 +697,18 @@ public sealed class SessionWorkspace : UserControl
 
     private async void RemoteTable_RowDoubleTapped(object? sender, TableViewRowDoubleTappedEventArgs e)
     {
-        if (e.Item is RemoteFileItem { IsDirectory: true } item) await NavigateToAsync(item.FullPath);
+        await OpenDirectoryAsync(e.Item as RemoteFileItem);
+    }
+
+    private async void RemoteTable_CellDoubleTapped(object? sender, TableViewCellDoubleTappedEventArgs e)
+    {
+        await OpenDirectoryAsync(e.Item as RemoteFileItem);
+    }
+
+    private async Task OpenDirectoryAsync(RemoteFileItem? item)
+    {
+        if (item is not { IsDirectory: true } || _isDirectoryLoading) return;
+        await NavigateToAsync(item.FullPath);
     }
 
     private async void RemoteTable_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -709,14 +757,30 @@ public sealed class SessionWorkspace : UserControl
         ToolTipService.SetToolTip(_sftpSelectionStatus, item?.FullPath);
     }
 
+    private void SetDirectoryLoading(bool isLoading, string? status = null)
+    {
+        _isDirectoryLoading = isLoading;
+        _directoryProgress.IsActive = isLoading;
+        _directoryProgress.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+        _directoryStatus.Text = status ?? (isLoading ? "正在读取目录…" : string.Empty);
+        if (isLoading) ToolTipService.SetToolTip(_directoryStatus, null);
+        _sftpPathBox.IsEnabled = !isLoading;
+        _remoteTable.IsEnabled = !isLoading;
+        _sftpToolbar.IsEnabled = !isLoading;
+    }
+
     private async Task<bool> RefreshRemoteFilesAsync() => await RefreshRemoteFilesAsync(_activeService);
 
     private async Task<bool> RefreshRemoteFilesAsync(SshConnectionService? service)
     {
-        if (service?.SftpClient is null || !service.SftpClient.IsConnected) return false;
+        if (service?.SftpClient is null || !service.SftpClient.IsConnected || _isDirectoryLoading) return false;
+        var path = _currentPath;
+        SetDirectoryLoading(true, $"正在读取 {path}…");
+        var succeeded = false;
         try
         {
-            var items = await Task.Run(() => service.SftpClient.ListDirectory(_currentPath)
+            // Keep the existing rows on screen until the remote request completes.
+            var items = await Task.Run(() => service.SftpClient.ListDirectory(path)
                 .Where(item => item.Name is not "." and not ".." && (_showHiddenFiles || !item.Name.StartsWith('.')))
                 .OrderByDescending(item => item.IsDirectory).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(item => new RemoteFileItem
@@ -730,9 +794,9 @@ public sealed class SessionWorkspace : UserControl
                     ModifiedAt = item.LastWriteTime.ToLocalTime(),
                     ModifiedLabel = item.LastWriteTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                 }).ToList());
-            if (_currentPath != "/")
+            if (path != "/")
             {
-                var parent = ParentRemotePath(_currentPath);
+                var parent = ParentRemotePath(path);
                 items.Insert(0, new RemoteFileItem
                 {
                     Name = "..",
@@ -747,19 +811,27 @@ public sealed class SessionWorkspace : UserControl
             _remoteTable.DeselectAll();
             _remoteFiles.Clear();
             foreach (var item in items) _remoteFiles.Add(item);
-            _sftpPathBox.Text = _currentPath;
+            _sftpPathBox.Text = path;
             UpdateSftpSelectionState();
+            succeeded = true;
             return true;
         }
         catch (Exception ex)
         {
+            SetDirectoryLoading(false, "读取失败");
+            ToolTipService.SetToolTip(_directoryStatus, ex.Message);
             _transferStatus.Text = $"读取目录失败：{ex.Message}";
             return false;
+        }
+        finally
+        {
+            if (succeeded) SetDirectoryLoading(false);
         }
     }
 
     private async Task NavigateToAsync(string path)
     {
+        if (_isDirectoryLoading) return;
         var previous = _currentPath;
         _currentPath = NormalizeRemotePath(path);
         if (!await RefreshRemoteFilesAsync())
@@ -771,9 +843,14 @@ public sealed class SessionWorkspace : UserControl
 
     private async Task NavigateUpAsync()
     {
-        if (_currentPath == "/") return;
+        if (_isDirectoryLoading || _currentPath == "/") return;
+        var previous = _currentPath;
         _currentPath = ParentRemotePath(_currentPath);
-        await RefreshRemoteFilesAsync();
+        if (!await RefreshRemoteFilesAsync())
+        {
+            _currentPath = previous;
+            _sftpPathBox.Text = previous;
+        }
     }
 
     private string ParentRemotePath(string path)

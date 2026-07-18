@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<Guid, SessionWorkspace> _sessions = [];
     private readonly HashSet<Guid> _connectingServers = [];
     private readonly Dictionary<Guid, string> _sessionSecrets = [];
+    private readonly Dictionary<Guid, bool> _credentialPersistenceOverrides = [];
     private readonly IntPtr _windowHandle;
     private readonly AppWindow _appWindow;
     private readonly DispatcherQueue _dispatcherQueue;
@@ -32,6 +33,7 @@ public sealed partial class MainWindow : Window
     private string _lastResult = "准备就绪";
     private AppSettings _settings = new();
     private bool _loadingSettings;
+    private int _activeConnectionAttempts;
 
     public MainWindow()
     {
@@ -46,7 +48,7 @@ public sealed partial class MainWindow : Window
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
-        _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         SetTitleBar(AppTitleBar);
         Activated += (_, _) => _ = LoadAsync();
     }
@@ -276,6 +278,24 @@ public sealed partial class MainWindow : Window
         if ((sender as Button)?.Tag is ServerProfile profile) _ = ConnectToServerAsync(profile);
     }
 
+    private void SetConnectionProgress(bool isActive, string? message = null)
+    {
+        _activeConnectionAttempts = isActive
+            ? _activeConnectionAttempts + 1
+            : Math.Max(0, _activeConnectionAttempts - 1);
+        var hasActiveConnection = _activeConnectionAttempts > 0;
+        ConnectionProgressPanel.Visibility = hasActiveConnection ? Visibility.Visible : Visibility.Collapsed;
+        ConnectionProgressRing.IsActive = hasActiveConnection;
+        if (hasActiveConnection && !string.IsNullOrWhiteSpace(message)) ConnectionProgressText.Text = message;
+
+        // Keep the current server list visible while preventing duplicate or conflicting actions.
+        ServersListView.IsEnabled = !hasActiveConnection;
+        ServerSearchBox.IsEnabled = !hasActiveConnection;
+        ServerSortComboBox.IsEnabled = !hasActiveConnection;
+        RefreshServersButton.IsEnabled = !hasActiveConnection;
+        AddServerPageButton.IsEnabled = !hasActiveConnection;
+    }
+
     private void ServerEditButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is ServerProfile profile) _ = ShowServerDialogAsync(profile);
@@ -314,16 +334,61 @@ public sealed partial class MainWindow : Window
 
     private async Task ShowServerDialogAsync(ServerProfile? editing)
     {
+        var originalUsername = editing?.Username;
+        var originalAuthentication = editing?.Authentication;
+        var hasSavedCredential = editing is not null && _credentialService.TryGet(editing) is not null;
         var name = new TextBox { Header = "显示名称", Text = editing?.Name ?? string.Empty, PlaceholderText = "例如：生产服务器" };
         var host = new TextBox { Header = "主机地址", Text = editing?.Host ?? string.Empty, PlaceholderText = "example.com 或 IP 地址" };
         var port = new NumberBox { Header = "端口", Value = editing?.Port ?? 22, Minimum = 1, Maximum = 65535, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline };
         var user = new TextBox { Header = "用户名", Text = editing?.Username ?? string.Empty };
         var auth = new ComboBox { Header = "认证方式", SelectedIndex = editing?.Authentication == AuthenticationMethod.PrivateKey ? 1 : 0 };
         auth.Items.Add(new ComboBoxItem { Content = "密码" }); auth.Items.Add(new ComboBoxItem { Content = "私钥" });
-        var keyPath = new TextBox { Header = "私钥文件路径", Text = editing?.PrivateKeyPath ?? string.Empty, PlaceholderText = "仅私钥认证需要" };
+        var secret = new PasswordBox { PasswordRevealMode = PasswordRevealMode.Peek };
+        var rememberCredential = new CheckBox { Content = "保存凭据到 Windows 凭据管理器", IsChecked = hasSavedCredential || _settings.RememberCredentials };
+        var credentialInfo = new TextBlock
+        {
+            Text = "凭据不会写入服务器配置文件。留空会保留已有凭据；取消勾选会删除这台服务器已保存的凭据。",
+            FontSize = 12,
+            Foreground = (Brush)Application.Current.Resources["MutedTextBrush"],
+            TextWrapping = TextWrapping.Wrap
+        };
+        var keyPath = new TextBox { Header = "私钥文件", Text = editing?.PrivateKeyPath ?? string.Empty, PlaceholderText = "选择 OpenSSH 私钥文件", IsReadOnly = true };
+        var chooseKeyButton = new Button { Content = "选择文件", MinHeight = 40, VerticalAlignment = VerticalAlignment.Bottom };
+        chooseKeyButton.Click += async (_, _) =>
+        {
+            var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+            picker.FileTypeFilter.Add("*");
+            InitializeWithWindow.Initialize(picker, _windowHandle);
+            var file = await picker.PickSingleFileAsync();
+            if (file is not null) keyPath.Text = file.Path;
+        };
+        var keyPickerRow = new Grid { ColumnSpacing = 8 };
+        keyPickerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        keyPickerRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        keyPickerRow.Children.Add(keyPath);
+        Grid.SetColumn(chooseKeyButton, 1);
+        keyPickerRow.Children.Add(chooseKeyButton);
+
+        void UpdateAuthenticationFields()
+        {
+            var usesPrivateKey = auth.SelectedIndex == 1;
+            var selectedAuthentication = usesPrivateKey ? AuthenticationMethod.PrivateKey : AuthenticationMethod.Password;
+            var canPreserveSavedCredential = hasSavedCredential &&
+                originalAuthentication == selectedAuthentication &&
+                string.Equals(originalUsername, user.Text.Trim(), StringComparison.Ordinal);
+            keyPickerRow.Visibility = usesPrivateKey ? Visibility.Visible : Visibility.Collapsed;
+            secret.Header = usesPrivateKey ? "私钥口令（可选）" : "密码";
+            secret.PlaceholderText = canPreserveSavedCredential
+                ? "已保存；留空保持不变"
+                : usesPrivateKey ? "私钥没有口令时可留空" : "输入登录密码";
+        }
+
+        auth.SelectionChanged += (_, _) => UpdateAuthenticationFields();
+        user.TextChanged += (_, _) => UpdateAuthenticationFields();
+        UpdateAuthenticationFields();
         var notes = new TextBox { Header = "备注", Text = editing?.Notes ?? string.Empty, PlaceholderText = "可选", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap };
         var form = new StackPanel { Spacing = 12, MaxWidth = 560 };
-        foreach (var child in new Control[] { name, host, port, user, auth, keyPath, notes }) form.Children.Add(child);
+        foreach (var child in new UIElement[] { name, host, port, user, auth, keyPickerRow, secret, rememberCredential, credentialInfo, notes }) form.Children.Add(child);
         var dialog = new ContentDialog { Title = editing is null ? "添加服务器" : "编辑服务器", Content = new ScrollViewer { Content = form, MaxHeight = 620 }, PrimaryButtonText = editing is null ? "保存" : "保存修改", SecondaryButtonText = "保存并连接", CloseButtonText = "取消", XamlRoot = Content.XamlRoot };
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.None) return;
@@ -332,14 +397,41 @@ public sealed partial class MainWindow : Window
             await ShowMessageAsync("信息不完整", "显示名称、主机地址和用户名不能为空。");
             return;
         }
+        if (auth.SelectedIndex == 1 && string.IsNullOrWhiteSpace(keyPath.Text))
+        {
+            await ShowMessageAsync("请选择私钥", "私钥认证需要选择一个本机私钥文件。");
+            return;
+        }
+        var enteredSecret = secret.Password;
+        var shouldSaveCredential = rememberCredential.IsChecked == true;
+        var newUsername = user.Text.Trim();
+        var selectedAuthentication = auth.SelectedIndex == 1 ? AuthenticationMethod.PrivateKey : AuthenticationMethod.Password;
+        if (editing is not null &&
+            (!string.Equals(originalUsername, newUsername, StringComparison.Ordinal) || originalAuthentication != selectedAuthentication))
+        {
+            _credentialService.Remove(editing);
+        }
         var profile = editing ?? new ServerProfile();
-        profile.Name = name.Text.Trim(); profile.Host = host.Text.Trim(); profile.Port = (int)(port.Value is double value && !double.IsNaN(value) ? value : 22); profile.Username = user.Text.Trim();
-        profile.Authentication = auth.SelectedIndex == 1 ? AuthenticationMethod.PrivateKey : AuthenticationMethod.Password;
+        profile.Name = name.Text.Trim(); profile.Host = host.Text.Trim(); profile.Port = (int)(port.Value is double value && !double.IsNaN(value) ? value : 22); profile.Username = newUsername;
+        profile.Authentication = selectedAuthentication;
         profile.PrivateKeyPath = keyPath.Text.Trim(); profile.Notes = notes.Text.Trim();
         if (editing is null) _servers.Add(profile);
+        if (shouldSaveCredential)
+        {
+            if (!string.IsNullOrEmpty(enteredSecret)) _credentialService.Save(profile, enteredSecret);
+        }
+        else
+        {
+            _credentialService.Remove(profile);
+        }
         await _profileStore.SaveAsync(_servers);
         RefreshServerList(); UpdateOverview();
-        if (result == ContentDialogResult.Secondary) _ = ConnectToServerAsync(profile);
+        if (result == ContentDialogResult.Secondary)
+        {
+            _credentialPersistenceOverrides[profile.Id] = shouldSaveCredential;
+            if (!string.IsNullOrEmpty(enteredSecret)) _sessionSecrets[profile.Id] = enteredSecret;
+            _ = ConnectToServerAsync(profile);
+        }
     }
 
     private async Task ConnectToServerAsync(ServerProfile profile)
@@ -354,15 +446,21 @@ public sealed partial class MainWindow : Window
 
         if (!_connectingServers.Add(profile.Id)) return;
 
-        var workspace = new SessionWorkspace(profile, _windowHandle, ConfirmFingerprintAsync, () => PromptSecretAsync(profile));
+        var workspace = new SessionWorkspace(profile, _windowHandle, ConfirmFingerprintAsync, () => PromptSecretAsync(profile), RootGrid.ActualTheme);
         workspace.SetTerminalFontSize(_settings.TerminalFontSize);
         workspace.StatusChanged += Session_StatusChanged;
         workspace.MetricsUpdated += Session_MetricsUpdated;
+        SetConnectionProgress(true, $"正在连接 {profile.Name}…");
         try { await workspace.ConnectAsync(); }
-        finally { _connectingServers.Remove(profile.Id); }
+        finally
+        {
+            _connectingServers.Remove(profile.Id);
+            SetConnectionProgress(false);
+        }
         if (!workspace.IsConnected)
         {
             _sessionSecrets.Remove(profile.Id);
+            _credentialPersistenceOverrides.Remove(profile.Id);
             workspace.StatusChanged -= Session_StatusChanged;
             workspace.MetricsUpdated -= Session_MetricsUpdated;
             await workspace.DisposeAsync();
@@ -376,7 +474,11 @@ public sealed partial class MainWindow : Window
         SessionContentPresenter.Content = workspace;
         ShowConnectedLayout();
         profile.LastConnectedAt = DateTimeOffset.Now;
-        if (_settings.RememberCredentials && _sessionSecrets.TryGetValue(profile.Id, out var secret)) _credentialService.Save(profile, secret);
+        var shouldPersistCredential = _credentialPersistenceOverrides.Remove(profile.Id, out var persistenceOverride)
+            ? persistenceOverride
+            : _settings.RememberCredentials;
+        if (shouldPersistCredential && _sessionSecrets.TryGetValue(profile.Id, out var secret)) _credentialService.Save(profile, secret);
+        else if (!shouldPersistCredential) _credentialService.Remove(profile);
         _sessionSecrets.Remove(profile.Id);
         await _profileStore.SaveAsync(_servers);
         UpdateOverview();
@@ -470,7 +572,8 @@ public sealed partial class MainWindow : Window
 
     private async Task<string?> PromptSecretAsync(ServerProfile profile)
     {
-        if (_settings.RememberCredentials && _credentialService.TryGet(profile) is string saved)
+        if (_sessionSecrets.TryGetValue(profile.Id, out var provided)) return provided;
+        if (_credentialService.TryGet(profile) is string saved)
         {
             _sessionSecrets[profile.Id] = saved;
             return saved;

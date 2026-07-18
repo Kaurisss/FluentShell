@@ -10,11 +10,11 @@
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="40" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="AppTitleBar" Height="48" Background="Transparent">
+        <Grid x:Name="AppTitleBar" Height="40" Background="Transparent">
             <Button
                 x:Name="PaneToggleButton"
                 Width="40"
@@ -29,23 +29,23 @@
                 Click="PaneToggleButton_Click"
                 ToolTipService.ToolTip="收起侧栏">
                 <Grid Width="20" Height="20">
-                    <!-- Paths from Microsoft Fluent UI System Icons (MIT). -->
+                    <!-- Both states share the Panel Left Contract 20px frame so the toggle does not jump in height or corner radius. -->
                     <PathIcon
                         x:Name="ExpandPaneIcon"
                         Width="20"
                         Height="20"
                         Visibility="Collapsed"
-                        Data="M2 6C2 4.34315 3.34315 3 5 3H15C16.6569 3 18 4.34315 18 6V13C18 14.6569 16.6569 16 15 16H5C3.34315 16 2 14.6569 2 13V6ZM8.5 4V15H15C16.1046 15 17 14.1046 17 13V6C17 4.89543 16.1046 4 15 4H8.5ZM7.5 4H5C3.89543 4 3 4.89543 3 6V13C3 14.1046 3.89543 15 5 15H7.5V4Z" />
+                        Data="M4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7V15H4C3.44772 15 3 14.5523 3 14V6ZM8 15V5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
                     <PathIcon
                         x:Name="CollapsePaneIcon"
                         Width="20"
                         Height="20"
-                        Data="M6.82097 10.5L7.81949 11.3737C8.0273 11.5556 8.04836 11.8714 7.86652 12.0793C7.68468 12.2871 7.3688 12.3081 7.16098 12.1263L5.16098 10.3763C5.05247 10.2814 4.99023 10.1442 4.99023 10C4.99023 9.85583 5.05247 9.71866 5.16098 9.62372L7.16098 7.87372C7.3688 7.69188 7.68468 7.71294 7.86652 7.92075C8.04836 8.12857 8.0273 8.44445 7.81949 8.62629L6.82095 9.50001L10.5 9.50001C10.7761 9.50001 11 9.72387 11 10C11 10.2762 10.7761 10.5 10.5 10.5L6.82097 10.5ZM18 14C18 15.1046 17.1046 16 16 16L4 16C2.89543 16 2 15.1046 2 14V6C2 4.89543 2.89543 4 4 4H16C17.1046 4 18 4.89543 18 6V14ZM16 15C16.5523 15 17 14.5523 17 14V6C17 5.44772 16.5523 5 16 5L13 5V15H16ZM12 15V5L4 5C3.44772 5 3 5.44771 3 6V14C3 14.5523 3.44772 15 4 15L12 15Z" />
+                        Data="M10.8211 10.5H14.5C14.7761 10.5 15 10.2761 15 10C15 9.72386 14.7761 9.5 14.5 9.5H10.8211L11.8196 8.6263C12.0274 8.44445 12.0485 8.12857 11.8666 7.92075C11.6848 7.71294 11.3689 7.69188 11.1611 7.87372L9.1611 9.62372C9.0526 9.71866 8.99036 9.85583 8.99036 10C8.99036 10.1442 9.0526 10.2814 9.1611 10.3763L11.1611 12.1263C11.3689 12.3081 11.6848 12.2871 11.8666 12.0793C12.0485 11.8714 12.0274 11.5556 11.8196 11.3737L10.8211 10.5ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7L7 15H4C3.44772 15 3 14.5523 3 14V6ZM8 15L8 5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
                 </Grid>
             </Button>
             <TabView
                 x:Name="SessionTabs"
-                Margin="60,0,140,0"
+                Margin="60,0,300,0"
                 Visibility="Collapsed"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"
@@ -55,6 +55,17 @@
                 TabCloseRequested="SessionTabs_TabCloseRequested"
                 SelectionChanged="SessionTabs_SelectionChanged"
                 TabWidthMode="SizeToContent" />
+            <StackPanel
+                x:Name="ConnectionProgressPanel"
+                Margin="0,0,150,0"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center"
+                Visibility="Collapsed">
+                <ProgressRing x:Name="ConnectionProgressRing" Width="18" Height="18" IsActive="False" />
+                <TextBlock x:Name="ConnectionProgressText" Text="连接中…" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" />
+            </StackPanel>
         </Grid>
 
         <NavigationView
@@ -216,8 +227,8 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBox x:Name="ServerSearchBox" PlaceholderText="搜索名称、主机或用户名" TextChanged="ServerSearchBox_TextChanged" />
                                 <ComboBox x:Name="ServerSortComboBox" Grid.Column="1" SelectedIndex="0" SelectionChanged="ServerSortComboBox_SelectionChanged"><ComboBoxItem Content="按名称排序" /><ComboBoxItem Content="按最近连接" /></ComboBox>
-                                <Button Grid.Column="2" Content="刷新" Click="RefreshServersButton_Click" />
-                                <Button Grid.Column="3" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AccentButtonStyle}" />
+                                <Button x:Name="RefreshServersButton" Grid.Column="2" Content="刷新" Click="RefreshServersButton_Click" />
+                                <Button x:Name="AddServerPageButton" Grid.Column="3" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AccentButtonStyle}" />
                             </Grid>
                             <Grid Grid.Row="1" Padding="14,8" ColumnSpacing="14">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
@@ -233,7 +244,7 @@
                                             <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Notes}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" /></StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Address}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="2" Text="{Binding Username}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"><Button Content="连接" Tag="{Binding}" Click="ServerConnectButton_Click" /><Button Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerCopyButton_Click" ToolTipService.ToolTip="复制" /><Button Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerEditButton_Click" ToolTipService.ToolTip="编辑" /><Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerDeleteButton_Click" ToolTipService.ToolTip="删除" /></StackPanel>
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"><Button Content="&#xE71B;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" Tag="{Binding}" Click="ServerConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" /><Button Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerCopyButton_Click" ToolTipService.ToolTip="复制" /><Button Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerEditButton_Click" ToolTipService.ToolTip="编辑" /><Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerDeleteButton_Click" ToolTipService.ToolTip="删除" /></StackPanel>
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
