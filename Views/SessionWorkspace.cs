@@ -109,7 +109,8 @@ public sealed class SessionWorkspace : UserControl
     private UIElement BuildLayout()
     {
         var root = _workspaceGrid;
-        root.Background = ThemeBrush("PanelSurfaceBrush");
+        // The window backdrop should remain visible around the terminal and SFTP surfaces.
+        root.Background = null;
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(65, GridUnitType.Star), MinHeight = 180 });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(35, GridUnitType.Star), MinHeight = 120 });
@@ -129,7 +130,7 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetRow(sftpPanel, 2);
         root.Children.Add(sftpPanel);
 
-        var restoreRow = new Grid { Padding = new Thickness(12, 4, 12, 4), Background = ThemeBrush("PanelSurfaceBrush") };
+        var restoreRow = new Grid { Padding = new Thickness(12, 4, 12, 4) };
         _sftpRestoreButton.Content = "显示 SFTP 文件管理器";
         _sftpRestoreButton.Click += (_, _) => ToggleSftp();
         _sftpRestoreButton.Visibility = Visibility.Collapsed;
@@ -178,21 +179,41 @@ public sealed class SessionWorkspace : UserControl
         _secureComposer.Visibility = Visibility.Collapsed;
         _secureComposer.KeyDown += SecureComposer_KeyDown;
         composerGrid.Children.Add(_secureComposer);
-        var secureToggle = new ToggleButton { Content = "隐藏输入" };
+        var secureToggle = new ToggleButton
+        {
+            Content = CreateCommandIcon(Symbol.HideBcc),
+            Style = (Style)Application.Current.Resources["TitleBarSessionTabStyle"],
+            Width = 40,
+            Height = 40,
+            MinWidth = 40,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center
+        };
+        ToolTipService.SetToolTip(secureToggle, "隐藏输入");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(secureToggle, "隐藏输入");
         Grid.SetColumn(secureToggle, 1);
         composerGrid.Children.Add(secureToggle);
-        var pasteButton = new Button { Content = "粘贴" };
+        var pasteButton = CreateCommandButton(Symbol.Paste, "粘贴");
         Grid.SetColumn(pasteButton, 2);
         composerGrid.Children.Add(pasteButton);
-        var historyButton = new Button { Content = "历史" };
+        var historyButton = CreateCommandButton(Symbol.Clock, "本次会话历史");
         historyButton.Click += HistoryButton_Click;
         Grid.SetColumn(historyButton, 3);
         composerGrid.Children.Add(historyButton);
-        var clearButton = new Button { Content = "清空" };
+        var clearButton = CreateCommandButton(Symbol.Clear, "清空输入");
         clearButton.Click += (_, _) => { _composer.Text = string.Empty; _secureComposer.Password = string.Empty; };
         Grid.SetColumn(clearButton, 4);
         composerGrid.Children.Add(clearButton);
-        var sendButton = new Button { Content = "发送", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var sendButton = new Button
+        {
+            Content = CreateCommandIcon(Symbol.Send),
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            Width = 40,
+            Height = 40,
+            Padding = new Thickness(0)
+        };
+        ToolTipService.SetToolTip(sendButton, "发送命令");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(sendButton, "发送命令");
         sendButton.Click += async (_, _) => await SendComposerAsync();
         Grid.SetColumn(sendButton, 5);
         composerGrid.Children.Add(sendButton);
@@ -324,7 +345,7 @@ public sealed class SessionWorkspace : UserControl
         heading.Children.Add(headingText);
 
         _sftpToolbar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        _sftpToolbar.DefaultLabelPosition = CommandBarDefaultLabelPosition.Right;
+        _sftpToolbar.DefaultLabelPosition = CommandBarDefaultLabelPosition.Collapsed;
         _sftpToolbar.IsDynamicOverflowEnabled = true;
         var up = CreateAppBarButton("上一级", Symbol.Up);
         up.Click += async (_, _) => await NavigateUpAsync();
@@ -344,7 +365,9 @@ public sealed class SessionWorkspace : UserControl
         _sftpToolbar.PrimaryCommands.Add(_downloadButton);
         _sftpToolbar.PrimaryCommands.Add(_renameButton);
         _sftpToolbar.PrimaryCommands.Add(_deleteButton);
-        var hidden = new AppBarToggleButton { Label = "显示隐藏文件", Icon = new SymbolIcon { Symbol = Symbol.View }, IsChecked = _showHiddenFiles };
+        var hidden = new AppBarToggleButton { Label = "显示隐藏文件", Icon = CreateCommandIcon(Symbol.View), IsChecked = _showHiddenFiles };
+        ToolTipService.SetToolTip(hidden, "显示隐藏文件");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(hidden, "显示隐藏文件");
         hidden.Click += (_, _) =>
         {
             _showHiddenFiles = hidden.IsChecked == true;
@@ -355,7 +378,7 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetColumn(_sftpToolbar, 1);
         heading.Children.Add(_sftpToolbar);
 
-        var collapse = new Button { Content = "收起", MinHeight = 32 };
+        var collapse = CreateCommandButton(Symbol.ClosePane, "收起 SFTP 文件管理器");
         collapse.Click += (_, _) => ToggleSftp();
         Grid.SetColumn(collapse, 2);
         heading.Children.Add(collapse);
@@ -412,9 +435,13 @@ public sealed class SessionWorkspace : UserControl
         transferRow.Children.Add(_transferStatus);
         Grid.SetColumn(_transferProgress, 1);
         transferRow.Children.Add(_transferProgress);
-        _cancelTransferButton.Content = "取消";
+        _cancelTransferButton.Content = CreateCommandIcon(Symbol.Cancel);
+        _cancelTransferButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
+        _cancelTransferButton.Width = 40;
+        _cancelTransferButton.Height = 40;
+        ToolTipService.SetToolTip(_cancelTransferButton, "取消文件传输");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_cancelTransferButton, "取消文件传输");
         _cancelTransferButton.Visibility = Visibility.Collapsed;
-        _cancelTransferButton.MinHeight = 40;
         _cancelTransferButton.Click += (_, _) => _transferCts?.Cancel();
         Grid.SetColumn(_cancelTransferButton, 2);
         transferRow.Children.Add(_cancelTransferButton);
@@ -532,12 +559,36 @@ public sealed class SessionWorkspace : UserControl
 
     private static Binding CreateOneWayBinding(string propertyName) => new() { Path = new PropertyPath(propertyName), Mode = BindingMode.OneWay };
 
-    private static AppBarButton CreateAppBarButton(string label, Symbol symbol) => new() { Label = label, Icon = new SymbolIcon { Symbol = symbol } };
+    private static SymbolIcon CreateCommandIcon(Symbol symbol) => new() { Symbol = symbol };
+
+    private static Button CreateCommandButton(Symbol symbol, string title)
+    {
+        var button = new Button
+        {
+            Content = CreateCommandIcon(symbol),
+            Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"],
+            Width = 40,
+            Height = 40
+        };
+        ToolTipService.SetToolTip(button, title);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
+        return button;
+    }
+
+    private static AppBarButton CreateAppBarButton(string label, Symbol symbol)
+    {
+        var button = new AppBarButton { Label = label, Icon = CreateCommandIcon(symbol) };
+        ToolTipService.SetToolTip(button, label);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
+        return button;
+    }
 
     private static void ConfigureSelectionCommand(AppBarButton button, string label, Symbol symbol, RoutedEventHandler handler)
     {
         button.Label = label;
-        button.Icon = new SymbolIcon { Symbol = symbol };
+        button.Icon = CreateCommandIcon(symbol);
+        ToolTipService.SetToolTip(button, label);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
         button.IsEnabled = false;
         button.Click += handler;
     }

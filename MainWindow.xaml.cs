@@ -3,6 +3,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using NovaShell.Models;
 using NovaShell.Services;
@@ -22,6 +23,9 @@ public sealed partial class MainWindow : Window
     private readonly CredentialService _credentialService = new();
     private readonly ObservableCollection<ServerProfile> _servers = [];
     private readonly Dictionary<Guid, SessionWorkspace> _sessions = [];
+    private readonly List<SessionWorkspace> _sessionOrder = [];
+    private readonly Dictionary<SessionWorkspace, ToggleButton> _sessionTabButtons = [];
+    private readonly Dictionary<SessionWorkspace, Grid> _sessionTabContainers = [];
     private readonly HashSet<Guid> _connectingServers = [];
     private readonly Dictionary<Guid, string> _sessionSecrets = [];
     private readonly Dictionary<Guid, bool> _credentialPersistenceOverrides = [];
@@ -34,6 +38,8 @@ public sealed partial class MainWindow : Window
     private AppSettings _settings = new();
     private bool _loadingSettings;
     private int _activeConnectionAttempts;
+    private SessionWorkspace? _selectedSession;
+    private bool _updatingSessionSelection;
 
     public MainWindow()
     {
@@ -158,7 +164,7 @@ public sealed partial class MainWindow : Window
         UnconnectedWorkspace.Visibility = Visibility.Collapsed;
         ConnectedWorkspace.Visibility = Visibility.Visible;
         ContentHeader.Visibility = Visibility.Collapsed;
-        SessionTabs.Visibility = Visibility.Visible;
+        SessionTabHost.Visibility = Visibility.Visible;
         OverviewNavItem.Visibility = Visibility.Collapsed;
         ServersNavItem.Visibility = Visibility.Collapsed;
         SettingsNavItem.Visibility = Visibility.Collapsed;
@@ -175,8 +181,9 @@ public sealed partial class MainWindow : Window
         ConnectedWorkspace.Visibility = Visibility.Collapsed;
         UnconnectedWorkspace.Visibility = Visibility.Visible;
         ContentHeader.Visibility = Visibility.Visible;
-        SessionTabs.Visibility = Visibility.Collapsed;
+        SessionTabHost.Visibility = Visibility.Collapsed;
         SessionContentPresenter.Content = null;
+        _selectedSession = null;
         OverviewNavItem.Visibility = Visibility.Visible;
         ServersNavItem.Visibility = Visibility.Visible;
         SettingsNavItem.Visibility = Visibility.Visible;
@@ -206,7 +213,7 @@ public sealed partial class MainWindow : Window
         ConnectedUserText.Text = $"用户：{server.Username}";
     }
 
-    private SessionWorkspace? GetSelectedSession() => (SessionTabs.SelectedItem as TabViewItem)?.Tag as SessionWorkspace;
+    private SessionWorkspace? GetSelectedSession() => _selectedSession;
 
     private void RootNavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
@@ -438,8 +445,7 @@ public sealed partial class MainWindow : Window
     {
         if (_sessions.TryGetValue(profile.Id, out var existing))
         {
-            SessionTabs.SelectedItem = SessionTabs.TabItems.FirstOrDefault(item => ReferenceEquals((item as TabViewItem)?.Tag, existing));
-            SessionContentPresenter.Content = existing;
+            SelectSession(existing);
             ShowConnectedLayout();
             return;
         }
@@ -468,10 +474,8 @@ public sealed partial class MainWindow : Window
         }
 
         _sessions[profile.Id] = workspace;
-        var tab = new TabViewItem { Header = profile.Name, Tag = workspace, IsClosable = true };
-        SessionTabs.TabItems.Add(tab);
-        SessionTabs.SelectedItem = tab;
-        SessionContentPresenter.Content = workspace;
+        AddSessionTab(workspace);
+        SelectSession(workspace);
         ShowConnectedLayout();
         profile.LastConnectedAt = DateTimeOffset.Now;
         var shouldPersistCredential = _credentialPersistenceOverrides.Remove(profile.Id, out var persistenceOverride)
@@ -600,15 +604,75 @@ public sealed partial class MainWindow : Window
         await dialog.ShowAsync();
     }
 
-    private void SessionTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void AddSessionTab(SessionWorkspace session)
     {
-        var session = GetSelectedSession();
-        foreach (var candidate in _sessions.Values) candidate.SetActive(ReferenceEquals(candidate, session));
-        SessionContentPresenter.Content = session;
-        if (session is not null) { session.Profile.LastConnectedAt ??= DateTimeOffset.Now; UpdateConnectedSidebar(); }
+        var tabContainer = new Grid
+        {
+            Height = 40,
+            MinWidth = 128,
+            MaxWidth = 240
+        };
+
+        var tabButton = new ToggleButton
+        {
+            Tag = session,
+            Content = new TextBlock
+            {
+                Text = session.DisplayTitle,
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 168
+            },
+            Style = (Style)Application.Current.Resources["TitleBarSessionTabStyle"],
+            Padding = new Thickness(12, 0, 40, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        ToolTipService.SetToolTip(tabButton, session.DisplayTitle);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tabButton, $"切换到 {session.DisplayTitle} 会话");
+        tabButton.Checked += SessionTabButton_Checked;
+        tabContainer.Children.Add(tabButton);
+
+        var closeButton = new Button
+        {
+            Tag = session,
+            Content = new FontIcon { Glyph = "\uE711", FontSize = 16 },
+            Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0)
+        };
+        ToolTipService.SetToolTip(closeButton, "关闭会话");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(closeButton, $"关闭 {session.DisplayTitle} 会话");
+        closeButton.Click += SessionTabCloseButton_Click;
+        tabContainer.Children.Add(closeButton);
+
+        _sessionOrder.Add(session);
+        _sessionTabButtons[session] = tabButton;
+        _sessionTabContainers[session] = tabContainer;
+        SessionTabStrip.Children.Insert(Math.Max(0, SessionTabStrip.Children.Count - 1), tabContainer);
     }
 
-    private async void SessionTabs_AddTabButtonClick(TabView sender, object args) => await ShowServerPickerAsync();
+    private void SessionTabButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_updatingSessionSelection || (sender as ToggleButton)?.Tag is not SessionWorkspace session) return;
+        SelectSession(session);
+    }
+
+    private void SelectSession(SessionWorkspace session)
+    {
+        if (!_sessions.ContainsKey(session.Profile.Id)) return;
+        _selectedSession = session;
+        _updatingSessionSelection = true;
+        foreach (var (candidate, tabButton) in _sessionTabButtons) tabButton.IsChecked = ReferenceEquals(candidate, session);
+        _updatingSessionSelection = false;
+        foreach (var candidate in _sessions.Values) candidate.SetActive(ReferenceEquals(candidate, session));
+        SessionContentPresenter.Content = session;
+        session.Profile.LastConnectedAt ??= DateTimeOffset.Now;
+        UpdateConnectedSidebar();
+    }
+
+    private async void NewSessionButton_Click(object sender, RoutedEventArgs e) => await ShowServerPickerAsync();
 
     private async Task ShowServerPickerAsync()
     {
@@ -624,25 +688,32 @@ public sealed partial class MainWindow : Window
         else if (result == ContentDialogResult.Secondary) await ShowServerDialogAsync(null);
     }
 
-    private async void SessionTabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
+    private async void SessionTabCloseButton_Click(object sender, RoutedEventArgs e)
     {
-        if (args.Tab.Tag is not SessionWorkspace session) return;
+        if ((sender as FrameworkElement)?.Tag is not SessionWorkspace session) return;
         if (session.IsTransferActive)
         {
             var confirm = new ContentDialog { Title = "文件正在传输", Content = "关闭标签页会取消当前文件传输，是否继续？", PrimaryButtonText = "关闭标签页", CloseButtonText = "继续传输", XamlRoot = Content.XamlRoot };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
         }
+
+        var removedIndex = _sessionOrder.IndexOf(session);
+        var wasSelected = ReferenceEquals(_selectedSession, session);
         _sessions.Remove(session.Profile.Id);
+        _sessionOrder.Remove(session);
+        _sessionTabButtons.Remove(session);
+        if (_sessionTabContainers.Remove(session, out var tabContainer)) SessionTabStrip.Children.Remove(tabContainer);
         await session.DisposeAsync();
-        SessionTabs.TabItems.Remove(args.Tab);
         if (_sessions.Count == 0)
         {
             ShowUnconnectedLayout("servers");
         }
         else
         {
-            SessionContentPresenter.Content = (SessionTabs.SelectedItem as TabViewItem)?.Tag as SessionWorkspace;
-            UpdateConnectedSidebar();
+            var nextSession = wasSelected
+                ? _sessionOrder[Math.Min(Math.Max(removedIndex, 0), _sessionOrder.Count - 1)]
+                : _selectedSession ?? _sessionOrder[0];
+            SelectSession(nextSession);
         }
     }
 
