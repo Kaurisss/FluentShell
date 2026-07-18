@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using Renci.SshNet.Common;
@@ -22,6 +23,8 @@ namespace NovaShell.Views;
 
 public sealed class SessionWorkspace : UserControl
 {
+    private const string PanelBottomContractPath = "M10.5 11.1741L11.3737 10.1756C11.5556 9.96781 11.8714 9.94675 12.0793 10.1286C12.2871 10.3104 12.3081 10.6263 12.1263 10.8341L10.3763 12.8341C10.2814 12.9426 10.1442 13.0049 10 13.0049C9.85583 13.0049 9.71866 12.9426 9.62372 12.8341L7.87372 10.8341C7.69188 10.6263 7.71294 10.3104 7.92075 10.1286C8.12857 9.94675 8.44445 9.96781 8.6263 10.1756L9.50001 11.1742L9.50001 7.49512C9.50001 7.21897 9.72387 6.99512 10 6.99512C10.2762 6.99512 10.5 7.21897 10.5 7.49512L10.5 11.1741ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H13.1664C13.1049 11.1761 13.0093 11.3436 12.8789 11.4926L12.4349 12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H7.56509L7.12116 11.4926C6.99078 11.3436 6.89517 11.1761 6.83367 11H3V6Z";
+    private const string PanelBottomExpandPath = "M10.5 8.82585L11.3737 9.82437C11.5556 10.0322 11.8714 10.0532 12.0793 9.87141C12.2871 9.68956 12.3081 9.37368 12.1263 9.16586L10.3763 7.16586C10.2814 7.05736 10.1442 6.99512 10 6.99512C9.85583 6.99512 9.71866 7.05736 9.62372 7.16586L7.87372 9.16586C7.69188 9.37368 7.71294 9.68956 7.92075 9.87141C8.12857 10.0532 8.44445 10.0322 8.6263 9.82437L9.50001 8.82583L9.50001 12.5049C9.50001 12.781 9.72387 13.0049 10 13.0049C10.2762 13.0049 10.5 12.781 10.5 12.5049L10.5 8.82585ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H11.5V12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H8.50003V11H3V6Z";
     private readonly ServerProfile _profile;
     private readonly IntPtr _windowHandle;
     private readonly Func<HostFingerprintRequiredEventArgs, Task<bool>> _fingerprintConfirmation;
@@ -51,6 +54,7 @@ public sealed class SessionWorkspace : UserControl
     private readonly Grid _sftpGrid = new();
     private readonly Grid _workspaceGrid = new();
     private readonly Button _sftpRestoreButton = new();
+    private readonly Button _sftpCollapseButton = new();
     private readonly CommandBar _sftpToolbar = new();
     private string _currentPath = "/";
     private bool _showHiddenFiles;
@@ -130,8 +134,14 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetRow(sftpPanel, 2);
         root.Children.Add(sftpPanel);
 
-        var restoreRow = new Grid { Padding = new Thickness(12, 4, 12, 4) };
-        _sftpRestoreButton.Content = "显示 SFTP 文件管理器";
+        var restoreRow = new Grid { Padding = new Thickness(0, 4, 0, 4) };
+        _sftpRestoreButton.Content = CreateFluentPathIcon(PanelBottomExpandPath);
+        _sftpRestoreButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
+        _sftpRestoreButton.Width = 40;
+        _sftpRestoreButton.Height = 40;
+        _sftpRestoreButton.HorizontalAlignment = HorizontalAlignment.Left;
+        ToolTipService.SetToolTip(_sftpRestoreButton, "展开 SFTP 文件管理器");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpRestoreButton, "展开 SFTP 文件管理器");
         _sftpRestoreButton.Click += (_, _) => ToggleSftp();
         _sftpRestoreButton.Visibility = Visibility.Collapsed;
         restoreRow.Children.Add(_sftpRestoreButton);
@@ -142,7 +152,7 @@ public sealed class SessionWorkspace : UserControl
 
     private Grid BuildTerminalGrid()
     {
-        var grid = new Grid { Padding = new Thickness(14, 0, 14, 8), RowSpacing = 8 };
+        var grid = new Grid { Padding = new Thickness(0, 0, 0, 8), RowSpacing = 8 };
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -325,16 +335,27 @@ public sealed class SessionWorkspace : UserControl
 
     private Grid BuildSftpPanel()
     {
-        var panel = new Grid { Padding = new Thickness(14, 8, 14, 10), RowSpacing = 6 };
+        var panel = new Grid { Padding = new Thickness(0, 8, 0, 10), RowSpacing = 6 };
         panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var heading = new Grid { ColumnSpacing = 10 };
+        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        _sftpCollapseButton.Content = CreateFluentPathIcon(PanelBottomContractPath);
+        _sftpCollapseButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
+        _sftpCollapseButton.Width = 40;
+        _sftpCollapseButton.Height = 40;
+        ToolTipService.SetToolTip(_sftpCollapseButton, "收起 SFTP 文件管理器");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpCollapseButton, "收起 SFTP 文件管理器");
+        _sftpCollapseButton.Click += (_, _) => ToggleSftp();
+        Grid.SetColumn(_sftpCollapseButton, 0);
+        heading.Children.Add(_sftpCollapseButton);
+
         var headingText = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         headingText.Children.Add(new TextBlock { Text = "SFTP 文件管理器", FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         _sftpSelectionStatus.Text = "0 项";
@@ -342,6 +363,7 @@ public sealed class SessionWorkspace : UserControl
         _sftpSelectionStatus.Foreground = ThemeBrush("MutedTextBrush");
         _sftpSelectionStatus.VerticalAlignment = VerticalAlignment.Center;
         headingText.Children.Add(_sftpSelectionStatus);
+        Grid.SetColumn(headingText, 1);
         heading.Children.Add(headingText);
 
         _sftpToolbar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -375,13 +397,8 @@ public sealed class SessionWorkspace : UserControl
             _ = RefreshRemoteFilesAsync();
         };
         _sftpToolbar.PrimaryCommands.Add(hidden);
-        Grid.SetColumn(_sftpToolbar, 1);
+        Grid.SetColumn(_sftpToolbar, 2);
         heading.Children.Add(_sftpToolbar);
-
-        var collapse = CreateCommandButton(Symbol.ClosePane, "收起 SFTP 文件管理器");
-        collapse.Click += (_, _) => ToggleSftp();
-        Grid.SetColumn(collapse, 2);
-        heading.Children.Add(collapse);
         Grid.SetRow(heading, 0);
         panel.Children.Add(heading);
 
@@ -560,6 +577,9 @@ public sealed class SessionWorkspace : UserControl
     private static Binding CreateOneWayBinding(string propertyName) => new() { Path = new PropertyPath(propertyName), Mode = BindingMode.OneWay };
 
     private static SymbolIcon CreateCommandIcon(Symbol symbol) => new() { Symbol = symbol };
+
+    private static PathIcon CreateFluentPathIcon(string pathData) =>
+        (PathIcon)XamlReader.Load($"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"{pathData}\" Width=\"20\" Height=\"20\" />");
 
     private static Button CreateCommandButton(Symbol symbol, string title)
     {
