@@ -1,0 +1,49 @@
+# Visual Studio and user-specific state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build output and generated files
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Gg]enerated [Ff]iles/
+/x86/
+/x64/
+/ARM64/
+TestResults/
+coverage/
+coverage.*
+*.nupkg
+*.snupkg
+
+# WinUI / MSIX packaging output
+AppPackages/
+BundleArtifacts/
+Package.StoreAssociation.xml
+*.appx
+*.appxbundle
+*.appxsym
+*.appxupload
+*.msix
+*.msixbundle
+*.msixupload
+*.cer
+*.pfx
+
+# Local dependency and temporary files
+.tmp/
+TerminalWeb/node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

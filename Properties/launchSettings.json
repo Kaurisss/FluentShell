@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NovaShell (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NovaShell (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
