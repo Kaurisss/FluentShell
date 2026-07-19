@@ -2,12 +2,13 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using Renci.SshNet.Common;
+using Syncfusion.UI.Xaml.DataGrid;
+using Syncfusion.UI.Xaml.Grids;
 using FluentShell.Models;
 using FluentShell.Services;
 using System.Collections.ObjectModel;
@@ -16,7 +17,6 @@ using System.Text.Json;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
-using WinUI.TableView;
 using WinRT.Interop;
 
 namespace FluentShell.Views;
@@ -42,7 +42,7 @@ public sealed class SessionWorkspace : UserControl
     private readonly TextBox _sftpPathBox = new();
     private readonly ProgressRing _directoryProgress = new();
     private readonly TextBlock _directoryStatus = new();
-    private readonly TableView _remoteTable = new();
+    private readonly SfDataGrid _remoteTable = new();
     private readonly TextBlock _sftpSelectionStatus = new();
     private readonly AppBarButton _downloadButton = new();
     private readonly AppBarButton _renameButton = new();
@@ -473,73 +473,72 @@ public sealed class SessionWorkspace : UserControl
         _remoteTable.ItemsSource = _remoteFiles;
         _remoteTable.AutoGenerateColumns = false;
         _remoteTable.IsReadOnly = true;
-        _remoteTable.SelectionMode = ListViewSelectionMode.Single;
-        _remoteTable.SelectionUnit = TableViewSelectionUnit.Row;
-        _remoteTable.CornerButtonMode = TableViewCornerButtonMode.Options;
-        _remoteTable.CanSortColumns = true;
-        _remoteTable.CanFilterColumns = true;
-        _remoteTable.CanResizeColumns = true;
-        _remoteTable.CanReorderColumns = true;
-        _remoteTable.GridLinesVisibility = TableViewGridLinesVisibility.Horizontal;
-        _remoteTable.HeaderGridLinesVisibility = TableViewGridLinesVisibility.Horizontal;
-        _remoteTable.HorizontalGridLinesStroke = ThemeBrush("SubtleStrokeBrush");
-        _remoteTable.HeaderRowHeight = 36;
-        _remoteTable.RowHeight = 36;
-        _remoteTable.FontSize = 13;
-        _remoteTable.RowDoubleTapped += RemoteTable_RowDoubleTapped;
-        _remoteTable.CellDoubleTapped += RemoteTable_CellDoubleTapped;
-        _remoteTable.RowContextFlyoutOpening += (_, args) => _remoteTable.SelectedItem = args.Item;
+        _remoteTable.SelectionUnit = GridSelectionUnit.Row;
+        _remoteTable.AllowSorting = true;
+        _remoteTable.AllowFiltering = true;
+        _remoteTable.AllowResizingColumns = true;
+        _remoteTable.AllowDraggingColumns = true;
+        _remoteTable.AllowGrouping = false;
+        _remoteTable.AllowRowHoverHighlighting = true;
+        _remoteTable.ShowRowHeader = false;
+        _remoteTable.HeaderRowHeight = 40;
+        _remoteTable.RowHeight = 40;
+        _remoteTable.FontSize = 14;
+        _remoteTable.CellDoubleTapped += async (_, _) => await OpenDirectoryAsync(SelectedRemoteItem);
         _remoteTable.SelectionChanged += RemoteTable_SelectionChanged;
-        // TableView handles Enter for its own navigation first. Listen to handled key events
-        // as well so Enter can open the selected directory in the workspace.
+        _remoteTable.GridContextFlyoutOpening += RemoteTable_GridContextFlyoutOpening;
         _remoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
-        _remoteTable.RowContextFlyout = BuildRemoteRowMenu();
+        _remoteTable.RecordContextFlyout = BuildRemoteRowMenu();
 
-        var iconStyle = new Style(typeof(TextBlock));
-        iconStyle.Setters.Add(new Setter(TextBlock.FontFamilyProperty, new FontFamily("Segoe Fluent Icons")));
-        iconStyle.Setters.Add(new Setter(TextBlock.FontSizeProperty, 16d));
-        iconStyle.Setters.Add(new Setter(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center));
-        _remoteTable.Columns.Add(new TableViewTextColumn
+        var iconCellStyle = new Style(typeof(GridCell));
+        iconCellStyle.Setters.Add(new Setter(Control.FontFamilyProperty, new FontFamily("Segoe Fluent Icons")));
+        iconCellStyle.Setters.Add(new Setter(Control.FontSizeProperty, 16d));
+        iconCellStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Center));
+
+        _remoteTable.Columns.Add(new GridTextColumn
         {
-            Header = string.Empty,
-            Binding = CreateOneWayBinding(nameof(RemoteFileItem.IconGlyph)),
-            Width = new GridLength(42),
-            CanResize = false,
-            CanSort = false,
-            CanFilter = false,
-            CanReorder = false,
-            ElementStyle = iconStyle
+            HeaderText = string.Empty,
+            MappingName = nameof(RemoteFileItem.IconGlyph),
+            Width = 44,
+            AllowResizing = false,
+            AllowSorting = false,
+            AllowFiltering = false,
+            AllowDragging = false,
+            CellStyle = iconCellStyle,
+            TextAlignment = TextAlignment.Center
         });
-        _remoteTable.Columns.Add(new TableViewTextColumn
+        _remoteTable.Columns.Add(new GridTextColumn
         {
-            Header = "名称",
-            Binding = CreateOneWayBinding(nameof(RemoteFileItem.Name)),
-            SortMemberPath = nameof(RemoteFileItem.SortName),
-            Width = new GridLength(1, GridUnitType.Star),
-            MinWidth = 200
+            HeaderText = "名称",
+            MappingName = nameof(RemoteFileItem.SortName),
+            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.Name)),
+            Width = 420,
+            MinimumWidth = 200,
+            TextTrimming = TextTrimming.CharacterEllipsis
         });
-        _remoteTable.Columns.Add(new TableViewTextColumn
+        _remoteTable.Columns.Add(new GridTextColumn
         {
-            Header = "类型",
-            Binding = CreateOneWayBinding(nameof(RemoteFileItem.TypeLabel)),
-            Width = new GridLength(90),
-            MinWidth = 72
+            HeaderText = "类型",
+            MappingName = nameof(RemoteFileItem.TypeLabel),
+            Width = 110,
+            MinimumWidth = 80
         });
-        _remoteTable.Columns.Add(new TableViewTextColumn
+        _remoteTable.Columns.Add(new GridTextColumn
         {
-            Header = "大小",
-            Binding = CreateOneWayBinding(nameof(RemoteFileItem.SizeLabel)),
-            SortMemberPath = nameof(RemoteFileItem.SizeBytes),
-            Width = new GridLength(110),
-            MinWidth = 88
+            HeaderText = "大小",
+            MappingName = nameof(RemoteFileItem.SizeBytes),
+            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.SizeLabel)),
+            Width = 120,
+            MinimumWidth = 96,
+            TextAlignment = TextAlignment.Right
         });
-        _remoteTable.Columns.Add(new TableViewTextColumn
+        _remoteTable.Columns.Add(new GridTextColumn
         {
-            Header = "修改时间",
-            Binding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
-            SortMemberPath = nameof(RemoteFileItem.ModifiedAt),
-            Width = new GridLength(164),
-            MinWidth = 140
+            HeaderText = "修改时间",
+            MappingName = nameof(RemoteFileItem.ModifiedAt),
+            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
+            Width = 180,
+            MinimumWidth = 150
         });
     }
 
@@ -574,7 +573,11 @@ public sealed class SessionWorkspace : UserControl
         return menu;
     }
 
-    private static Binding CreateOneWayBinding(string propertyName) => new() { Path = new PropertyPath(propertyName), Mode = BindingMode.OneWay };
+    private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()
+    {
+        Path = new Microsoft.UI.Xaml.PropertyPath(propertyName),
+        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+    };
 
     private static SymbolIcon CreateCommandIcon(Symbol symbol) => new() { Symbol = symbol };
 
@@ -764,16 +767,12 @@ public sealed class SessionWorkspace : UserControl
 
     private RemoteFileItem? SelectedRemoteItem => _remoteTable.SelectedItem as RemoteFileItem;
 
-    private void RemoteTable_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateSftpSelectionState();
+    private void RemoteTable_SelectionChanged(object? sender, GridSelectionChangedEventArgs e) => UpdateSftpSelectionState();
 
-    private async void RemoteTable_RowDoubleTapped(object? sender, TableViewRowDoubleTappedEventArgs e)
+    private void RemoteTable_GridContextFlyoutOpening(object? sender, GridContextFlyoutEventArgs e)
     {
-        await OpenDirectoryAsync(e.Item as RemoteFileItem);
-    }
-
-    private async void RemoteTable_CellDoubleTapped(object? sender, TableViewCellDoubleTappedEventArgs e)
-    {
-        await OpenDirectoryAsync(e.Item as RemoteFileItem);
+        if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: RemoteFileItem item })
+            _remoteTable.SelectedItem = item;
     }
 
     private async Task OpenDirectoryAsync(RemoteFileItem? item)
@@ -879,7 +878,7 @@ public sealed class SessionWorkspace : UserControl
                     ModifiedLabel = string.Empty
                 });
             }
-            _remoteTable.DeselectAll();
+            _remoteTable.SelectedItem = null;
             _remoteFiles.Clear();
             foreach (var item in items) _remoteFiles.Add(item);
             _sftpPathBox.Text = path;
