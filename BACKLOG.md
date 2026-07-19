@@ -1,4 +1,4 @@
-# NovaShell Backlog
+# FluentShell Backlog
 
 > 本文件记录第一版之后的迭代点。条目进入 Backlog 不代表已经承诺具体版本；实施前仍需单独设计、评估和验收。  
 > 最后更新：2026-07-18

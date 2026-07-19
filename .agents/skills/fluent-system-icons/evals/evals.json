@@ -1,0 +1,25 @@
+{
+  "skill_name": "fluent-system-icons",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我找一个 Fluent 风格的收起侧栏图标，WinUI 3 里要能直接用，给我准确的 icon id 和 XAML。",
+      "expected_output": "Uses the official lookup workflow, distinguishes panel-left from panel-left-expand/panel-right-expand, and returns an official name, code point, and a valid WinUI snippet without confusing Segoe Fluent Icons with FluentSystemIcons."
+    },
+    {
+      "id": 2,
+      "prompt": "NovaShell 的 SFTP 工具栏需要刷新、上传、下载和删除图标，请给出 24px regular 版本和可复制的 PathIcon 路径。",
+      "expected_output": "Returns separate official candidates for all four actions at 24px regular, includes SVG/path output, and does not invent Unicode values or use emoji."
+    },
+    {
+      "id": 3,
+      "prompt": "我只知道一个图标大概叫 arrow sync，想确认它的 filled glyph 十六进制值。",
+      "expected_output": "Looks up the exact filled variant, reports the official icon id and decimal/hex code point, and states which Fluent System Icons font the value belongs to."
+    },
+    {
+      "id": 4,
+      "prompt": "给 WinUI 标题栏的侧栏开关选择 Panel Left 和 Panel Left Contract 图标。两个状态必须一样高、圆角一致，当前找到的文件一个是 20px、一个是 28px。",
+      "expected_output": "Rejects mixing 20px and 28px source variants, selects one shared source size and render box, compares viewBox and outer-frame geometry, and reuses a shared base frame if the official state paths still differ."
+    }
+  ]
+}

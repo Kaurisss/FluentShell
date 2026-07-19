@@ -1,6 +1,6 @@
 using Microsoft.UI.Xaml;
 
-namespace NovaShell;
+namespace FluentShell;
 
 public partial class App : Application
 {

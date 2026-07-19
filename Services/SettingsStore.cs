@@ -1,7 +1,7 @@
-using NovaShell.Models;
+using FluentShell.Models;
 using System.Text.Json;
 
-namespace NovaShell.Services;
+namespace FluentShell.Services;
 
 public sealed class SettingsStore
 {

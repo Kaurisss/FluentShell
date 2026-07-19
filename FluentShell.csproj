@@ -3,9 +3,9 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>NovaShell</RootNamespace>
-    <AssemblyName>NovaShell</AssemblyName>
-    <ApplicationIcon>Assets\NovaShell.ico</ApplicationIcon>
+    <RootNamespace>FluentShell</RootNamespace>
+    <AssemblyName>FluentShell</AssemblyName>
+    <ApplicationIcon>Assets\FluentShell.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
@@ -26,7 +26,7 @@
     <Content Include="Assets\Square44x44Logo.targetsize-*.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    <Content Include="Assets\NovaShell.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\FluentShell.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Terminal\**" CopyToOutputDirectory="PreserveNewest" />
     <None Update="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

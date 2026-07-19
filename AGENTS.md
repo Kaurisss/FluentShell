@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-NovaShell is a .NET 8 WinUI 3 SSH/SFTP client. `MainWindow.xaml` and its code-behind implement the application shell, navigation, and session tabs. Connected-session UI lives in `Views/SessionWorkspace.cs`. Keep reusable connection, storage, and credential logic in `Services/`; data contracts belong in `Models/`. Runtime images, icons, and the checked-in xterm.js bridge are under `Assets/`. `TerminalWeb/` records the npm packages used to source terminal assets. Product decisions and planned work are documented in `PLAN.md` and `BACKLOG.md`.
+FluentShell is a .NET 8 WinUI 3 SSH/SFTP client. `MainWindow.xaml` and its code-behind implement the application shell, navigation, and session tabs. Connected-session UI lives in `Views/SessionWorkspace.cs`. Keep reusable connection, storage, and credential logic in `Services/`; data contracts belong in `Models/`. Runtime images, icons, and the checked-in xterm.js bridge are under `Assets/`. `TerminalWeb/` records the npm packages used to source terminal assets. Product decisions and planned work are documented in `PLAN.md` and `BACKLOG.md`.
 
 Do not edit generated content in `bin/`, `obj/`, `.tmp/`, or `TerminalWeb/node_modules/`.
 
@@ -11,9 +11,9 @@ Do not edit generated content in `bin/`, `obj/`, `.tmp/`, or `TerminalWeb/node_m
 Run commands from the repository root in PowerShell:
 
 ```powershell
-dotnet restore .\NovaShell.csproj -p:Platform=x64
-dotnet build .\NovaShell.csproj -c Debug -p:Platform=x64
-dotnet run --project .\NovaShell.csproj -p:Platform=x64
+dotnet restore .\FluentShell.csproj -p:Platform=x64
+dotnet build .\FluentShell.csproj -c Debug -p:Platform=x64
+dotnet run --project .\FluentShell.csproj -p:Platform=x64
 dotnet test -p:Platform=x64
 ```
 
@@ -25,7 +25,7 @@ Use four-space indentation for C# and XAML. Follow standard C# naming: `PascalCa
 
 ## Testing Guidelines
 
-There is no automated test project yet. New service or model logic should add xUnit tests under `Tests/NovaShell.Tests/`, named `{TypeName}Tests.cs`. Cover changed behavior rather than targeting a numeric percentage. For UI changes, manually verify light and dark themes, expanded and compact sidebars, session switching, terminal input, and SFTP navigation. Never run destructive SFTP tests against a personal or production server.
+There is no automated test project yet. New service or model logic should add xUnit tests under `Tests/FluentShell.Tests/`, named `{TypeName}Tests.cs`. Cover changed behavior rather than targeting a numeric percentage. For UI changes, manually verify light and dark themes, expanded and compact sidebars, session switching, terminal input, and SFTP navigation. Never run destructive SFTP tests against a personal or production server.
 
 ## Commit & Pull Request Guidelines
 

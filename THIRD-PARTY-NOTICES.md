@@ -27,7 +27,7 @@ SOFTWARE.
 
 ## WinUI.TableView
 
-NovaShell uses [WinUI.TableView](https://github.com/w-ahmad/WinUI.TableView)
+FluentShell uses [WinUI.TableView](https://github.com/w-ahmad/WinUI.TableView)
 for the remote SFTP file list.
 
 Copyright (c) 2024 w-ahmad (https://github.com/w-ahmad)
@@ -52,7 +52,7 @@ SOFTWARE.
 
 ## xterm.js
 
-NovaShell bundles the browser terminal emulator and fit, search, and web-links addons from
+FluentShell bundles the browser terminal emulator and fit, search, and web-links addons from
 [xterm.js](https://github.com/xtermjs/xterm.js). The bundled files are under
 `Assets/Terminal`.
 

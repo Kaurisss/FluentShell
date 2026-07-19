@@ -8,8 +8,8 @@ using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using Renci.SshNet.Common;
-using NovaShell.Models;
-using NovaShell.Services;
+using FluentShell.Models;
+using FluentShell.Services;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
@@ -19,7 +19,7 @@ using Windows.Storage.Pickers;
 using WinUI.TableView;
 using WinRT.Interop;
 
-namespace NovaShell.Views;
+namespace FluentShell.Views;
 
 public sealed class SessionWorkspace : UserControl
 {
@@ -270,9 +270,9 @@ public sealed class SessionWorkspace : UserControl
             var terminalAssets = Path.Combine(AppContext.BaseDirectory, "Assets", "Terminal");
             _terminalView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             _terminalView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-            _terminalView.CoreWebView2.SetVirtualHostNameToFolderMapping("novashell.local", terminalAssets, CoreWebView2HostResourceAccessKind.Allow);
+        _terminalView.CoreWebView2.SetVirtualHostNameToFolderMapping("fluentshell.local", terminalAssets, CoreWebView2HostResourceAccessKind.Allow);
             _terminalView.CoreWebView2.WebMessageReceived += TerminalView_WebMessageReceived;
-            _terminalView.Source = new Uri("https://novashell.local/index.html");
+        _terminalView.Source = new Uri("https://fluentshell.local/index.html");
         }
         catch (Exception ex)
         {

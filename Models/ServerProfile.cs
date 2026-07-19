@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace NovaShell.Models;
+namespace FluentShell.Models;
 
 public enum AuthenticationMethod
 {

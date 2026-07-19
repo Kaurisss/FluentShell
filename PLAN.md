@@ -1,11 +1,11 @@
-# NovaShell 第一版实施计划
+# FluentShell 第一版实施计划
 
 > 状态：规划已确认，尚未开始功能实现  
 > 最后更新：2026-07-18
 
 ## 1. 产品目标
 
-NovaShell 是一个使用 .NET 8 和 WinUI 3 构建的 Windows SSH/SFTP 客户端。第一版面向日常 Linux 服务器管理，重点解决以下问题：
+FluentShell 是一个使用 .NET 8 和 WinUI 3 构建的 Windows SSH/SFTP 客户端。第一版面向日常 Linux 服务器管理，重点解决以下问题：
 
 - 在本机保存并管理多个服务器配置。
 - 同时连接多台服务器，并在标签之间保持会话状态。
@@ -210,7 +210,7 @@ NovaShell 是一个使用 .NET 8 和 WinUI 3 构建的 Windows SSH/SFTP 客户�
 
 ### 5.3 本地数据
 
-- 服务器资料保存在 `%LOCALAPPDATA%\NovaShell\servers.json`。
+- 服务器资料保存在 `%LOCALAPPDATA%\FluentShell\servers.json`。
 - 首次运行时迁移旧版 `%LOCALAPPDATA%\SSHUI` 配置和 `SSHUI/` 凭据键；迁移失败时保留旧数据，不覆盖新数据。
 - 设置保存在本机应用数据目录。
 - 命令历史和终端输出只存在于当前运行会话，不写入磁盘。
@@ -237,7 +237,7 @@ Windows App SDK 采用自包含输出，避免目标机器缺少对应 Windows A
 ### 6.2 目录规划
 
 ```text
-NovaShell/
+FluentShell/
 ├─ Models/
 │  ├─ ServerProfile.cs
 │  ├─ RemoteFileItem.cs
@@ -305,7 +305,7 @@ NovaShell/
 - 已完成：ShellStream 普通命令输出、终端直接输入、增强输入、会话历史搜索和隐藏输入。
 - 已完成：Linux CPU、内存、Swap、Load、主机名、系统和运行时间基础采集。
 - 已完成：SFTP 单栏浏览、隐藏文件、新建目录、重命名、删除、上传、下载、覆盖确认、取消传输和拖动收起。
-- 已验证：`dotnet build NovaShell.csproj -p:Platform=x64 --no-restore` 为 0 警告、0 错误；浅色常规窗口的概览、服务器页、设置页和侧栏状态已做实际窗口检查。
+- 已验证：`dotnet build FluentShell.csproj -p:Platform=x64 --no-restore` 为 0 警告、0 错误；浅色常规窗口的概览、服务器页、设置页和侧栏状态已做实际窗口检查。
 - 仍需真实环境验证：至少一台测试 Linux 主机上的密码认证、私钥认证、指纹变化、Shell 输出、指标采集和 SFTP 传输。
 
 ### 阶段 1：应用外壳与未连接状态

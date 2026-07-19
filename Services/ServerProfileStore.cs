@@ -1,7 +1,7 @@
 using System.Text.Json;
-using NovaShell.Models;
+using FluentShell.Models;
 
-namespace NovaShell.Services;
+namespace FluentShell.Services;
 
 public sealed class ServerProfileStore
 {

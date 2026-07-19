@@ -1,0 +1,19 @@
+{
+  "收起侧栏": ["panel left", "panel right expand"],
+  "展开侧栏": ["panel right expand", "panel left"],
+  "刷新": ["arrow clockwise", "arrow sync"],
+  "设置": ["settings"],
+  "主页": ["home"],
+  "服务器": ["server"],
+  "终端": ["terminal"],
+  "文件夹": ["folder"],
+  "下载": ["arrow download"],
+  "上传": ["arrow upload"],
+  "删除": ["delete"],
+  "编辑": ["edit"],
+  "添加": ["add"],
+  "搜索": ["search"],
+  "关闭": ["dismiss"],
+  "返回": ["arrow left", "arrow previous"],
+  "更多": ["more horizontal", "more vertical"]
+}

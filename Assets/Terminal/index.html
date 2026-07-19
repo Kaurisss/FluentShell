@@ -59,7 +59,7 @@
             terminal.onData(data => post({ type: 'input', data }));
             terminal.onResize(size => post({ type: 'resize', cols: size.cols, rows: size.rows }));
 
-            window.novaShellTerminal = {
+      window.fluentShellTerminal = {
                 focus: () => terminal.focus(),
                 write: data => terminal.write(data || ''),
                 clear: () => terminal.clear(),
@@ -75,10 +75,10 @@
                     try { message = JSON.parse(message); } catch { return; }
                 }
                 if (!message || typeof message.type !== 'string') return;
-                if (message.type === 'write') window.novaShellTerminal.write(message.data);
-                if (message.type === 'clear') window.novaShellTerminal.clear();
-                if (message.type === 'focus') window.novaShellTerminal.focus();
-                if (message.type === 'fontSize') window.novaShellTerminal.setFontSize(message.value);
+        if (message.type === 'write') window.fluentShellTerminal.write(message.data);
+        if (message.type === 'clear') window.fluentShellTerminal.clear();
+        if (message.type === 'focus') window.fluentShellTerminal.focus();
+        if (message.type === 'fontSize') window.fluentShellTerminal.setFontSize(message.value);
             });
 
             const resizeObserver = new ResizeObserver(() => requestAnimationFrame(fit));

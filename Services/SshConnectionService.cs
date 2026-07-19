@@ -1,8 +1,8 @@
 using Renci.SshNet;
 using Renci.SshNet.Common;
-using NovaShell.Models;
+using FluentShell.Models;
 
-namespace NovaShell.Services;
+namespace FluentShell.Services;
 
 public sealed class HostFingerprintRequiredEventArgs : EventArgs
 {
@@ -60,7 +60,7 @@ public sealed class SshConnectionService : IAsyncDisposable
     {
         Renci.SshNet.AuthenticationMethod auth = _profile.Authentication switch
         {
-            NovaShell.Models.AuthenticationMethod.PrivateKey => new PrivateKeyAuthenticationMethod(_profile.Username, new PrivateKeyFile(_profile.PrivateKeyPath, string.IsNullOrWhiteSpace(_secret) ? null : _secret)),
+            FluentShell.Models.AuthenticationMethod.PrivateKey => new PrivateKeyAuthenticationMethod(_profile.Username, new PrivateKeyFile(_profile.PrivateKeyPath, string.IsNullOrWhiteSpace(_secret) ? null : _secret)),
             _ => new PasswordAuthenticationMethod(_profile.Username, _secret)
         };
 

@@ -5,16 +5,16 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
-using NovaShell.Models;
-using NovaShell.Services;
-using NovaShell.Views;
+using FluentShell.Models;
+using FluentShell.Services;
+using FluentShell.Views;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
-namespace NovaShell;
+namespace FluentShell;
 
 public sealed partial class MainWindow : Window
 {
@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window
         _windowHandle = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(_windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "NovaShell.ico");
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "FluentShell.ico");
         if (File.Exists(iconPath)) _appWindow.SetIcon(iconPath);
         _appWindow.Resize(new SizeInt32(1440, 900));
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();

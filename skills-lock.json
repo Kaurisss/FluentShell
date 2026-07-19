@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "code-security": {
+      "source": "semgrep/skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-security/SKILL.md",
+      "computedHash": "a4b931c20f8ebe7d4de8a4a91df449684516f1af129b773c34ed0e02b294a622"
+    },
+    "run-tests": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-test/skills/run-tests/SKILL.md",
+      "computedHash": "075d5b12b7c83a80ef676d1850f71be544823881192ce18f5c24ee17368b7248"
+    },
+    "winui-app": {
+      "source": "openai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/winui-app/SKILL.md",
+      "computedHash": "d4d9408ca78c5f574af0699ad6749ba840505ba18d0913f470af32d5ffab7c64"
+    },
+    "winui-code-review": {
+      "source": "microsoft/win-dev-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/winui/skills/winui-code-review/SKILL.md",
+      "computedHash": "b1f78bf281f2da38ee44c25d3bbe573e52a2eeb8c07947a40feeebfacfbc35e6"
+    }
+  }
+}

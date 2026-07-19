@@ -1,9 +1,9 @@
 {
   "profiles": {
-    "NovaShell (Package)": {
+    "FluentShell (Package)": {
       "commandName": "MsixPackage"
     },
-    "NovaShell (Unpackaged)": {
+    "FluentShell (Unpackaged)": {
       "commandName": "Project"
     }
   }

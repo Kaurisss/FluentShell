@@ -1,13 +1,13 @@
-# NovaShell Fluent 2 应用图标：官方资料研究与生图提示词
+# FluentShell Fluent 2 应用图标：官方资料研究与生图提示词
 
 > 研究日期：2026-07-18  
 > 范围：仅采用 Microsoft / Fluent 2 官方一手资料，并结合仓库内用户提供的微软产品图标展示图进行视觉观察。
 
 ## 结论先行
 
-要让 NovaShell 图标接近 Windows / Fluent 的产品图标语言，提示词不能只写“Fluent Design、渐变、3D”。这类宽泛词很容易把模型带向 macOS Big Sur 的统一圆角方形底板、厚玻璃和强高光。更有效的写法是把 Microsoft 官方规则拆成可检查的几何约束：
+要让 FluentShell 图标接近 Windows / Fluent 的产品图标语言，提示词不能只写“Fluent Design、渐变、3D”。这类宽泛词很容易把模型带向 macOS Big Sur 的统一圆角方形底板、厚玻璃和强高光。更有效的写法是把 Microsoft 官方规则拆成可检查的几何约束：
 
-1. **先规定一个清楚的主隐喻和独特外轮廓**：NovaShell 只以“终端 / Shell”为主隐喻；产品名不需要被逐字翻译成星星、闪光或其他天体元素，也不要同时塞入文件夹、服务器、锁等符号。
+1. **先规定一个清楚的主隐喻和独特外轮廓**：FluentShell 只以“终端 / Shell”为主隐喻；产品名不需要被逐字翻译成水流、波纹或书写笔触，也不要同时塞入文件夹、服务器、锁等符号。
 2. **明确要求透明画布上的自由轮廓（unplated / free-standing silhouette）**：禁止用覆盖整张图的圆角方形、squircle、瓷砖或容器当底板。
 3. **只用少量正视、平坦的重叠形状建立层次**：不是拟物厚块，不做倾斜透视，不做玻璃材质。
 4. **圆角只修饰局部轮廓**：官方 48×48 基准中，外角约 2 px、内角约 1 px；这意味着“柔和”，而不是“大圆角方块”。
@@ -20,13 +20,13 @@
 
 [Fluent 2 Design principles](https://fluent2.microsoft.design/design-principles) 提供四条上位原则，其中对图标最直接的有：
 
-- **Natural on every platform**：体验应适应所在平台并建立在用户熟悉的模式之上。因此 NovaShell 是 Windows 应用时，应优先遵循 Windows 应用图标规范，而不是借用 macOS 的统一 squircle 容器。
+- **Natural on every platform**：体验应适应所在平台并建立在用户熟悉的模式之上。因此 FluentShell 是 Windows 应用时，应优先遵循 Windows 应用图标规范，而不是借用 macOS 的统一 squircle 容器。
 - **Built for focus**：减少视觉杂乱与噪音。对应到图标，就是删去不支持核心隐喻的装饰和多余细节。
 - **Unmistakably Microsoft**：颜色、插画与图标等 signature experiences 提高熟悉度与品牌识别；同时官方也提醒“一点个性就足够”，不需要堆叠效果来证明风格。
 
 ### 2. Fluent 图标首先要可识别、实用、易懂
 
-[Fluent 2 Iconography](https://fluent2.microsoft.design/iconography) 将图标分成 system、product launch 与 file 三类。NovaShell 的启动图标对应 **product launch icon** 的角色，而不是界面内的单色 system icon。官方强调：
+[Fluent 2 Iconography](https://fluent2.microsoft.design/iconography) 将图标分成 system、product launch 与 file 三类。FluentShell 的启动图标对应 **product launch icon** 的角色，而不是界面内的单色 system icon。官方强调：
 
 - 图标表达概念、对象或动作，应始终可识别、实用并容易理解。
 - Product launch icon 用于识别一个应用或能力。
@@ -38,7 +38,7 @@
 [Design guidelines for Windows app icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-design) 给出了可直接转换成提示词的约束：
 
 - **隐喻**：用简单形状将应用概念表现为一个整体；最多两个隐喻，一个更好；主概念必须成为焦点。
-- **文字**：避免在图标中使用字母和单词，除非确实不可替代。因而不建议用大写 `N`、`SSH` 或仿 Office 的字母角标作为 NovaShell 主体。
+- **文字**：避免在图标中使用字母和单词，除非确实不可替代。因而不建议用大写 `F`、`SSH` 或仿 Office 的字母角标作为 FluentShell 主体。
 - **网格与圆角**：先对齐 48×48 网格；48 px 下外部曲线圆角约 2 px，内部曲线约 1 px。
 - **轮廓**：外轮廓要平衡、独特且在小尺寸清楚；用尽可能少的形状和转角。
 - **细节**：额外的具象细节只放在最突出的主层上。
@@ -51,7 +51,7 @@
 
 [Construct your Windows app's icon](https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction) 明确写道，图标在透明背景上通常表现最好。只有品牌确实需要时才应加底板，而且加底板会失去透明图标自动适配主题的部分能力。
 
-这条官方建议直接支持 NovaShell 使用 **透明背景 + 独立轮廓**。同一页还指出：
+这条官方建议直接支持 FluentShell 使用 **透明背景 + 独立轮廓**。同一页还指出：
 
 - Windows 至少应准备 16、24、32、48、256 px 资源。
 - Windows 会优先寻找精确尺寸，因此多尺寸专版能减少缩放并提高像素清晰度。
@@ -68,25 +68,25 @@
 - 有些 Office 图标包含小型字母牌，但它是品牌系统中既有的识别资产，不等于新应用都应模仿“字母 + 方块”。Microsoft 的 Windows 新应用图标规范仍建议避免文字。
 - 大多数视觉深度来自层与层的遮挡、色值差和局部阴影；不是厚重挤出的 3D 物体，也不是覆盖整图的玻璃质感。
 
-## NovaShell 的隐喻选择
+## FluentShell 的隐喻选择
 
 ### 推荐方向：只表达终端 / Shell
 
 - **主隐喻**：一个简化但有独特剪影的终端工作面 / shell 符号。
 - **终端细节**：可以在最前层使用一个几何化的命令箭头或短光标切口，但不要画完整 UI、窗口控制点或命令文字。
-- **品牌名处理**：将 NovaShell 只视为产品名称，不从 `Nova` 推导星星、闪光、轨道、彗星或宇宙元素。识别度应来自轮廓、层次和配色，而不是名字的字面插图。
+- **品牌名处理**：将 FluentShell 只视为产品名称，不从 `Fluent` 推导水流、波纹或书写笔触。识别度应来自轮廓、层次和配色，而不是名字的字面插图。
 - **远程与 SFTP**：不再额外放连接线、服务器或文件夹。SSH/SFTP 是产品能力，不必各占一个符号；这些能力在应用界面或宣传图中表达。
 
-设计目标不是让用户逐字读出 “SSH/SFTP”，而是在 Windows 启动器中一眼识别“这是一个远程终端工具”，并通过独特轮廓记住 NovaShell。
+设计目标不是让用户逐字读出 “SSH/SFTP”，而是在 Windows 启动器中一眼识别“这是一个远程终端工具”，并通过独特轮廓记住 FluentShell。
 
 ## 推荐的生图主提示词
 
 建议把用户提供的产品图标展示图作为**风格参考图**一起输入，并使用下面这段英文提示词。英文版对多数生图模型的设计词汇约束更稳定；其中已避免要求复制任何微软产品图标。
 
 ```text
-Design one original product-launch app icon for “NovaShell”, a native Windows SSH and SFTP client.
+Design one original product-launch app icon for “FluentShell”, a native Windows SSH and SFTP client.
 
-Treat “NovaShell” solely as the product name. Do not translate the word “Nova” into any celestial imagery.
+Treat “FluentShell” solely as the product name. Do not translate the word “Fluent” into water, waves, or handwriting imagery.
 
 Core metaphor: terminal / command shell only. Create one unified, instantly recognizable and distinctive terminal symbol. Explore an original silhouette made from 2–3 broad overlapping planes rather than a literal screenshot of a terminal window. A single geometric command chevron or short cursor notch may appear as a small pictorial detail on the foremost layer, but it must not look like typed text or a complete user interface.
 
@@ -110,7 +110,7 @@ macOS Big Sur icon, iOS icon, rounded-square app tile, squircle, full-canvas bac
 ### 中文版（适合明确要求中文提示词的模型）
 
 ```text
-为“NovaShell”设计一个原创的 Windows 产品启动图标。NovaShell 是原生 Windows SSH/SFTP 客户端。只把 NovaShell 当作产品名称，不要把 `Nova` 翻译成任何天体图形。
+为“FluentShell”设计一个原创的 Windows 产品启动图标。FluentShell 是原生 Windows SSH/SFTP 客户端。只把 FluentShell 当作产品名称，不要把 `Fluent` 翻译成水流、波纹或书写笔触。
 
 唯一核心隐喻是“终端 / Shell”。设计一个统一、可立即识别且剪影独特的终端符号；用 2–3 个宽阔、平坦的重叠形状构成原创轮廓，不要照搬终端窗口截图。最前层可以有一个几何化命令箭头或短光标切口作为小型图形细节，但不能像输入的文字或完整界面。
 
@@ -144,7 +144,7 @@ macOS Big Sur icon, iOS icon, rounded-square app tile, squircle, full-canvas bac
 用于二次编辑的短提示词：
 
 ```text
-Keep the selected NovaShell silhouette and metaphor. Remove the entire enclosing rounded-square/squircle plate and every decorative badge. Place only the free-standing symbol on true alpha transparency. Flatten the icon to 2–3 front-facing overlapping layers, soften only local corners, reduce gradients and shadows, and optimize the result for legibility at 24 px. Do not add or redesign any other element.
+Keep the selected FluentShell silhouette and metaphor. Remove the entire enclosing rounded-square/squircle plate and every decorative badge. Place only the free-standing symbol on true alpha transparency. Flatten the icon to 2–3 front-facing overlapping layers, soften only local corners, reduce gradients and shadows, and optimize the result for legibility at 24 px. Do not add or redesign any other element.
 ```
 
 ## 验收清单
