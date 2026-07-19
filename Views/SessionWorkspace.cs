@@ -31,12 +31,9 @@ public sealed class SessionWorkspace : UserControl
     private readonly Func<Task<string?>> _passwordProvider;
     private readonly ElementTheme _workspaceTheme;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
-    private readonly List<string> _history = [];
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly WebView2 _terminalView = new();
     private readonly StringBuilder _pendingTerminalOutput = new();
-    private readonly TextBox _composer = new();
-    private readonly PasswordBox _secureComposer = new();
     private readonly TextBlock _connectionState = new();
     private readonly Button _reconnectButton = new();
     private readonly TextBox _sftpPathBox = new();
@@ -105,8 +102,6 @@ public sealed class SessionWorkspace : UserControl
     public void SetTerminalFontSize(double value)
     {
         _terminalFontSize = value;
-        _composer.FontSize = value;
-        _secureComposer.FontSize = value;
         PostTerminalMessage(new { type = "fontSize", value });
     }
 
@@ -152,9 +147,8 @@ public sealed class SessionWorkspace : UserControl
 
     private Grid BuildTerminalGrid()
     {
-        var grid = new Grid { Padding = new Thickness(0, 0, 0, 8), RowSpacing = 8 };
+        var grid = new Grid { Padding = new Thickness(0, 0, 0, 8) };
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         _terminalView.HorizontalAlignment = HorizontalAlignment.Stretch;
         _terminalView.VerticalAlignment = VerticalAlignment.Stretch;
@@ -174,84 +168,6 @@ public sealed class SessionWorkspace : UserControl
         Grid.SetRow(statePanel, 0);
         Canvas.SetZIndex(statePanel, 1);
         grid.Children.Add(statePanel);
-
-        var composerBorder = new Border { Background = ThemeBrush("PageSurfaceBrush"), BorderBrush = ThemeBrush("SubtleStrokeBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), Padding = new Thickness(8, 4, 8, 4) };
-        var composerGrid = new Grid { ColumnSpacing = 6 };
-        composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (var i = 0; i < 5; i++) composerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _composer.PlaceholderText = "增强输入：Enter 发送，Shift+Enter 换行；历史仅保留在本次会话";
-        _composer.AcceptsReturn = true;
-        _composer.TextWrapping = TextWrapping.Wrap;
-        _composer.MinHeight = 40;
-        _composer.KeyDown += Composer_KeyDown;
-        composerGrid.Children.Add(_composer);
-        _secureComposer.PlaceholderText = "隐藏输入：内容不会进入历史记录";
-        _secureComposer.Visibility = Visibility.Collapsed;
-        _secureComposer.KeyDown += SecureComposer_KeyDown;
-        composerGrid.Children.Add(_secureComposer);
-        var secureToggle = new ToggleButton
-        {
-            Content = CreateCommandIcon(Symbol.HideBcc),
-            Style = (Style)Application.Current.Resources["TitleBarSessionTabStyle"],
-            Width = 40,
-            Height = 40,
-            MinWidth = 40,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center
-        };
-        ToolTipService.SetToolTip(secureToggle, "隐藏输入");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(secureToggle, "隐藏输入");
-        Grid.SetColumn(secureToggle, 1);
-        composerGrid.Children.Add(secureToggle);
-        var pasteButton = CreateCommandButton(Symbol.Paste, "粘贴");
-        Grid.SetColumn(pasteButton, 2);
-        composerGrid.Children.Add(pasteButton);
-        var historyButton = CreateCommandButton(Symbol.Clock, "本次会话历史");
-        historyButton.Click += HistoryButton_Click;
-        Grid.SetColumn(historyButton, 3);
-        composerGrid.Children.Add(historyButton);
-        var clearButton = CreateCommandButton(Symbol.Clear, "清空输入");
-        clearButton.Click += (_, _) => { _composer.Text = string.Empty; _secureComposer.Password = string.Empty; };
-        Grid.SetColumn(clearButton, 4);
-        composerGrid.Children.Add(clearButton);
-        var sendButton = new Button
-        {
-            Content = CreateCommandIcon(Symbol.Send),
-            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
-            Width = 40,
-            Height = 40,
-            Padding = new Thickness(0)
-        };
-        ToolTipService.SetToolTip(sendButton, "发送命令");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(sendButton, "发送命令");
-        sendButton.Click += async (_, _) => await SendComposerAsync();
-        Grid.SetColumn(sendButton, 5);
-        composerGrid.Children.Add(sendButton);
-        secureToggle.Checked += (_, _) =>
-        {
-            _composer.Visibility = Visibility.Collapsed;
-            _secureComposer.Visibility = Visibility.Visible;
-            historyButton.IsEnabled = false;
-            pasteButton.IsEnabled = false;
-            _secureComposer.Focus(FocusState.Programmatic);
-        };
-        secureToggle.Unchecked += (_, _) =>
-        {
-            _secureComposer.Password = string.Empty;
-            _secureComposer.Visibility = Visibility.Collapsed;
-            _composer.Visibility = Visibility.Visible;
-            historyButton.IsEnabled = true;
-            pasteButton.IsEnabled = true;
-            _composer.Focus(FocusState.Programmatic);
-        };
-        pasteButton.Click += async (_, _) =>
-        {
-            var content = Clipboard.GetContent();
-            if (content.Contains(StandardDataFormats.Text)) _composer.Text += await content.GetTextAsync();
-        };
-        composerBorder.Child = composerGrid;
-        Grid.SetRow(composerBorder, 1);
-        grid.Children.Add(composerBorder);
         return grid;
     }
 
@@ -709,44 +625,6 @@ public sealed class SessionWorkspace : UserControl
         PostTerminalMessage(new { type = "write", data = text });
     }
 
-    private async void Composer_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == Windows.System.VirtualKey.Enter && !IsShiftDown()) { e.Handled = true; await SendFromBoxAsync(_composer, true); }
-    }
-
-    private async void SecureComposer_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == Windows.System.VirtualKey.Enter) { e.Handled = true; await SendComposerAsync(); }
-    }
-
-    private async Task SendComposerAsync()
-    {
-        if (_secureComposer.Visibility == Visibility.Visible)
-        {
-            var command = _secureComposer.Password;
-            if (string.IsNullOrEmpty(command)) return;
-            try { await _activeService!.SendAsync(command, true); _secureComposer.Password = string.Empty; }
-            catch (Exception ex) { AppendOutput($"\r\n[发送失败] {ex.Message}\r\n"); }
-            return;
-        }
-        await SendFromBoxAsync(_composer, true);
-    }
-
-    private bool IsShiftDown() => Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-    private async Task SendFromBoxAsync(TextBox box, bool appendNewLine)
-    {
-        var command = box.Text;
-        if (string.IsNullOrWhiteSpace(command)) return;
-        try
-        {
-            // The currently connected service is injected when the session is created in MainWindow.
-            await _activeService!.SendAsync(command, appendNewLine);
-            _history.Add(command);
-            box.Text = string.Empty;
-        }
-        catch (Exception ex) { AppendOutput($"\r\n[发送失败] {ex.Message}\r\n"); }
-    }
-
     private SshConnectionService? _activeService;
 
     private async Task RefreshMetricsLoopAsync(SshConnectionService service)
@@ -1070,17 +948,6 @@ public sealed class SessionWorkspace : UserControl
             await RefreshRemoteFilesAsync();
         }
         catch (Exception ex) { _transferStatus.Text = $"删除失败：{ex.Message}"; }
-    }
-
-    private async void HistoryButton_Click(object sender, RoutedEventArgs e)
-    {
-        var all = _history.AsEnumerable().Reverse().ToList();
-        var search = new TextBox { PlaceholderText = "搜索本次会话命令" };
-        var list = new ListView { ItemsSource = all, SelectionMode = ListViewSelectionMode.Single, MaxHeight = 300 };
-        search.TextChanged += (_, _) => list.ItemsSource = string.IsNullOrWhiteSpace(search.Text) ? all : all.Where(command => command.Contains(search.Text, StringComparison.OrdinalIgnoreCase)).ToList();
-        var content = new StackPanel { Spacing = 10 }; content.Children.Add(search); content.Children.Add(list);
-        var dialog = new ContentDialog { Title = "本次会话历史", Content = content, PrimaryButtonText = "填入输入框", CloseButtonText = "关闭", XamlRoot = XamlRoot };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary && list.SelectedItem is string command) _composer.Text = command;
     }
 
     private async Task<string> PromptTextAsync(string title, string placeholder)
