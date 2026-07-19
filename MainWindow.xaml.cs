@@ -40,9 +40,13 @@ public sealed partial class MainWindow : Window
     private int _activeConnectionAttempts;
     private SessionWorkspace? _selectedSession;
     private bool _updatingSessionSelection;
+    private bool _isNarrowLayout;
+    private bool _paneWasOpenBeforeNarrow = true;
 
     public MainWindow()
     {
+        _loadingSettings = true;
+        _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         InitializeComponent();
         ApplyBackdrop("Mica");
         _windowHandle = WindowNative.GetWindowHandle(this);
@@ -51,12 +55,13 @@ public sealed partial class MainWindow : Window
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "FluentShell.ico");
         if (File.Exists(iconPath)) _appWindow.SetIcon(iconPath);
         _appWindow.Resize(new SizeInt32(1440, 900));
-        _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         SetTitleBar(AppTitleBar);
+        RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
+        _loadingSettings = false;
     }
 
     private async Task LoadAsync()
@@ -72,6 +77,7 @@ public sealed partial class MainWindow : Window
         ApplySettingsToControls();
         RootNavigationView.SelectedItem = OverviewNavItem;
         NavigateTo("overview");
+        UpdateResponsiveLayout(RootGrid.ActualWidth);
     }
 
     private void ApplySettingsToControls()
@@ -146,6 +152,81 @@ public sealed partial class MainWindow : Window
             if (nested is not null) return nested;
         }
         return null;
+    }
+
+    private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateResponsiveLayout(e.NewSize.Width);
+
+    private void UpdateResponsiveLayout(double width)
+    {
+        var isNarrow = width < 720;
+        if (isNarrow != _isNarrowLayout)
+        {
+            if (isNarrow)
+            {
+                var wasOpen = RootNavigationView.IsPaneOpen;
+                _isNarrowLayout = true;
+                RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.LeftMinimal;
+                RootNavigationView.IsPaneOpen = false;
+                _paneWasOpenBeforeNarrow = wasOpen;
+            }
+            else
+            {
+                _isNarrowLayout = false;
+                RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
+                RootNavigationView.IsPaneOpen = _paneWasOpenBeforeNarrow;
+            }
+        }
+
+        var contentPadding = isNarrow ? 16 : 30;
+        ContentHeader.Padding = new Thickness(contentPadding, isNarrow ? 16 : 24, contentPadding, isNarrow ? 12 : 18);
+        ContentHost.Padding = new Thickness(contentPadding, 0, contentPadding, isNarrow ? 16 : 28);
+        SessionTabHost.Margin = isNarrow
+            ? new Thickness(56, 0, 180, 0)
+            : new Thickness(65, 0, 300, 0);
+        ConnectionProgressText.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
+        ConnectionProgressPanel.Spacing = isNarrow ? 0 : 8;
+
+        OverviewStatsGrid.ColumnSpacing = isNarrow ? 0 : 16;
+        OverviewStatsGrid.RowSpacing = isNarrow ? 12 : 0;
+        OverviewStatsGrid.RowDefinitions[1].Height = isNarrow ? GridLength.Auto : new GridLength(0);
+        Grid.SetRow(RecentServerOverviewCard, isNarrow ? 1 : 0);
+        Grid.SetColumn(RecentServerOverviewCard, isNarrow ? 0 : 1);
+
+        ServerListHeader.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
+        ServerToolbar.RowSpacing = isNarrow ? 10 : 0;
+        ServerToolbar.RowDefinitions.Clear();
+        if (isNarrow)
+        {
+            ServerToolbar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ServerToolbar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            ServerToolbar.ColumnDefinitions[0].Width = new GridLength(136);
+            ServerToolbar.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+            Grid.SetRow(ServerSearchBox, 0);
+            Grid.SetColumn(ServerSearchBox, 0);
+            Grid.SetColumnSpan(ServerSearchBox, 4);
+            Grid.SetRow(ServerSortComboBox, 1);
+            Grid.SetColumn(ServerSortComboBox, 0);
+            Grid.SetRow(RefreshServersButton, 1);
+            Grid.SetColumn(RefreshServersButton, 2);
+            Grid.SetRow(AddServerPageButton, 1);
+            Grid.SetColumn(AddServerPageButton, 3);
+            AddServerPageButton.Content = "添加";
+        }
+        else
+        {
+            ServerToolbar.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            ServerToolbar.ColumnDefinitions[1].Width = new GridLength(150);
+            Grid.SetRow(ServerSearchBox, 0);
+            Grid.SetColumn(ServerSearchBox, 0);
+            Grid.SetColumnSpan(ServerSearchBox, 1);
+            Grid.SetRow(ServerSortComboBox, 0);
+            Grid.SetColumn(ServerSortComboBox, 1);
+            Grid.SetRow(RefreshServersButton, 0);
+            Grid.SetColumn(RefreshServersButton, 2);
+            Grid.SetRow(AddServerPageButton, 0);
+            Grid.SetColumn(AddServerPageButton, 3);
+            AddServerPageButton.Content = "添加服务器";
+        }
     }
 
     private void NavigateTo(string page)
@@ -223,7 +304,8 @@ public sealed partial class MainWindow : Window
 
     private void RootNavigationView_PaneOpening(NavigationView sender, object args)
     {
-        _sidebarCollapsed = false;
+        if (_isNarrowLayout) _paneWasOpenBeforeNarrow = true;
+        else _sidebarCollapsed = false;
         UpdatePaneToggleButton(isPaneOpen: true);
         ConnectedSidebarExpandedPanel.Visibility = ConnectedSidebarPanel.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
         ConnectedSidebarCompactPanel.Visibility = Visibility.Collapsed;
@@ -232,7 +314,8 @@ public sealed partial class MainWindow : Window
 
     private void RootNavigationView_PaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
-        _sidebarCollapsed = true;
+        if (_isNarrowLayout) _paneWasOpenBeforeNarrow = false;
+        else _sidebarCollapsed = true;
         UpdatePaneToggleButton(isPaneOpen: false);
         ConnectedSidebarExpandedPanel.Visibility = Visibility.Collapsed;
         ConnectedSidebarCompactPanel.Visibility = ConnectedSidebarPanel.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;

@@ -39,6 +39,7 @@ public sealed class SessionWorkspace : UserControl
     private readonly TextBox _sftpPathBox = new();
     private readonly ProgressRing _directoryProgress = new();
     private readonly TextBlock _directoryStatus = new();
+    private readonly StackPanel _directoryStatusPanel = new();
     private readonly SfDataGrid _remoteTable = new();
     private readonly TextBlock _sftpSelectionStatus = new();
     private readonly AppBarButton _downloadButton = new();
@@ -76,6 +77,7 @@ public sealed class SessionWorkspace : UserControl
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _showHiddenFiles = profile.ShowHiddenFiles;
         Content = BuildLayout();
+        SizeChanged += SessionWorkspace_SizeChanged;
     }
 
     public ServerProfile Profile => _profile;
@@ -328,13 +330,10 @@ public sealed class SessionWorkspace : UserControl
         _sftpPathBox.IsSpellCheckEnabled = false;
         _sftpPathBox.KeyDown += SftpPathBox_KeyDown;
         pathBar.Children.Add(_sftpPathBox);
-        var directoryStatusPanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Margin = new Thickness(10, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
+        _directoryStatusPanel.Orientation = Orientation.Horizontal;
+        _directoryStatusPanel.Spacing = 8;
+        _directoryStatusPanel.Margin = new Thickness(10, 0, 0, 0);
+        _directoryStatusPanel.VerticalAlignment = VerticalAlignment.Center;
         _directoryProgress.Width = 16;
         _directoryProgress.Height = 16;
         _directoryProgress.IsActive = false;
@@ -343,10 +342,10 @@ public sealed class SessionWorkspace : UserControl
         _directoryStatus.Foreground = ThemeBrush("MutedTextBrush");
         _directoryStatus.MaxWidth = 220;
         _directoryStatus.TextTrimming = TextTrimming.CharacterEllipsis;
-        directoryStatusPanel.Children.Add(_directoryProgress);
-        directoryStatusPanel.Children.Add(_directoryStatus);
-        Grid.SetColumn(directoryStatusPanel, 1);
-        pathBar.Children.Add(directoryStatusPanel);
+        _directoryStatusPanel.Children.Add(_directoryProgress);
+        _directoryStatusPanel.Children.Add(_directoryStatus);
+        Grid.SetColumn(_directoryStatusPanel, 1);
+        pathBar.Children.Add(_directoryStatusPanel);
         Grid.SetRow(pathBar, 1);
         panel.Children.Add(pathBar);
 
@@ -400,6 +399,7 @@ public sealed class SessionWorkspace : UserControl
         _remoteTable.HeaderRowHeight = 40;
         _remoteTable.RowHeight = 40;
         _remoteTable.FontSize = 14;
+        _remoteTable.ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill;
         _remoteTable.CellDoubleTapped += async (_, _) => await OpenDirectoryAsync(SelectedRemoteItem);
         _remoteTable.SelectionChanged += RemoteTable_SelectionChanged;
         _remoteTable.GridContextFlyoutOpening += RemoteTable_GridContextFlyoutOpening;
@@ -428,24 +428,24 @@ public sealed class SessionWorkspace : UserControl
             HeaderText = "名称",
             MappingName = nameof(RemoteFileItem.SortName),
             DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.Name)),
-            Width = 420,
-            MinimumWidth = 200,
+            ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill,
+            MinimumWidth = 180,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         _remoteTable.Columns.Add(new GridTextColumn
         {
             HeaderText = "类型",
             MappingName = nameof(RemoteFileItem.TypeLabel),
-            Width = 110,
-            MinimumWidth = 80
+            MinimumWidth = 80,
+            MaximumWidth = 160
         });
         _remoteTable.Columns.Add(new GridTextColumn
         {
             HeaderText = "大小",
             MappingName = nameof(RemoteFileItem.SizeBytes),
             DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.SizeLabel)),
-            Width = 120,
             MinimumWidth = 96,
+            MaximumWidth = 160,
             TextAlignment = TextAlignment.Right
         });
         _remoteTable.Columns.Add(new GridTextColumn
@@ -453,9 +453,21 @@ public sealed class SessionWorkspace : UserControl
             HeaderText = "修改时间",
             MappingName = nameof(RemoteFileItem.ModifiedAt),
             DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
-            Width = 180,
-            MinimumWidth = 150
+            MinimumWidth = 150,
+            MaximumWidth = 230
         });
+    }
+
+    private void SessionWorkspace_SizeChanged(object sender, SizeChangedEventArgs e) => ApplySftpResponsiveLayout(e.NewSize.Width);
+
+    private void ApplySftpResponsiveLayout(double width)
+    {
+        var isNarrow = width < 560;
+        _sftpSelectionStatus.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
+        _directoryStatus.MaxWidth = width < 760 ? 112 : 220;
+        _directoryStatusPanel.Visibility = !isNarrow || _isDirectoryLoading
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private MenuFlyout BuildRemoteRowMenu()
