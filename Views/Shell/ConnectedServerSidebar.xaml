@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="FluentShell.Views.Shell.ConnectedServerSidebar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid VerticalAlignment="Stretch">
+        <StackPanel x:Name="ExpandedPanel" Margin="16,16,12,0" Spacing="20">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="ServerNameText" Text="服务器" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ServerStatusText" Text="正在连接" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontSize="13" />
+            </StackPanel>
+            <StackPanel Spacing="5">
+                <TextBlock x:Name="AddressText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="UserText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <StackPanel Spacing="12">
+                <TextBlock Text="服务器状态" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+                <StackPanel x:Name="MetricsPanel" Spacing="12" />
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel
+            x:Name="CompactPanel"
+            Visibility="Collapsed"
+            Margin="8,16,8,12"
+            Spacing="14"
+            SizeChanged="CompactPanel_SizeChanged"
+            VerticalAlignment="Stretch">
+            <Grid RowSpacing="4">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="CPU" FontSize="10" />
+                <TextBlock x:Name="CompactCpuText" Grid.Column="1" Text="—" FontSize="10" />
+                <Grid x:Name="CompactCpuTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                    <Border x:Name="CompactCpuFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                </Grid>
+            </Grid>
+            <Grid RowSpacing="4">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="内存" FontSize="10" />
+                <TextBlock x:Name="CompactMemoryText" Grid.Column="1" Text="—" FontSize="10" />
+                <Grid x:Name="CompactMemoryTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                    <Border x:Name="CompactMemoryFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                </Grid>
+            </Grid>
+            <Grid RowSpacing="4">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="Swap" FontSize="10" />
+                <TextBlock x:Name="CompactSwapText" Grid.Column="1" Text="—" FontSize="10" />
+                <Grid x:Name="CompactSwapTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                    <Border x:Name="CompactSwapFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                </Grid>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>

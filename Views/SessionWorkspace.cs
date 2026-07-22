@@ -1,135 +1,117 @@
+using FluentShell.Core;
+using FluentShell.Models;
+using FluentShell.Services;
+using FluentShell.Views.Session;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.Web.WebView2.Core;
-using Renci.SshNet.Common;
-using Syncfusion.UI.Xaml.DataGrid;
-using Syncfusion.UI.Xaml.Grids;
-using FluentShell.Models;
-using FluentShell.Services;
-using System.Collections.ObjectModel;
-using System.Text;
-using System.Text.Json;
-using Windows.ApplicationModel.DataTransfer;
-using Windows.Storage;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace FluentShell.Views;
 
-public sealed class SessionWorkspace : UserControl
+public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposable
 {
-    private const string PanelBottomContractPath = "M10.5 11.1741L11.3737 10.1756C11.5556 9.96781 11.8714 9.94675 12.0793 10.1286C12.2871 10.3104 12.3081 10.6263 12.1263 10.8341L10.3763 12.8341C10.2814 12.9426 10.1442 13.0049 10 13.0049C9.85583 13.0049 9.71866 12.9426 9.62372 12.8341L7.87372 10.8341C7.69188 10.6263 7.71294 10.3104 7.92075 10.1286C8.12857 9.94675 8.44445 9.96781 8.6263 10.1756L9.50001 11.1742L9.50001 7.49512C9.50001 7.21897 9.72387 6.99512 10 6.99512C10.2762 6.99512 10.5 7.21897 10.5 7.49512L10.5 11.1741ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H13.1664C13.1049 11.1761 13.0093 11.3436 12.8789 11.4926L12.4349 12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H7.56509L7.12116 11.4926C6.99078 11.3436 6.89517 11.1761 6.83367 11H3V6Z";
     private const string PanelBottomExpandPath = "M10.5 8.82585L11.3737 9.82437C11.5556 10.0322 11.8714 10.0532 12.0793 9.87141C12.2871 9.68956 12.3081 9.37368 12.1263 9.16586L10.3763 7.16586C10.2814 7.05736 10.1442 6.99512 10 6.99512C9.85583 6.99512 9.71866 7.05736 9.62372 7.16586L7.87372 9.16586C7.69188 9.37368 7.71294 9.68956 7.92075 9.87141C8.12857 10.0532 8.44445 10.0322 8.6263 9.82437L9.50001 8.82583L9.50001 12.5049C9.50001 12.781 9.72387 13.0049 10 13.0049C10.2762 13.0049 10.5 12.781 10.5 12.5049L10.5 8.82585ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H11.5V12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H8.50003V11H3V6Z";
+
     private readonly ServerProfile _profile;
-    private readonly IntPtr _windowHandle;
     private readonly Func<HostFingerprintRequiredEventArgs, Task<bool>> _fingerprintConfirmation;
     private readonly Func<Task<string?>> _passwordProvider;
     private readonly ElementTheme _workspaceTheme;
-    private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly WebView2 _terminalView = new();
-    private readonly StringBuilder _pendingTerminalOutput = new();
+    private readonly TerminalPane _terminalPane = new();
     private readonly TextBlock _connectionState = new();
     private readonly Button _reconnectButton = new();
-    private readonly TextBox _sftpPathBox = new();
-    private readonly ProgressRing _directoryProgress = new();
-    private readonly TextBlock _directoryStatus = new();
-    private readonly StackPanel _directoryStatusPanel = new();
-    private readonly SfDataGrid _remoteTable = new();
-    private readonly TextBlock _sftpSelectionStatus = new();
-    private readonly AppBarButton _downloadButton = new();
-    private readonly AppBarButton _renameButton = new();
-    private readonly AppBarButton _deleteButton = new();
-    private readonly ProgressBar _transferProgress = new();
-    private readonly TextBlock _transferStatus = new();
-    private readonly Button _cancelTransferButton = new();
-    private readonly SemaphoreSlim _transferGate = new(1, 1);
-    private readonly Grid _sftpGrid = new();
     private readonly Grid _workspaceGrid = new();
     private readonly Button _sftpRestoreButton = new();
-    private readonly Button _sftpCollapseButton = new();
-    private readonly CommandBar _sftpToolbar = new();
-    private string _currentPath = "/";
-    private bool _showHiddenFiles;
-    private bool _isCollapsed;
-    private bool _terminalInitializationStarted;
-    private bool _terminalReady;
-    private double _terminalFontSize = 14;
-    private double _previousSftpHeight = 260;
+    private readonly SftpWorkspace _sftpWorkspace;
+    private SshConnectionService? _activeService;
     private CancellationTokenSource? _metricsCts;
-    private CancellationTokenSource? _transferCts;
     private bool _isConnecting;
-    private bool _isDirectoryLoading;
+    private bool _isSftpCollapsed;
+    private double _previousSftpHeight = 260;
 
-    public SessionWorkspace(ServerProfile profile, IntPtr windowHandle, Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation, Func<Task<string?>> passwordProvider, ElementTheme workspaceTheme)
+    public SessionWorkspace(
+        ServerProfile profile,
+        IntPtr windowHandle,
+        Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation,
+        Func<Task<string?>> passwordProvider,
+        ElementTheme workspaceTheme)
     {
         _profile = profile;
-        _windowHandle = windowHandle;
         _fingerprintConfirmation = fingerprintConfirmation;
         _passwordProvider = passwordProvider;
-        _workspaceTheme = workspaceTheme == ElementTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        _workspaceTheme = workspaceTheme == ElementTheme.Dark
+            ? ElementTheme.Dark
+            : ElementTheme.Light;
         RequestedTheme = _workspaceTheme;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        _showHiddenFiles = profile.ShowHiddenFiles;
+
+        var fileService = new SftpFileService(() => _activeService?.SftpClient);
+        _sftpWorkspace = new SftpWorkspace(profile, windowHandle, fileService, _workspaceTheme);
+        _sftpWorkspace.CollapseRequested += SftpWorkspace_CollapseRequested;
+        _terminalPane.InputReceived += TerminalPane_InputReceived;
+        _terminalPane.ResizeRequested += TerminalPane_ResizeRequested;
+        _terminalPane.InitializationFailed += TerminalPane_InitializationFailed;
+
         Content = BuildLayout();
-        SizeChanged += SessionWorkspace_SizeChanged;
     }
 
     public ServerProfile Profile => _profile;
     public string DisplayTitle => _profile.Name;
     public bool IsConnected => _activeService?.IsConnected == true;
-    public bool IsTransferActive => _transferCts is not null;
+    public bool IsTransferActive => _sftpWorkspace.IsTransferActive;
+
     public event EventHandler<ServerMetrics?>? MetricsUpdated;
     public event EventHandler<string>? StatusChanged;
 
-    private Brush ThemeBrush(string key)
-    {
-        var themeKey = _workspaceTheme == ElementTheme.Dark ? "Dark" : "Light";
-        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictionary) && dictionary is ResourceDictionary themeDictionary && themeDictionary.ContainsKey(key))
-            return (Brush)themeDictionary[key];
-        return (Brush)Application.Current.Resources[key];
-    }
-
     public void SetActive(bool active)
     {
-        if (!active) _metricsCts?.Cancel();
-        else if (_activeService?.IsConnected == true) _ = RefreshMetricsLoopAsync(_activeService);
+        if (!active)
+        {
+            _metricsCts?.Cancel();
+        }
+        else if (_activeService?.IsConnected == true)
+        {
+            _ = RefreshMetricsLoopAsync(_activeService);
+        }
     }
 
-    public void SetTerminalFontSize(double value)
-    {
-        _terminalFontSize = value;
-        PostTerminalMessage(new { type = "fontSize", value });
-    }
+    public void SetTerminalFontSize(double value) => _terminalPane.SetFontSize(value);
 
     private UIElement BuildLayout()
     {
-        var root = _workspaceGrid;
-        // The window backdrop should remain visible around the terminal and SFTP surfaces.
-        root.Background = null;
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(65, GridUnitType.Star), MinHeight = 180 });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(35, GridUnitType.Star), MinHeight = 120 });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _workspaceGrid.Background = null;
+        _workspaceGrid.RowDefinitions.Add(new RowDefinition
+        {
+            Height = new GridLength(65, GridUnitType.Star),
+            MinHeight = 180
+        });
+        _workspaceGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
+        _workspaceGrid.RowDefinitions.Add(new RowDefinition
+        {
+            Height = new GridLength(35, GridUnitType.Star),
+            MinHeight = 120
+        });
+        _workspaceGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var terminalGrid = BuildTerminalGrid();
-        Grid.SetRow(terminalGrid, 0);
-        root.Children.Add(terminalGrid);
+        _workspaceGrid.Children.Add(terminalGrid);
 
-        var splitter = new Thumb { Background = ThemeBrush("SubtleStrokeBrush"), Height = 6, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var splitter = new Thumb
+        {
+            Background = ThemeBrush("SubtleStrokeBrush"),
+            Height = 6,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
         splitter.DragDelta += Splitter_DragDelta;
-        splitter.DoubleTapped += (_, _) => ToggleSftp();
+        splitter.DoubleTapped += Splitter_DoubleTapped;
         Grid.SetRow(splitter, 1);
-        root.Children.Add(splitter);
+        _workspaceGrid.Children.Add(splitter);
 
-        var sftpPanel = BuildSftpPanel();
-        Grid.SetRow(sftpPanel, 2);
-        root.Children.Add(sftpPanel);
+        Grid.SetRow(_sftpWorkspace.View, 2);
+        _workspaceGrid.Children.Add(_sftpWorkspace.View);
 
         var restoreRow = new Grid { Padding = new Thickness(0, 4, 0, 4) };
         _sftpRestoreButton.Content = CreateFluentPathIcon(PanelBottomExpandPath);
@@ -137,415 +119,52 @@ public sealed class SessionWorkspace : UserControl
         _sftpRestoreButton.HorizontalAlignment = HorizontalAlignment.Left;
         ToolTipService.SetToolTip(_sftpRestoreButton, "展开 SFTP 文件管理器");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpRestoreButton, "展开 SFTP 文件管理器");
-        _sftpRestoreButton.Click += (_, _) => ToggleSftp();
+        _sftpRestoreButton.Click += SftpRestoreButton_Click;
         _sftpRestoreButton.Visibility = Visibility.Collapsed;
         restoreRow.Children.Add(_sftpRestoreButton);
         Grid.SetRow(restoreRow, 3);
-        root.Children.Add(restoreRow);
-        return root;
+        _workspaceGrid.Children.Add(restoreRow);
+
+        return _workspaceGrid;
     }
 
     private Grid BuildTerminalGrid()
     {
         var grid = new Grid { Padding = new Thickness(0, 0, 0, 8) };
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.Children.Add(_terminalPane);
 
-        _terminalView.HorizontalAlignment = HorizontalAlignment.Stretch;
-        _terminalView.VerticalAlignment = VerticalAlignment.Stretch;
-        Grid.SetRow(_terminalView, 0);
-        grid.Children.Add(_terminalView);
-        _terminalView.Loaded += TerminalView_Loaded;
-
-        var statePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 4, 4, 0) };
+        var statePanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 4, 4, 0)
+        };
         _connectionState.Text = "未连接";
         _connectionState.Foreground = ThemeBrush("MutedTextBrush");
         _connectionState.VerticalAlignment = VerticalAlignment.Center;
         statePanel.Children.Add(_connectionState);
         _reconnectButton.Content = "重新连接";
         _reconnectButton.Visibility = Visibility.Collapsed;
-        _reconnectButton.Click += async (_, _) => await ConnectAsync();
+        _reconnectButton.Click += ReconnectButton_Click;
         statePanel.Children.Add(_reconnectButton);
-        Grid.SetRow(statePanel, 0);
         Canvas.SetZIndex(statePanel, 1);
         grid.Children.Add(statePanel);
         return grid;
     }
 
-    private void TerminalView_Loaded(object sender, RoutedEventArgs e)
+    private Brush ThemeBrush(string key)
     {
-        if (_terminalInitializationStarted) return;
-        _terminalInitializationStarted = true;
-        _ = InitializeTerminalAsync();
-    }
-
-    private async Task InitializeTerminalAsync()
-    {
-        try
+        var themeKey = _workspaceTheme == ElementTheme.Dark ? "Dark" : "Light";
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictionary) &&
+            dictionary is ResourceDictionary themeDictionary &&
+            themeDictionary.ContainsKey(key))
         {
-            await _terminalView.EnsureCoreWebView2Async();
-            var terminalAssets = Path.Combine(AppContext.BaseDirectory, "Assets", "Terminal");
-            _terminalView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            _terminalView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-        _terminalView.CoreWebView2.SetVirtualHostNameToFolderMapping("fluentshell.local", terminalAssets, CoreWebView2HostResourceAccessKind.Allow);
-            _terminalView.CoreWebView2.WebMessageReceived += TerminalView_WebMessageReceived;
-        _terminalView.Source = new Uri("https://fluentshell.local/index.html");
+            return (Brush)themeDictionary[key];
         }
-        catch (Exception ex)
-        {
-            AppendOutput($"\r\n[终端初始化失败] {ex.Message}\r\n");
-        }
-    }
-
-    private void TerminalView_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(e.WebMessageAsJson);
-            var root = document.RootElement;
-            if (!root.TryGetProperty("type", out var typeElement)) return;
-            var type = typeElement.GetString();
-            switch (type)
-            {
-                case "ready":
-                    _terminalReady = true;
-                    PostTerminalMessage(new { type = "fontSize", value = _terminalFontSize });
-                    if (_pendingTerminalOutput.Length > 0)
-                    {
-                        var pending = _pendingTerminalOutput.ToString();
-                        _pendingTerminalOutput.Clear();
-                        PostTerminalMessage(new { type = "write", data = pending });
-                    }
-                    break;
-                case "input":
-                    if (root.TryGetProperty("data", out var input) && input.GetString() is string data && data.Length > 0) _ = SendTerminalInputAsync(data);
-                    break;
-                case "resize":
-                    if (root.TryGetProperty("cols", out var cols) && root.TryGetProperty("rows", out var rows)) _ = ResizeTerminalAsync(cols.GetInt32(), rows.GetInt32());
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AppendOutput($"\r\n[终端消息失败] {ex.Message}\r\n");
-        }
-    }
-
-    private void PostTerminalMessage(object message)
-    {
-        if (!_terminalReady || _terminalView.CoreWebView2 is null) return;
-        _terminalView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message));
-    }
-
-    private async Task SendTerminalInputAsync(string data)
-    {
-        if (_activeService is null || !_activeService.IsConnected) return;
-        try { await _activeService.SendRawAsync(data); }
-        catch (Exception ex) { AppendOutput($"\r\n[发送失败] {ex.Message}\r\n"); }
-    }
-
-    private async Task ResizeTerminalAsync(int columns, int rows)
-    {
-        if (_activeService is null || !_activeService.IsConnected || columns <= 0 || rows <= 0) return;
-        try { await _activeService.ResizeTerminalAsync(columns, rows); } catch { }
-    }
-
-    private Grid BuildSftpPanel()
-    {
-        var panel = new Grid { Padding = new Thickness(0, 8, 0, 10), RowSpacing = 6 };
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var heading = new Grid { ColumnSpacing = 10 };
-        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        _sftpCollapseButton.Content = CreateFluentPathIcon(PanelBottomContractPath);
-        _sftpCollapseButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
-        ToolTipService.SetToolTip(_sftpCollapseButton, "收起 SFTP 文件管理器");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpCollapseButton, "收起 SFTP 文件管理器");
-        _sftpCollapseButton.Click += (_, _) => ToggleSftp();
-        Grid.SetColumn(_sftpCollapseButton, 0);
-        heading.Children.Add(_sftpCollapseButton);
-
-        var headingText = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        headingText.Children.Add(new TextBlock { Text = "SFTP 文件管理器", FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        _sftpSelectionStatus.Text = "0 项";
-        _sftpSelectionStatus.FontSize = 12;
-        _sftpSelectionStatus.Foreground = ThemeBrush("MutedTextBrush");
-        _sftpSelectionStatus.VerticalAlignment = VerticalAlignment.Center;
-        headingText.Children.Add(_sftpSelectionStatus);
-        Grid.SetColumn(headingText, 1);
-        heading.Children.Add(headingText);
-
-        _sftpToolbar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        _sftpToolbar.DefaultLabelPosition = CommandBarDefaultLabelPosition.Collapsed;
-        _sftpToolbar.IsDynamicOverflowEnabled = true;
-        var up = CreateAppBarButton("上一级", Symbol.Up);
-        up.Click += async (_, _) => await NavigateUpAsync();
-        _sftpToolbar.PrimaryCommands.Add(up);
-        var refresh = CreateAppBarButton("刷新", Symbol.Refresh);
-        refresh.Click += async (_, _) => await RefreshRemoteFilesAsync();
-        _sftpToolbar.PrimaryCommands.Add(refresh);
-        var newFolder = CreateAppBarButton("新建文件夹", Symbol.Add);
-        newFolder.Click += NewFolderButton_Click;
-        _sftpToolbar.PrimaryCommands.Add(newFolder);
-        var upload = CreateAppBarButton("上传", Symbol.Upload);
-        upload.Click += UploadButton_Click;
-        _sftpToolbar.PrimaryCommands.Add(upload);
-        ConfigureSelectionCommand(_downloadButton, "下载", Symbol.Download, DownloadButton_Click);
-        ConfigureSelectionCommand(_renameButton, "重命名", Symbol.Edit, RenameButton_Click);
-        ConfigureSelectionCommand(_deleteButton, "删除", Symbol.Delete, DeleteButton_Click);
-        _sftpToolbar.PrimaryCommands.Add(_downloadButton);
-        _sftpToolbar.PrimaryCommands.Add(_renameButton);
-        _sftpToolbar.PrimaryCommands.Add(_deleteButton);
-        var hidden = new AppBarToggleButton
-        {
-            Label = "显示隐藏文件",
-            Icon = CreateCommandIcon(Symbol.View),
-            IsChecked = _showHiddenFiles,
-            Style = (Style)Application.Current.Resources["CommandBarIconToggleButtonStyle"]
-        };
-        ToolTipService.SetToolTip(hidden, "显示隐藏文件");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(hidden, "显示隐藏文件");
-        hidden.Click += (_, _) =>
-        {
-            _showHiddenFiles = hidden.IsChecked == true;
-            _profile.ShowHiddenFiles = _showHiddenFiles;
-            _ = RefreshRemoteFilesAsync();
-        };
-        _sftpToolbar.PrimaryCommands.Add(hidden);
-        Grid.SetColumn(_sftpToolbar, 2);
-        heading.Children.Add(_sftpToolbar);
-        Grid.SetRow(heading, 0);
-        panel.Children.Add(heading);
-
-        var pathBar = new Grid();
-        pathBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        pathBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _sftpPathBox.Text = "/";
-        _sftpPathBox.PlaceholderText = "远程路径";
-        _sftpPathBox.FontFamily = new FontFamily("Cascadia Mono");
-        _sftpPathBox.FontSize = 12;
-        _sftpPathBox.IsSpellCheckEnabled = false;
-        _sftpPathBox.KeyDown += SftpPathBox_KeyDown;
-        pathBar.Children.Add(_sftpPathBox);
-        _directoryStatusPanel.Orientation = Orientation.Horizontal;
-        _directoryStatusPanel.Spacing = 8;
-        _directoryStatusPanel.Margin = new Thickness(10, 0, 0, 0);
-        _directoryStatusPanel.VerticalAlignment = VerticalAlignment.Center;
-        _directoryProgress.Width = 16;
-        _directoryProgress.Height = 16;
-        _directoryProgress.IsActive = false;
-        _directoryProgress.Visibility = Visibility.Collapsed;
-        _directoryStatus.FontSize = 12;
-        _directoryStatus.Foreground = ThemeBrush("MutedTextBrush");
-        _directoryStatus.MaxWidth = 220;
-        _directoryStatus.TextTrimming = TextTrimming.CharacterEllipsis;
-        _directoryStatusPanel.Children.Add(_directoryProgress);
-        _directoryStatusPanel.Children.Add(_directoryStatus);
-        Grid.SetColumn(_directoryStatusPanel, 1);
-        pathBar.Children.Add(_directoryStatusPanel);
-        Grid.SetRow(pathBar, 1);
-        panel.Children.Add(pathBar);
-
-        ConfigureRemoteTable();
-        Grid.SetRow(_remoteTable, 2);
-        panel.Children.Add(_remoteTable);
-
-        _transferStatus.Text = "暂无文件传输";
-        _transferStatus.FontSize = 12;
-        _transferStatus.Foreground = ThemeBrush("MutedTextBrush");
-        _transferStatus.TextTrimming = TextTrimming.CharacterEllipsis;
-        _transferProgress.Visibility = Visibility.Collapsed;
-        _transferProgress.IsIndeterminate = true;
-        _transferProgress.Width = 160;
-        var transferRow = new Grid { ColumnSpacing = 10 };
-        transferRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        transferRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        transferRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        transferRow.Children.Add(_transferStatus);
-        Grid.SetColumn(_transferProgress, 1);
-        transferRow.Children.Add(_transferProgress);
-        _cancelTransferButton.Content = CreateCommandIcon(Symbol.Cancel);
-        _cancelTransferButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
-        ToolTipService.SetToolTip(_cancelTransferButton, "取消文件传输");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_cancelTransferButton, "取消文件传输");
-        _cancelTransferButton.Visibility = Visibility.Collapsed;
-        _cancelTransferButton.Click += (_, _) => _transferCts?.Cancel();
-        Grid.SetColumn(_cancelTransferButton, 2);
-        transferRow.Children.Add(_cancelTransferButton);
-        Grid.SetRow(transferRow, 3);
-        panel.Children.Add(transferRow);
-        UpdateSftpSelectionState();
-        return panel;
-    }
-
-    private void ConfigureRemoteTable()
-    {
-        _remoteTable.ItemsSource = _remoteFiles;
-        _remoteTable.AutoGenerateColumns = false;
-        _remoteTable.IsReadOnly = true;
-        _remoteTable.SelectionUnit = GridSelectionUnit.Row;
-        _remoteTable.AllowSorting = true;
-        _remoteTable.AllowFiltering = true;
-        _remoteTable.AllowResizingColumns = true;
-        _remoteTable.AllowDraggingColumns = true;
-        _remoteTable.AllowGrouping = false;
-        _remoteTable.AllowRowHoverHighlighting = true;
-        _remoteTable.ShowRowHeader = false;
-        _remoteTable.HeaderRowHeight = 40;
-        _remoteTable.RowHeight = 40;
-        _remoteTable.FontSize = 14;
-        _remoteTable.ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill;
-        _remoteTable.CellDoubleTapped += async (_, _) => await OpenDirectoryAsync(SelectedRemoteItem);
-        _remoteTable.SelectionChanged += RemoteTable_SelectionChanged;
-        _remoteTable.GridContextFlyoutOpening += RemoteTable_GridContextFlyoutOpening;
-        _remoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
-        _remoteTable.RecordContextFlyout = BuildRemoteRowMenu();
-
-        var iconCellStyle = new Style(typeof(GridCell));
-        iconCellStyle.Setters.Add(new Setter(Control.FontFamilyProperty, new FontFamily("Segoe Fluent Icons")));
-        iconCellStyle.Setters.Add(new Setter(Control.FontSizeProperty, 16d));
-        iconCellStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Center));
-
-        _remoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = string.Empty,
-            MappingName = nameof(RemoteFileItem.IconGlyph),
-            Width = 44,
-            AllowResizing = false,
-            AllowSorting = false,
-            AllowFiltering = false,
-            AllowDragging = false,
-            CellStyle = iconCellStyle,
-            TextAlignment = TextAlignment.Center
-        });
-        _remoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = "名称",
-            MappingName = nameof(RemoteFileItem.SortName),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.Name)),
-            ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill,
-            MinimumWidth = 180,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-        _remoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = "类型",
-            MappingName = nameof(RemoteFileItem.TypeLabel),
-            MinimumWidth = 80,
-            MaximumWidth = 160
-        });
-        _remoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = "大小",
-            MappingName = nameof(RemoteFileItem.SizeBytes),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.SizeLabel)),
-            MinimumWidth = 96,
-            MaximumWidth = 160,
-            TextAlignment = TextAlignment.Right
-        });
-        _remoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = "修改时间",
-            MappingName = nameof(RemoteFileItem.ModifiedAt),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
-            MinimumWidth = 150,
-            MaximumWidth = 230
-        });
-    }
-
-    private void SessionWorkspace_SizeChanged(object sender, SizeChangedEventArgs e) => ApplySftpResponsiveLayout(e.NewSize.Width);
-
-    private void ApplySftpResponsiveLayout(double width)
-    {
-        var isNarrow = width < 560;
-        _sftpSelectionStatus.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
-        _directoryStatus.MaxWidth = width < 760 ? 112 : 220;
-        _directoryStatusPanel.Visibility = !isNarrow || _isDirectoryLoading
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-    }
-
-    private MenuFlyout BuildRemoteRowMenu()
-    {
-        var menu = new MenuFlyout();
-        var open = new MenuFlyoutItem { Text = "打开文件夹" };
-        open.Click += async (_, _) => { if (SelectedRemoteItem is { IsDirectory: true } item) await NavigateToAsync(item.FullPath); };
-        var download = new MenuFlyoutItem { Text = "下载" };
-        download.Click += async (_, _) => await DownloadSelectedAsync();
-        var copyPath = new MenuFlyoutItem { Text = "复制远程路径" };
-        copyPath.Click += (_, _) => CopySelectedRemotePath();
-        var rename = new MenuFlyoutItem { Text = "重命名" };
-        rename.Click += async (_, _) => await RenameSelectedAsync();
-        var delete = new MenuFlyoutItem { Text = "删除" };
-        delete.Click += async (_, _) => await DeleteSelectedAsync();
-        menu.Items.Add(open);
-        menu.Items.Add(download);
-        menu.Items.Add(copyPath);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(rename);
-        menu.Items.Add(delete);
-        menu.Opened += (_, _) =>
-        {
-            var item = SelectedRemoteItem;
-            open.IsEnabled = item?.IsDirectory == true;
-            download.IsEnabled = item is { IsDirectory: false };
-            copyPath.IsEnabled = item is not null;
-            rename.IsEnabled = item is not null && item.Name != "..";
-            delete.IsEnabled = item is not null && item.Name != "..";
-        };
-        return menu;
-    }
-
-    private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()
-    {
-        Path = new Microsoft.UI.Xaml.PropertyPath(propertyName),
-        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
-    };
-
-    private static SymbolIcon CreateCommandIcon(Symbol symbol) => new() { Symbol = symbol };
-
-    private static PathIcon CreateFluentPathIcon(string pathData) =>
-        (PathIcon)XamlReader.Load($"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"{pathData}\" Width=\"20\" Height=\"20\" />");
-
-    private static Button CreateCommandButton(Symbol symbol, string title)
-    {
-        var button = new Button
-        {
-            Content = CreateCommandIcon(symbol),
-            Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"]
-        };
-        ToolTipService.SetToolTip(button, title);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
-        return button;
-    }
-
-    private static AppBarButton CreateAppBarButton(string label, Symbol symbol)
-    {
-        var button = new AppBarButton
-        {
-            Label = label,
-            Icon = CreateCommandIcon(symbol),
-            Style = (Style)Application.Current.Resources["CommandBarIconButtonStyle"]
-        };
-        ToolTipService.SetToolTip(button, label);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
-        return button;
-    }
-
-    private static void ConfigureSelectionCommand(AppBarButton button, string label, Symbol symbol, RoutedEventHandler handler)
-    {
-        button.Label = label;
-        button.Icon = CreateCommandIcon(symbol);
-        button.Style = (Style)Application.Current.Resources["CommandBarIconButtonStyle"];
-        ToolTipService.SetToolTip(button, label);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
-        button.IsEnabled = false;
-        button.Click += handler;
+        return (Brush)Application.Current.Resources[key];
     }
 
     public async Task ConnectAsync()
@@ -572,51 +191,70 @@ public sealed class SessionWorkspace : UserControl
             _connectionState.Text = "连接失败";
             _reconnectButton.Visibility = Visibility.Visible;
             StatusChanged?.Invoke(this, $"连接失败：{ex.Message}");
-            AppendOutput($"\r\n[连接失败] {ex.Message}\r\n");
+            _terminalPane.Write($"\r\n[连接失败] {ex.Message}\r\n");
         }
-        finally { _isConnecting = false; }
+        finally
+        {
+            _isConnecting = false;
+        }
     }
 
     private async Task ConnectWithSecretAsync(string secret)
     {
         if (_activeService is not null)
         {
-            _activeService.OutputReceived -= Connection_OutputReceived;
-            _activeService.Disconnected -= Connection_Disconnected;
+            UnsubscribeConnection(_activeService);
             await _activeService.DisposeAsync();
         }
+
         var service = new SshConnectionService(_profile, secret);
         _activeService = service;
         service.OutputReceived += Connection_OutputReceived;
         service.HostFingerprintRequired += Connection_HostFingerprintRequired;
         service.Disconnected += Connection_Disconnected;
-        try { await service.ConnectAsync(); }
-        catch { _activeService = null; await service.DisposeAsync(); throw; }
+        try
+        {
+            await service.ConnectAsync();
+        }
+        catch
+        {
+            _activeService = null;
+            UnsubscribeConnection(service);
+            await service.DisposeAsync();
+            throw;
+        }
+
         _connectionState.Text = "已连接";
         _reconnectButton.Visibility = Visibility.Collapsed;
         StatusChanged?.Invoke(this, "已连接");
-        AppendOutput("连接主机成功。\r\n");
-        await RefreshRemoteFilesAsync(service);
-        PostTerminalMessage(new { type = "focus" });
+        _terminalPane.Write("连接主机成功。\r\n");
+        await _sftpWorkspace.RefreshAsync();
+        _terminalPane.FocusTerminal();
         _ = RefreshMetricsLoopAsync(service);
     }
 
-    private void Connection_HostFingerprintRequired(object? sender, HostFingerprintRequiredEventArgs e)
+    private void Connection_HostFingerprintRequired(
+        object? sender,
+        HostFingerprintRequiredEventArgs e)
     {
         var signal = new ManualResetEventSlim(false);
         _dispatcherQueue.TryEnqueue(async () =>
         {
-            try { e.Accepted = await _fingerprintConfirmation(e); }
-            finally { signal.Set(); }
+            try
+            {
+                e.Accepted = await _fingerprintConfirmation(e);
+            }
+            finally
+            {
+                signal.Set();
+            }
         });
         signal.Wait(TimeSpan.FromMinutes(2));
         if (e.Accepted) _profile.HostFingerprint = e.Fingerprint;
     }
 
-    private void Connection_OutputReceived(object? sender, string e)
-    {
-        _dispatcherQueue.TryEnqueue(() => AppendOutput(e));
-    }
+    private void Connection_OutputReceived(object? sender, string e) =>
+        _dispatcherQueue.TryEnqueue(() => _terminalPane.Write(e));
 
     private void Connection_Disconnected(object? sender, EventArgs e)
     {
@@ -625,211 +263,77 @@ public sealed class SessionWorkspace : UserControl
             _connectionState.Text = "已断开";
             _reconnectButton.Visibility = Visibility.Visible;
             StatusChanged?.Invoke(this, "连接已断开");
-            AppendOutput("\r\n[连接已断开]\r\n");
+            _terminalPane.Write("\r\n[连接已断开]\r\n");
         });
     }
 
-    private void AppendOutput(string text)
-    {
-        if (!_terminalReady)
-        {
-            _pendingTerminalOutput.Append(text);
-            if (_pendingTerminalOutput.Length > 1_000_000)
-                _pendingTerminalOutput.Remove(0, _pendingTerminalOutput.Length - 800_000);
-            return;
-        }
-        PostTerminalMessage(new { type = "write", data = text });
-    }
-
-    private SshConnectionService? _activeService;
-
     private async Task RefreshMetricsLoopAsync(SshConnectionService service)
     {
-        _activeService = service;
         var previous = _metricsCts;
         var current = new CancellationTokenSource();
         _metricsCts = current;
         previous?.Cancel();
         previous?.Dispose();
+
         while (!current.IsCancellationRequested && service.IsConnected)
         {
             var metrics = await service.ReadLinuxMetricsAsync(current.Token);
             MetricsUpdated?.Invoke(this, metrics);
-            try { await Task.Delay(TimeSpan.FromSeconds(3), current.Token); } catch (OperationCanceledException) { break; }
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), current.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
         }
     }
 
-    private RemoteFileItem? SelectedRemoteItem => _remoteTable.SelectedItem as RemoteFileItem;
-
-    private void RemoteTable_SelectionChanged(object? sender, GridSelectionChangedEventArgs e) => UpdateSftpSelectionState();
-
-    private void RemoteTable_GridContextFlyoutOpening(object? sender, GridContextFlyoutEventArgs e)
+    private async void TerminalPane_InputReceived(object? sender, string data)
     {
-        if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: RemoteFileItem item })
-            _remoteTable.SelectedItem = item;
-    }
-
-    private async Task OpenDirectoryAsync(RemoteFileItem? item)
-    {
-        if (item is not { IsDirectory: true } || _isDirectoryLoading) return;
-        await NavigateToAsync(item.FullPath);
-    }
-
-    private async void RemoteTable_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == Windows.System.VirtualKey.Enter && SelectedRemoteItem is { IsDirectory: true } directory)
-        {
-            e.Handled = true;
-            await NavigateToAsync(directory.FullPath);
-        }
-        else if (e.Key == Windows.System.VirtualKey.F2 && SelectedRemoteItem is not null)
-        {
-            e.Handled = true;
-            await RenameSelectedAsync();
-        }
-        else if (e.Key == Windows.System.VirtualKey.Delete && SelectedRemoteItem is not null)
-        {
-            e.Handled = true;
-            await DeleteSelectedAsync();
-        }
-    }
-
-    private async void SftpPathBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key != Windows.System.VirtualKey.Enter) return;
-        e.Handled = true;
-        await NavigateToAsync(_sftpPathBox.Text);
-    }
-
-    private void CopySelectedRemotePath()
-    {
-        if (SelectedRemoteItem is not { } item) return;
-        var package = new DataPackage();
-        package.SetText(item.FullPath);
-        Clipboard.SetContent(package);
-        _transferStatus.Text = "已复制远程路径";
-    }
-
-    private void UpdateSftpSelectionState()
-    {
-        var item = SelectedRemoteItem;
-        _downloadButton.IsEnabled = item is { IsDirectory: false };
-        _renameButton.IsEnabled = item is not null && item.Name != "..";
-        _deleteButton.IsEnabled = item is not null && item.Name != "..";
-        var fileCount = _remoteFiles.Count(remote => remote.Name != "..");
-        _sftpSelectionStatus.Text = item is null ? $"{fileCount} 项" : $"已选择 {item.Name}";
-        ToolTipService.SetToolTip(_sftpSelectionStatus, item?.FullPath);
-    }
-
-    private void SetDirectoryLoading(bool isLoading, string? status = null)
-    {
-        _isDirectoryLoading = isLoading;
-        _directoryProgress.IsActive = isLoading;
-        _directoryProgress.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
-        _directoryStatus.Text = status ?? (isLoading ? "正在读取目录…" : string.Empty);
-        if (isLoading) ToolTipService.SetToolTip(_directoryStatus, null);
-        _sftpPathBox.IsEnabled = !isLoading;
-        _remoteTable.IsEnabled = !isLoading;
-        _sftpToolbar.IsEnabled = !isLoading;
-    }
-
-    private async Task<bool> RefreshRemoteFilesAsync() => await RefreshRemoteFilesAsync(_activeService);
-
-    private async Task<bool> RefreshRemoteFilesAsync(SshConnectionService? service)
-    {
-        if (service?.SftpClient is null || !service.SftpClient.IsConnected || _isDirectoryLoading) return false;
-        var path = _currentPath;
-        SetDirectoryLoading(true, $"正在读取 {path}…");
-        var succeeded = false;
+        if (_activeService is null || !_activeService.IsConnected) return;
         try
         {
-            // Keep the existing rows on screen until the remote request completes.
-            var items = await Task.Run(() => service.SftpClient.ListDirectory(path)
-                .Where(item => item.Name is not "." and not ".." && (_showHiddenFiles || !item.Name.StartsWith('.')))
-                .OrderByDescending(item => item.IsDirectory).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(item => new RemoteFileItem
-                {
-                    Name = item.Name,
-                    IsDirectory = item.IsDirectory,
-                    FullPath = item.FullName,
-                    TypeLabel = item.IsDirectory ? "目录" : "文件",
-                    SizeBytes = item.IsDirectory ? -1 : item.Length,
-                    SizeLabel = item.IsDirectory ? "—" : FormatBytes(item.Length),
-                    ModifiedAt = item.LastWriteTime.ToLocalTime(),
-                    ModifiedLabel = item.LastWriteTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                }).ToList());
-            if (path != "/")
-            {
-                var parent = ParentRemotePath(path);
-                items.Insert(0, new RemoteFileItem
-                {
-                    Name = "..",
-                    IsDirectory = true,
-                    FullPath = parent,
-                    TypeLabel = "目录",
-                    SizeBytes = -1,
-                    SizeLabel = "—",
-                    ModifiedLabel = string.Empty
-                });
-            }
-            _remoteTable.SelectedItem = null;
-            _remoteFiles.Clear();
-            foreach (var item in items) _remoteFiles.Add(item);
-            _sftpPathBox.Text = path;
-            UpdateSftpSelectionState();
-            succeeded = true;
-            return true;
+            await _activeService.SendRawAsync(data);
         }
         catch (Exception ex)
         {
-            SetDirectoryLoading(false, "读取失败");
-            ToolTipService.SetToolTip(_directoryStatus, ex.Message);
-            _transferStatus.Text = $"读取目录失败：{ex.Message}";
-            return false;
-        }
-        finally
-        {
-            if (succeeded) SetDirectoryLoading(false);
+            _terminalPane.Write($"\r\n[发送失败] {ex.Message}\r\n");
         }
     }
 
-    private async Task NavigateToAsync(string path)
+    private async void TerminalPane_ResizeRequested(
+        object? sender,
+        TerminalResizeRequestedEventArgs e)
     {
-        if (_isDirectoryLoading) return;
-        var previous = _currentPath;
-        _currentPath = NormalizeRemotePath(path);
-        if (!await RefreshRemoteFilesAsync())
+        if (_activeService is null || !_activeService.IsConnected || e.Columns <= 0 || e.Rows <= 0)
+            return;
+        try
         {
-            _currentPath = previous;
-            _sftpPathBox.Text = previous;
+            await _activeService.ResizeTerminalAsync(e.Columns, e.Rows);
+        }
+        catch
+        {
         }
     }
 
-    private async Task NavigateUpAsync()
-    {
-        if (_isDirectoryLoading || _currentPath == "/") return;
-        var previous = _currentPath;
-        _currentPath = ParentRemotePath(_currentPath);
-        if (!await RefreshRemoteFilesAsync())
-        {
-            _currentPath = previous;
-            _sftpPathBox.Text = previous;
-        }
-    }
+    private void TerminalPane_InitializationFailed(object? sender, string message) =>
+        _terminalPane.Write($"\r\n[终端初始化失败] {message}\r\n");
 
-    private string ParentRemotePath(string path)
-    {
-        var normalized = NormalizeRemotePath(path);
-        if (normalized == "/") return "/";
-        var parent = normalized.TrimEnd('/');
-        var slash = parent.LastIndexOf('/');
-        return slash <= 0 ? "/" : parent[..slash];
-    }
+    private async void ReconnectButton_Click(object sender, RoutedEventArgs e) => await ConnectAsync();
+
+    private void SftpWorkspace_CollapseRequested(object? sender, EventArgs e) => ToggleSftp();
+
+    private void SftpRestoreButton_Click(object sender, RoutedEventArgs e) => ToggleSftp();
+
+    private void Splitter_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e) =>
+        ToggleSftp();
 
     private void ToggleSftp()
     {
-        _isCollapsed = !_isCollapsed;
-        if (_isCollapsed)
+        _isSftpCollapsed = !_isSftpCollapsed;
+        if (_isSftpCollapsed)
         {
             _previousSftpHeight = Math.Max(120, _workspaceGrid.RowDefinitions[2].ActualHeight);
             _workspaceGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
@@ -844,13 +348,14 @@ public sealed class SessionWorkspace : UserControl
             _workspaceGrid.RowDefinitions[2].MinHeight = 120;
             _workspaceGrid.RowDefinitions[2].Height = new GridLength(_previousSftpHeight);
         }
-        _sftpToolbar.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
-        _sftpRestoreButton.Visibility = _isCollapsed ? Visibility.Visible : Visibility.Collapsed;
+
+        _sftpWorkspace.View.Visibility = _isSftpCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        _sftpRestoreButton.Visibility = _isSftpCollapsed ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Splitter_DragDelta(object sender, DragDeltaEventArgs e)
     {
-        if (_isCollapsed) return;
+        if (_isSftpCollapsed) return;
         var terminalHeight = _workspaceGrid.RowDefinitions[0].ActualHeight + e.VerticalChange;
         var sftpHeight = _workspaceGrid.RowDefinitions[2].ActualHeight - e.VerticalChange;
         if (sftpHeight <= 70)
@@ -859,159 +364,41 @@ public sealed class SessionWorkspace : UserControl
             return;
         }
         if (terminalHeight < 180) return;
+
         _workspaceGrid.RowDefinitions[0].Height = new GridLength(terminalHeight);
         _workspaceGrid.RowDefinitions[2].Height = new GridLength(sftpHeight);
         _previousSftpHeight = sftpHeight;
     }
 
-    private async void NewFolderButton_Click(object sender, RoutedEventArgs e)
+    private static PathIcon CreateFluentPathIcon(string pathData) =>
+        (PathIcon)XamlReader.Load(
+            $"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"{pathData}\" Width=\"20\" Height=\"20\" />");
+
+    private void UnsubscribeConnection(SshConnectionService service)
     {
-        var name = await PromptTextAsync("新建文件夹", "文件夹名称");
-        if (string.IsNullOrWhiteSpace(name) || _activeService?.SftpClient is null) return;
-        try { await Task.Run(() => _activeService.SftpClient.CreateDirectory(CombinePath(_currentPath, name))); await RefreshRemoteFilesAsync(); }
-        catch (Exception ex) { _transferStatus.Text = $"新建失败：{ex.Message}"; }
+        service.OutputReceived -= Connection_OutputReceived;
+        service.HostFingerprintRequired -= Connection_HostFingerprintRequired;
+        service.Disconnected -= Connection_Disconnected;
     }
-
-    private async void UploadButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_activeService?.SftpClient is null) return;
-        var picker = new FileOpenPicker(); picker.FileTypeFilter.Add("*"); InitializeWithWindow.Initialize(picker, _windowHandle);
-        var files = await picker.PickMultipleFilesAsync(); if (files.Count == 0) return;
-        await _transferGate.WaitAsync();
-        _transferCts = new CancellationTokenSource();
-        _cancelTransferButton.Visibility = Visibility.Visible;
-        try
-        {
-            foreach (var file in files)
-            {
-                var remotePath = CombinePath(_currentPath, file.Name);
-                if (_activeService.SftpClient.Exists(remotePath) && !await ConfirmOverwriteAsync(file.Name)) continue;
-                _transferStatus.Text = $"正在上传 {file.Name}";
-                _transferProgress.Visibility = Visibility.Visible;
-                using var input = await file.OpenStreamForReadAsync();
-                await _activeService.SftpClient.UploadFileAsync(input, remotePath, _transferCts.Token);
-            }
-            _transferStatus.Text = "上传完成";
-        }
-        catch (OperationCanceledException) { _transferStatus.Text = "上传已取消"; }
-        catch (Exception ex) { _transferStatus.Text = $"上传失败：{ex.Message}"; }
-        finally
-        {
-            _transferProgress.Visibility = Visibility.Collapsed;
-            _cancelTransferButton.Visibility = Visibility.Collapsed;
-            _transferCts.Dispose(); _transferCts = null; _transferGate.Release();
-        }
-        await RefreshRemoteFilesAsync();
-    }
-
-    private async void DownloadButton_Click(object sender, RoutedEventArgs e) => await DownloadSelectedAsync();
-
-    private async Task DownloadSelectedAsync()
-    {
-        if (SelectedRemoteItem is not { IsDirectory: false } item || _activeService?.SftpClient is null) return;
-        var picker = new FolderPicker(); picker.FileTypeFilter.Add("*"); InitializeWithWindow.Initialize(picker, _windowHandle);
-        var folder = await picker.PickSingleFolderAsync(); if (folder is null) return;
-        var localPath = Path.Combine(folder.Path, item.Name);
-        if (File.Exists(localPath) && !await ConfirmOverwriteAsync(item.Name)) return;
-        await _transferGate.WaitAsync();
-        _transferCts = new CancellationTokenSource();
-        _cancelTransferButton.Visibility = Visibility.Visible;
-        try
-        {
-            _transferStatus.Text = $"正在下载 {item.Name}";
-            _transferProgress.Visibility = Visibility.Visible;
-            var local = await folder.CreateFileAsync(item.Name, CreationCollisionOption.ReplaceExisting);
-            using var output = File.Create(local.Path);
-            await _activeService.SftpClient.DownloadFileAsync(item.FullPath, output, _transferCts.Token);
-            _transferStatus.Text = "下载完成";
-        }
-        catch (OperationCanceledException) { _transferStatus.Text = "下载已取消"; }
-        catch (Exception ex) { _transferStatus.Text = $"下载失败：{ex.Message}"; }
-        finally
-        {
-            _transferProgress.Visibility = Visibility.Collapsed;
-            _cancelTransferButton.Visibility = Visibility.Collapsed;
-            _transferCts.Dispose(); _transferCts = null; _transferGate.Release();
-        }
-    }
-
-    private async void RenameButton_Click(object sender, RoutedEventArgs e) => await RenameSelectedAsync();
-
-    private async Task RenameSelectedAsync()
-    {
-        if (SelectedRemoteItem is not { } item || _activeService?.SftpClient is null) return;
-        var name = await PromptTextAsync("重命名", "输入新名称");
-        if (string.IsNullOrWhiteSpace(name) || name == item.Name) return;
-        try
-        {
-            await _activeService.SftpClient.RenameFileAsync(item.FullPath, CombinePath(_currentPath, name), CancellationToken.None);
-            await RefreshRemoteFilesAsync();
-        }
-        catch (Exception ex) { _transferStatus.Text = $"重命名失败：{ex.Message}"; }
-    }
-
-    private async void DeleteButton_Click(object sender, RoutedEventArgs e) => await DeleteSelectedAsync();
-
-    private async Task DeleteSelectedAsync()
-    {
-        if (SelectedRemoteItem is not { } item || _activeService?.SftpClient is null) return;
-        var dialog = new ContentDialog { Title = "确认删除", Content = $"确定删除“{item.Name}”吗？仅允许删除空目录。", PrimaryButtonText = "删除", CloseButtonText = "取消", XamlRoot = XamlRoot };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        try
-        {
-            if (item.IsDirectory) await Task.Run(() => _activeService.SftpClient.DeleteDirectory(item.FullPath));
-            else await Task.Run(() => _activeService.SftpClient.DeleteFile(item.FullPath));
-            await RefreshRemoteFilesAsync();
-        }
-        catch (Exception ex) { _transferStatus.Text = $"删除失败：{ex.Message}"; }
-    }
-
-    private async Task<string> PromptTextAsync(string title, string placeholder)
-    {
-        var box = new TextBox { PlaceholderText = placeholder };
-        var dialog = new ContentDialog { Title = title, Content = box, PrimaryButtonText = "确定", CloseButtonText = "取消", XamlRoot = XamlRoot };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary ? box.Text : string.Empty;
-    }
-
-    private async Task<bool> ConfirmOverwriteAsync(string name)
-    {
-        var dialog = new ContentDialog { Title = "文件已存在", Content = $"“{name}”已存在，是否覆盖？", PrimaryButtonText = "覆盖", CloseButtonText = "取消", XamlRoot = XamlRoot };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
-    }
-
-    private string NormalizeRemotePath(string path)
-    {
-        path = path.Trim().Replace('\\', '/');
-        if (string.IsNullOrEmpty(path)) return _currentPath;
-        if (!path.StartsWith('/')) path = CombinePath(_currentPath, path);
-        var segments = new List<string>();
-        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (segment == ".") continue;
-            if (segment == "..")
-            {
-                if (segments.Count > 0) segments.RemoveAt(segments.Count - 1);
-                continue;
-            }
-            segments.Add(segment);
-        }
-        return "/" + string.Join('/', segments);
-    }
-
-    private static string CombinePath(string path, string name) => path == "/" ? "/" + name.TrimStart('/') : path.TrimEnd('/') + "/" + name.TrimStart('/');
-    private static string FormatBytes(long length) => length switch { < 1024 => $"{length} B", < 1024 * 1024 => $"{length / 1024d:0.0} KB", < 1024L * 1024 * 1024 => $"{length / 1024d / 1024d:0.0} MB", _ => $"{length / 1024d / 1024d / 1024d:0.0} GB" };
 
     public async ValueTask DisposeAsync()
     {
         _metricsCts?.Cancel();
-        _transferCts?.Cancel();
+        _sftpWorkspace.CancelTransfer();
+        _sftpWorkspace.CollapseRequested -= SftpWorkspace_CollapseRequested;
+        _terminalPane.InputReceived -= TerminalPane_InputReceived;
+        _terminalPane.ResizeRequested -= TerminalPane_ResizeRequested;
+        _terminalPane.InitializationFailed -= TerminalPane_InitializationFailed;
+        _reconnectButton.Click -= ReconnectButton_Click;
+        _sftpRestoreButton.Click -= SftpRestoreButton_Click;
+        _terminalPane.Dispose();
+        _sftpWorkspace.Dispose();
+
         if (_activeService is not null)
         {
-            _activeService.OutputReceived -= Connection_OutputReceived;
-            _activeService.Disconnected -= Connection_Disconnected;
+            UnsubscribeConnection(_activeService);
+            await _activeService.DisposeAsync();
         }
-        if (_activeService is not null) await _activeService.DisposeAsync();
-        _terminalView.Loaded -= TerminalView_Loaded;
-        if (_terminalView.CoreWebView2 is not null) _terminalView.CoreWebView2.WebMessageReceived -= TerminalView_WebMessageReceived;
+        _metricsCts?.Dispose();
     }
 }

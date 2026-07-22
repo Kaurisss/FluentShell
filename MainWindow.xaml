@@ -3,9 +3,7 @@
     x:Class="FluentShell.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d"
+    xmlns:shell="using:FluentShell.Views.Shell"
     Title="FluentShell">
 
     <Grid x:Name="RootGrid">
@@ -28,50 +26,12 @@
                 Click="PaneToggleButton_Click"
                 ToolTipService.ToolTip="收起侧栏">
                 <Grid Width="20" Height="20">
-                    <!-- Both states share the Panel Left Contract 20px frame so the toggle does not jump in height or corner radius. -->
-                    <PathIcon
-                        x:Name="ExpandPaneIcon"
-                        Width="20"
-                        Height="20"
-                        Visibility="Collapsed"
-                        Data="M4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7V15H4C3.44772 15 3 14.5523 3 14V6ZM8 15V5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
-                    <PathIcon
-                        x:Name="CollapsePaneIcon"
-                        Width="20"
-                        Height="20"
-                        Data="M10.8211 10.5H14.5C14.7761 10.5 15 10.2761 15 10C15 9.72386 14.7761 9.5 14.5 9.5H10.8211L11.8196 8.6263C12.0274 8.44445 12.0485 8.12857 11.8666 7.92075C11.6848 7.71294 11.3689 7.69188 11.1611 7.87372L9.1611 9.62372C9.0526 9.71866 8.99036 9.85583 8.99036 10C8.99036 10.1442 9.0526 10.2814 9.1611 10.3763L11.1611 12.1263C11.3689 12.3081 11.6848 12.2871 11.8666 12.0793C12.0485 11.8714 12.0274 11.5556 11.8196 11.3737L10.8211 10.5ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7L7 15H4C3.44772 15 3 14.5523 3 14V6ZM8 15L8 5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
+                    <PathIcon x:Name="ExpandPaneIcon" Width="20" Height="20" Visibility="Collapsed" Data="M4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7V15H4C3.44772 15 3 14.5523 3 14V6ZM8 15V5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
+                    <PathIcon x:Name="CollapsePaneIcon" Width="20" Height="20" Data="M10.8211 10.5H14.5C14.7761 10.5 15 10.2761 15 10C15 9.72386 14.7761 9.5 14.5 9.5H10.8211L11.8196 8.6263C12.0274 8.44445 12.0485 8.12857 11.8666 7.92075C11.6848 7.71294 11.3689 7.69188 11.1611 7.87372L9.1611 9.62372C9.0526 9.71866 8.99036 9.85583 8.99036 10C8.99036 10.1442 9.0526 10.2814 9.1611 10.3763L11.1611 12.1263C11.3689 12.3081 11.6848 12.2871 11.8666 12.0793C12.0485 11.8714 12.0274 11.5556 11.8196 11.3737L10.8211 10.5ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H7L7 15H4C3.44772 15 3 14.5523 3 14V6ZM8 15L8 5H16C16.5523 5 17 5.44772 17 6V14C17 14.5523 16.5523 15 16 15H8Z" />
                 </Grid>
             </Button>
-            <ScrollViewer
-                x:Name="SessionTabHost"
-                Margin="65,0,300,0"
-                Visibility="Collapsed"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
-                HorizontalScrollMode="Enabled"
-                HorizontalScrollBarVisibility="Hidden"
-                VerticalScrollMode="Disabled"
-                VerticalScrollBarVisibility="Hidden"
-                ZoomMode="Disabled">
-                <StackPanel x:Name="SessionTabStrip" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                    <Button
-                        x:Name="NewSessionButton"
-                        Style="{StaticResource TitleBarSessionIconButtonStyle}"
-                        Click="NewSessionButton_Click"
-                        ToolTipService.ToolTip="打开新连接"
-                        AutomationProperties.Name="打开新连接">
-                        <FontIcon Glyph="&#xE710;" FontSize="16" />
-                    </Button>
-                </StackPanel>
-            </ScrollViewer>
-            <StackPanel
-                x:Name="ConnectionProgressPanel"
-                Margin="0,0,150,0"
-                HorizontalAlignment="Right"
-                Orientation="Horizontal"
-                Spacing="8"
-                VerticalAlignment="Center"
-                Visibility="Collapsed">
+            <ContentPresenter x:Name="SessionTabHost" Margin="65,0,300,0" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+            <StackPanel x:Name="ConnectionProgressPanel" Margin="0,0,150,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Visibility="Collapsed">
                 <ProgressRing x:Name="ConnectionProgressRing" Width="18" Height="18" IsActive="False" />
                 <TextBlock x:Name="ConnectionProgressText" Text="连接中…" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" />
             </StackPanel>
@@ -91,79 +51,18 @@
             SelectionChanged="RootNavigationView_SelectionChanged"
             PaneOpening="RootNavigationView_PaneOpening"
             PaneClosing="RootNavigationView_PaneClosing">
-
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="OverviewNavItem" Content="概览" Tag="overview">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
+                <NavigationViewItem x:Name="OverviewNavItem" Content="概览" Tag="overview"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
-
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="SettingsNavItem" Content="设置" Tag="settings">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
+                <NavigationViewItem x:Name="SettingsNavItem" Content="设置" Tag="settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.FooterMenuItems>
-
             <NavigationView.PaneCustomContent>
-                <Grid x:Name="ConnectedSidebarPanel" Visibility="Collapsed" VerticalAlignment="Stretch">
-                    <StackPanel x:Name="ConnectedSidebarExpandedPanel" Margin="16,16,12,0" Spacing="20">
-                        <StackPanel Spacing="4">
-                            <TextBlock x:Name="ConnectedServerNameText" Text="服务器" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                            <TextBlock x:Name="ConnectedServerStatusText" Text="正在连接" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontSize="13" />
-                        </StackPanel>
-                        <StackPanel Spacing="5">
-                            <TextBlock x:Name="ConnectedAddressText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                            <TextBlock x:Name="ConnectedUserText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                        <StackPanel Spacing="12">
-                            <TextBlock Text="服务器状态" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                            <StackPanel x:Name="MetricsPanel" Spacing="12" />
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel x:Name="ConnectedSidebarCompactPanel" Visibility="Collapsed" Margin="8,16,8,12" Spacing="14" SizeChanged="CompactMetricsGrid_SizeChanged" VerticalAlignment="Stretch">
-                        <Grid x:Name="CompactCpuMetric" RowSpacing="4">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="CPU" FontSize="10" />
-                            <TextBlock x:Name="CompactCpuText" Grid.Column="1" Text="—" FontSize="10" />
-                            <Grid x:Name="CompactCpuTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                                <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                                <Border x:Name="CompactCpuFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
-                            </Grid>
-                        </Grid>
-                        <Grid x:Name="CompactMemoryMetric" RowSpacing="4">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="内存" FontSize="10" />
-                            <TextBlock x:Name="CompactMemoryText" Grid.Column="1" Text="—" FontSize="10" />
-                            <Grid x:Name="CompactMemoryTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                                <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                                <Border x:Name="CompactMemoryFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
-                            </Grid>
-                        </Grid>
-                        <Grid x:Name="CompactSwapMetric" RowSpacing="4">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="Swap" FontSize="10" />
-                            <TextBlock x:Name="CompactSwapText" Grid.Column="1" Text="—" FontSize="10" />
-                            <Grid x:Name="CompactSwapTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                                <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                                <Border x:Name="CompactSwapFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
-                            </Grid>
-                        </Grid>
-                    </StackPanel>
-                </Grid>
+                <shell:ConnectedServerSidebar x:Name="ConnectedSidebar" Visibility="Collapsed" VerticalAlignment="Stretch" />
             </NavigationView.PaneCustomContent>
-
             <Grid x:Name="ContentRoot" Background="Transparent">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <Grid x:Name="ContentHeader" Padding="30,24,30,18">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel Spacing="3">
@@ -175,116 +74,9 @@
                         <Button x:Name="AddServerButton" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AppAccentButtonStyle}" />
                     </StackPanel>
                 </Grid>
-
                 <Grid Grid.Row="1" x:Name="ContentHost" Padding="30,0,30,28">
-                    <Grid x:Name="UnconnectedWorkspace">
-                        <Grid x:Name="OverviewPage" Visibility="Visible">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Spacing="30" MaxWidth="980" HorizontalAlignment="Left">
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="连接与管理" Style="{StaticResource PageHeadingStyle}" />
-                                        <TextBlock Text="从已保存的服务器发起 SSH 会话，连接后可同时使用终端与远程文件管理。" FontSize="14" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" MaxWidth="680" />
-                                    </StackPanel>
-
-                                    <Grid x:Name="OverviewStatsGrid" ColumnSpacing="16">
-                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="0" /></Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
-                                        <Border x:Name="SavedServersOverviewCard" Grid.Column="0" Padding="22" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
-                                            <Grid ColumnSpacing="20">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="7">
-                                                    <TextBlock Text="已保存的服务器" Style="{StaticResource SectionHeadingStyle}" />
-                                                    <TextBlock Text="配置保存在本机，密码和私钥口令不会写入服务器文件。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                                    <TextBlock x:Name="SavedCountText" Text="0" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Right" />
-                                                    <TextBlock Text="台服务器" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                        <Border x:Name="RecentServerOverviewCard" Grid.Column="1" Padding="22" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
-                                            <StackPanel Spacing="7">
-                                                <TextBlock Text="最近连接" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" />
-                                                <TextBlock x:Name="RecentServerText" Text="暂无" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock x:Name="RecentServerDetailText" Text="连接成功后会显示在这里" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
-                                        </Border>
-                                    </Grid>
-
-                                    <StackPanel Spacing="12">
-                                        <TextBlock Text="开始使用" Style="{StaticResource SectionHeadingStyle}" />
-                                        <Border Padding="20" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
-                                            <Grid ColumnSpacing="20">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="5">
-                                                    <TextBlock Text="添加服务器配置" FontSize="15" FontWeight="SemiBold" />
-                                                    <TextBlock Text="填写主机、端口和认证方式；保存后即可连接。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" />
-                                                    <TextBlock x:Name="LastResultText" Text="准备就绪" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Margin="0,5,0,0" />
-                                                    <TextBlock x:Name="LastResultDetailText" Text="还没有连接记录" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                                                </StackPanel>
-                                                <Button Grid.Column="1" Content="添加第一台服务器" Click="AddServerButton_Click" VerticalAlignment="Center" Style="{StaticResource AppAccentButtonStyle}" />
-                                            </Grid>
-                                        </Border>
-                                    </StackPanel>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Grid>
-
-                        <Grid x:Name="ServersPage" Visibility="Collapsed">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                            <Grid x:Name="ServerToolbar" ColumnSpacing="10" Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="150" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <TextBox x:Name="ServerSearchBox" PlaceholderText="搜索名称、主机或用户名" TextChanged="ServerSearchBox_TextChanged" />
-                                <ComboBox x:Name="ServerSortComboBox" Grid.Column="1" SelectedIndex="0" SelectionChanged="ServerSortComboBox_SelectionChanged"><ComboBoxItem Content="按名称排序" /><ComboBoxItem Content="按最近连接" /></ComboBox>
-                                <Button x:Name="RefreshServersButton" Grid.Column="2" Content="刷新" Click="RefreshServersButton_Click" />
-                                <Button x:Name="AddServerPageButton" Grid.Column="3" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AppAccentButtonStyle}" />
-                            </Grid>
-                            <Grid x:Name="ServerListHeader" Grid.Row="1" Padding="14,8" ColumnSpacing="14">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
-                                <TextBlock Text="服务器" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                                <TextBlock Grid.Column="1" Text="地址" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                                <TextBlock Grid.Column="2" Text="用户" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
-                            </Grid>
-                            <ListView Grid.Row="2" x:Name="ServersListView" IsItemClickEnabled="True" ItemClick="ServersListView_ItemClick" SelectionMode="None">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Padding="10,10" ColumnSpacing="14">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                            <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Notes}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" /></StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding Address}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Column="2" Text="{Binding Username}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"><Button Style="{StaticResource IconButtonStyle}" Content="&#xE71B;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" Tag="{Binding}" Click="ServerConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerCopyButton_Click" ToolTipService.ToolTip="复制" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerEditButton_Click" ToolTipService.ToolTip="编辑" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerDeleteButton_Click" ToolTipService.ToolTip="删除" /></StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Grid>
-
-                        <Grid x:Name="SettingsPage" Visibility="Collapsed">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Spacing="28" MaxWidth="720" HorizontalAlignment="Left">
-                                    <StackPanel Spacing="6"><TextBlock Text="外观与连接" Style="{StaticResource PageHeadingStyle}" /><TextBlock Text="设置只影响当前 Windows 用户。" Foreground="{ThemeResource MutedTextBrush}" /></StackPanel>
-                                    <StackPanel Spacing="9"><TextBlock Text="主题" FontWeight="SemiBold" /><ComboBox x:Name="ThemeComboBox" SelectedIndex="0" SelectionChanged="ThemeComboBox_SelectionChanged" MinWidth="220"><ComboBoxItem Content="系统" /><ComboBoxItem Content="浅色" /><ComboBoxItem Content="深色" /></ComboBox></StackPanel>
-                                    <StackPanel Spacing="9">
-                                        <TextBlock Text="背景效果" FontWeight="SemiBold" />
-                                        <ComboBox x:Name="BackdropMaterialComboBox" SelectedIndex="0" SelectionChanged="BackdropMaterialComboBox_SelectionChanged" MinWidth="220">
-                                            <ComboBoxItem Content="Mica（云母）" />
-                                            <ComboBoxItem Content="亚克力" />
-                                        </ComboBox>
-                                        <TextBlock Text="Mica 更稳定省电；亚克力会透出窗口后方内容。" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                    <StackPanel Spacing="9"><TextBlock Text="终端字号" FontWeight="SemiBold" /><NumberBox x:Name="TerminalFontSizeBox" Value="14" Minimum="11" Maximum="24" SpinButtonPlacementMode="Inline" ValueChanged="TerminalFontSizeBox_ValueChanged" MinWidth="220" /></StackPanel>
-                                    <StackPanel Spacing="9"><TextBlock Text="默认下载目录" FontWeight="SemiBold" /><Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBox x:Name="DownloadDirectoryBox" IsReadOnly="True" /><Button Grid.Column="1" Content="选择目录" Click="ChooseDownloadDirectoryButton_Click" /></Grid></StackPanel>
-                                    <ToggleSwitch x:Name="RememberCredentialsToggle" Header="记住成功登录凭据" OnContent="开启" OffContent="关闭" Toggled="RememberCredentialsToggle_Toggled" />
-                                    <Border Padding="18" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8"><StackPanel Spacing="10"><TextBlock Text="本地数据" FontWeight="SemiBold" /><TextBlock x:Name="DataLocationText" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" /><Button Content="清除服务器配置" Click="ClearLocalDataButton_Click" HorizontalAlignment="Left" /></StackPanel></Border>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Grid>
-                    </Grid>
-
-                    <Grid x:Name="ConnectedWorkspace" Visibility="Collapsed">
-                        <ContentPresenter x:Name="SessionContentPresenter" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
-                    </Grid>
+                    <ContentPresenter x:Name="PageContentPresenter" />
+                    <ContentPresenter x:Name="SessionContentPresenter" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 </Grid>
             </Grid>
         </NavigationView>

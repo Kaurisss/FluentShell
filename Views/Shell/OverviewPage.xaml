@@ -1,0 +1,55 @@
+<UserControl
+    x:Class="FluentShell.Views.Shell.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="30" MaxWidth="980" HorizontalAlignment="Left">
+            <StackPanel Spacing="6">
+                <TextBlock Text="连接与管理" Style="{StaticResource PageHeadingStyle}" />
+                <TextBlock Text="从已保存的服务器发起 SSH 会话，连接后可同时使用终端与远程文件管理。" FontSize="14" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" MaxWidth="680" />
+            </StackPanel>
+            <Grid x:Name="StatsGrid" ColumnSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="0" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="2*" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Padding="22" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="已保存的服务器" Style="{StaticResource SectionHeadingStyle}" />
+                            <TextBlock Text="配置保存在本机，密码和私钥口令不会写入服务器文件。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="SavedCountText" Text="0" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                            <TextBlock Text="台服务器" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border x:Name="RecentCard" Grid.Column="1" Padding="22" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="最近连接" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" />
+                        <TextBlock x:Name="RecentServerText" Text="暂无" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="RecentServerDetailText" Text="连接成功后会显示在这里" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+            <StackPanel Spacing="12">
+                <TextBlock Text="开始使用" Style="{StaticResource SectionHeadingStyle}" />
+                <Border Padding="20" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="添加服务器配置" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="填写主机、端口和认证方式；保存后即可连接。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" />
+                        <TextBlock x:Name="LastResultText" Text="准备就绪" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Margin="0,5,0,0" />
+                        <TextBlock x:Name="LastResultDetailText" Text="还没有连接记录" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
