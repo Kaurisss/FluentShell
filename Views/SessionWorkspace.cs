@@ -134,8 +134,6 @@ public sealed class SessionWorkspace : UserControl
         var restoreRow = new Grid { Padding = new Thickness(0, 4, 0, 4) };
         _sftpRestoreButton.Content = CreateFluentPathIcon(PanelBottomExpandPath);
         _sftpRestoreButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
-        _sftpRestoreButton.Width = 40;
-        _sftpRestoreButton.Height = 40;
         _sftpRestoreButton.HorizontalAlignment = HorizontalAlignment.Left;
         ToolTipService.SetToolTip(_sftpRestoreButton, "展开 SFTP 文件管理器");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpRestoreButton, "展开 SFTP 文件管理器");
@@ -266,8 +264,6 @@ public sealed class SessionWorkspace : UserControl
 
         _sftpCollapseButton.Content = CreateFluentPathIcon(PanelBottomContractPath);
         _sftpCollapseButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
-        _sftpCollapseButton.Width = 40;
-        _sftpCollapseButton.Height = 40;
         ToolTipService.SetToolTip(_sftpCollapseButton, "收起 SFTP 文件管理器");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_sftpCollapseButton, "收起 SFTP 文件管理器");
         _sftpCollapseButton.Click += (_, _) => ToggleSftp();
@@ -305,7 +301,13 @@ public sealed class SessionWorkspace : UserControl
         _sftpToolbar.PrimaryCommands.Add(_downloadButton);
         _sftpToolbar.PrimaryCommands.Add(_renameButton);
         _sftpToolbar.PrimaryCommands.Add(_deleteButton);
-        var hidden = new AppBarToggleButton { Label = "显示隐藏文件", Icon = CreateCommandIcon(Symbol.View), IsChecked = _showHiddenFiles };
+        var hidden = new AppBarToggleButton
+        {
+            Label = "显示隐藏文件",
+            Icon = CreateCommandIcon(Symbol.View),
+            IsChecked = _showHiddenFiles,
+            Style = (Style)Application.Current.Resources["CommandBarIconToggleButtonStyle"]
+        };
         ToolTipService.SetToolTip(hidden, "显示隐藏文件");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(hidden, "显示隐藏文件");
         hidden.Click += (_, _) =>
@@ -369,8 +371,6 @@ public sealed class SessionWorkspace : UserControl
         transferRow.Children.Add(_transferProgress);
         _cancelTransferButton.Content = CreateCommandIcon(Symbol.Cancel);
         _cancelTransferButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
-        _cancelTransferButton.Width = 40;
-        _cancelTransferButton.Height = 40;
         ToolTipService.SetToolTip(_cancelTransferButton, "取消文件传输");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_cancelTransferButton, "取消文件传输");
         _cancelTransferButton.Visibility = Visibility.Collapsed;
@@ -517,9 +517,7 @@ public sealed class SessionWorkspace : UserControl
         var button = new Button
         {
             Content = CreateCommandIcon(symbol),
-            Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"],
-            Width = 40,
-            Height = 40
+            Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"]
         };
         ToolTipService.SetToolTip(button, title);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
@@ -528,7 +526,12 @@ public sealed class SessionWorkspace : UserControl
 
     private static AppBarButton CreateAppBarButton(string label, Symbol symbol)
     {
-        var button = new AppBarButton { Label = label, Icon = CreateCommandIcon(symbol) };
+        var button = new AppBarButton
+        {
+            Label = label,
+            Icon = CreateCommandIcon(symbol),
+            Style = (Style)Application.Current.Resources["CommandBarIconButtonStyle"]
+        };
         ToolTipService.SetToolTip(button, label);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
         return button;
@@ -538,6 +541,7 @@ public sealed class SessionWorkspace : UserControl
     {
         button.Label = label;
         button.Icon = CreateCommandIcon(symbol);
+        button.Style = (Style)Application.Current.Resources["CommandBarIconButtonStyle"];
         ToolTipService.SetToolTip(button, label);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
         button.IsEnabled = false;

@@ -57,7 +57,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _theme = "系统";
     private string _backdropMaterial = "Mica";
     private double _terminalFontSize = 14;
-    private string _downloadDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private string _downloadDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads");
     private bool _rememberCredentials;
 
     public string Theme { get => _theme; set => SetField(ref _theme, value); }

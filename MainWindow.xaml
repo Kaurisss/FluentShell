@@ -17,8 +17,6 @@
         <Grid x:Name="AppTitleBar" Height="40" Background="Transparent">
             <Button
                 x:Name="PaneToggleButton"
-                Width="40"
-                Height="40"
                 Margin="12,0,0,0"
                 Padding="10"
                 HorizontalAlignment="Left"
@@ -82,15 +80,14 @@
         <NavigationView
             Grid.Row="1"
             x:Name="RootNavigationView"
-            PaneDisplayMode="Left"
             OpenPaneLength="260"
             CompactPaneLength="64"
-            IsPaneOpen="True"
             IsPaneToggleButtonVisible="False"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             Background="Transparent"
             SelectionFollowsFocus="Disabled"
+            Loaded="RootNavigationView_Loaded"
             SelectionChanged="RootNavigationView_SelectionChanged"
             PaneOpening="RootNavigationView_PaneOpening"
             PaneClosing="RootNavigationView_PaneClosing">
@@ -175,7 +172,7 @@
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button x:Name="QuickConnectButton" Content="快速连接" Click="QuickConnectButton_Click" />
-                        <Button x:Name="AddServerButton" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button x:Name="AddServerButton" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AppAccentButtonStyle}" />
                     </StackPanel>
                 </Grid>
 
@@ -225,7 +222,7 @@
                                                     <TextBlock x:Name="LastResultText" Text="准备就绪" FontSize="12" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Margin="0,5,0,0" />
                                                     <TextBlock x:Name="LastResultDetailText" Text="还没有连接记录" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
                                                 </StackPanel>
-                                                <Button Grid.Column="1" Content="添加第一台服务器" Click="AddServerButton_Click" VerticalAlignment="Center" Style="{StaticResource AccentButtonStyle}" />
+                                                <Button Grid.Column="1" Content="添加第一台服务器" Click="AddServerButton_Click" VerticalAlignment="Center" Style="{StaticResource AppAccentButtonStyle}" />
                                             </Grid>
                                         </Border>
                                     </StackPanel>
@@ -240,7 +237,7 @@
                                 <TextBox x:Name="ServerSearchBox" PlaceholderText="搜索名称、主机或用户名" TextChanged="ServerSearchBox_TextChanged" />
                                 <ComboBox x:Name="ServerSortComboBox" Grid.Column="1" SelectedIndex="0" SelectionChanged="ServerSortComboBox_SelectionChanged"><ComboBoxItem Content="按名称排序" /><ComboBoxItem Content="按最近连接" /></ComboBox>
                                 <Button x:Name="RefreshServersButton" Grid.Column="2" Content="刷新" Click="RefreshServersButton_Click" />
-                                <Button x:Name="AddServerPageButton" Grid.Column="3" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AccentButtonStyle}" />
+                                <Button x:Name="AddServerPageButton" Grid.Column="3" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AppAccentButtonStyle}" />
                             </Grid>
                             <Grid x:Name="ServerListHeader" Grid.Row="1" Padding="14,8" ColumnSpacing="14">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="170" /><ColumnDefinition Width="110" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
@@ -256,7 +253,7 @@
                                             <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Notes}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" /></StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Address}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="2" Text="{Binding Username}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"><Button Content="&#xE71B;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" Tag="{Binding}" Click="ServerConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" /><Button Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerCopyButton_Click" ToolTipService.ToolTip="复制" /><Button Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerEditButton_Click" ToolTipService.ToolTip="编辑" /><Button Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerDeleteButton_Click" ToolTipService.ToolTip="删除" /></StackPanel>
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4"><Button Style="{StaticResource IconButtonStyle}" Content="&#xE71B;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" Tag="{Binding}" Click="ServerConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerCopyButton_Click" ToolTipService.ToolTip="复制" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerEditButton_Click" ToolTipService.ToolTip="编辑" /><Button Style="{StaticResource IconButtonStyle}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="ServerDeleteButton_Click" ToolTipService.ToolTip="删除" /></StackPanel>
                                         </Grid>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>

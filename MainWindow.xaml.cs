@@ -40,7 +40,8 @@ public sealed partial class MainWindow : Window
     private int _activeConnectionAttempts;
     private SessionWorkspace? _selectedSession;
     private bool _updatingSessionSelection;
-    private bool _isNarrowLayout;
+    private bool? _isNarrowLayout;
+    private bool _isApplyingResponsivePaneState;
     private bool _paneWasOpenBeforeNarrow = true;
 
     public MainWindow()
@@ -77,7 +78,6 @@ public sealed partial class MainWindow : Window
         ApplySettingsToControls();
         RootNavigationView.SelectedItem = OverviewNavItem;
         NavigateTo("overview");
-        UpdateResponsiveLayout(RootGrid.ActualWidth);
     }
 
     private void ApplySettingsToControls()
@@ -154,26 +154,41 @@ public sealed partial class MainWindow : Window
         return null;
     }
 
-    private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateResponsiveLayout(e.NewSize.Width);
+    private void RootNavigationView_Loaded(object sender, RoutedEventArgs e)
+    {
+        UpdateResponsiveLayout(RootGrid.ActualWidth);
+    }
+
+    private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_isNarrowLayout is not null) UpdateResponsiveLayout(e.NewSize.Width);
+    }
 
     private void UpdateResponsiveLayout(double width)
     {
         var isNarrow = width < 720;
         if (isNarrow != _isNarrowLayout)
         {
-            if (isNarrow)
+            _isApplyingResponsivePaneState = true;
+            try
             {
-                var wasOpen = RootNavigationView.IsPaneOpen;
-                _isNarrowLayout = true;
-                RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.LeftMinimal;
-                RootNavigationView.IsPaneOpen = false;
-                _paneWasOpenBeforeNarrow = wasOpen;
+                if (isNarrow)
+                {
+                    if (_isNarrowLayout is not null) _paneWasOpenBeforeNarrow = RootNavigationView.IsPaneOpen;
+                    _isNarrowLayout = true;
+                    RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.LeftMinimal;
+                    RootNavigationView.IsPaneOpen = false;
+                }
+                else
+                {
+                    RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
+                    _isNarrowLayout = false;
+                    RootNavigationView.IsPaneOpen = _paneWasOpenBeforeNarrow;
+                }
             }
-            else
+            finally
             {
-                _isNarrowLayout = false;
-                RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
-                RootNavigationView.IsPaneOpen = _paneWasOpenBeforeNarrow;
+                _isApplyingResponsivePaneState = false;
             }
         }
 
@@ -304,8 +319,11 @@ public sealed partial class MainWindow : Window
 
     private void RootNavigationView_PaneOpening(NavigationView sender, object args)
     {
-        if (_isNarrowLayout) _paneWasOpenBeforeNarrow = true;
-        else _sidebarCollapsed = false;
+        if (!_isApplyingResponsivePaneState && _isNarrowLayout == false)
+        {
+            _paneWasOpenBeforeNarrow = true;
+            _sidebarCollapsed = false;
+        }
         UpdatePaneToggleButton(isPaneOpen: true);
         ConnectedSidebarExpandedPanel.Visibility = ConnectedSidebarPanel.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
         ConnectedSidebarCompactPanel.Visibility = Visibility.Collapsed;
@@ -314,8 +332,11 @@ public sealed partial class MainWindow : Window
 
     private void RootNavigationView_PaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
-        if (_isNarrowLayout) _paneWasOpenBeforeNarrow = false;
-        else _sidebarCollapsed = true;
+        if (!_isApplyingResponsivePaneState && _isNarrowLayout == false)
+        {
+            _paneWasOpenBeforeNarrow = false;
+            _sidebarCollapsed = true;
+        }
         UpdatePaneToggleButton(isPaneOpen: false);
         ConnectedSidebarExpandedPanel.Visibility = Visibility.Collapsed;
         ConnectedSidebarCompactPanel.Visibility = ConnectedSidebarPanel.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
