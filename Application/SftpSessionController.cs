@@ -64,17 +64,17 @@ public sealed class SftpSessionController : IDisposable
         _transferCts?.Cancel();
     }
 
-    public async Task<SftpDirectoryListing> RefreshAsync(bool showHiddenFiles)
+    public async Task<SftpDirectoryListing> RefreshAsync()
     {
         if (!_fileService.IsConnected)
             return FailListing("SFTP 尚未连接。");
         if (!CanNavigate())
             return FailListing("当前操作尚未完成。");
 
-        return await ListDirectoryAsync(_currentPath, showHiddenFiles);
+        return await ListDirectoryAsync(_currentPath);
     }
 
-    public async Task<SftpDirectoryListing> NavigateToAsync(string path, bool showHiddenFiles)
+    public async Task<SftpDirectoryListing> NavigateToAsync(string path)
     {
         if (!_fileService.IsConnected)
             return FailListing("SFTP 尚未连接。");
@@ -83,17 +83,17 @@ public sealed class SftpSessionController : IDisposable
 
         var previousPath = _currentPath;
         _currentPath = RemotePath.Normalize(_currentPath, path);
-        var listing = await ListDirectoryAsync(_currentPath, showHiddenFiles);
+        var listing = await ListDirectoryAsync(_currentPath);
         if (!listing.Succeeded) _currentPath = previousPath;
         return listing;
     }
 
-    public Task<SftpDirectoryListing> NavigateUpAsync(bool showHiddenFiles) =>
+    public Task<SftpDirectoryListing> NavigateUpAsync() =>
         _currentPath == "/"
-            ? RefreshAsync(showHiddenFiles)
-            : NavigateToAsync(RemotePath.Parent(_currentPath), showHiddenFiles);
+            ? RefreshAsync()
+            : NavigateToAsync(RemotePath.Parent(_currentPath));
 
-    public async Task<SftpOperationResult> CreateDirectoryAsync(string name, bool showHiddenFiles)
+    public async Task<SftpOperationResult> CreateDirectoryAsync(string name)
     {
         if (!CanModifyRemoteFiles())
             return SftpOperationResult.Failure("当前操作尚未完成。");
@@ -103,7 +103,7 @@ public sealed class SftpSessionController : IDisposable
         try
         {
             await _fileService.CreateDirectoryAsync(RemotePath.Combine(_currentPath, name));
-            await RefreshAsync(showHiddenFiles);
+            await RefreshAsync();
             return SftpOperationResult.Success("文件夹已创建。");
         }
         catch (Exception exception)
@@ -112,10 +112,7 @@ public sealed class SftpSessionController : IDisposable
         }
     }
 
-    public async Task<SftpOperationResult> RenameAsync(
-        RemoteFileItem item,
-        string name,
-        bool showHiddenFiles)
+    public async Task<SftpOperationResult> RenameAsync(RemoteFileItem item, string name)
     {
         if (!CanModifyRemoteFiles() || item.Name == "..")
             return SftpOperationResult.Failure("当前项目不可重命名。");
@@ -127,7 +124,7 @@ public sealed class SftpSessionController : IDisposable
         try
         {
             await _fileService.RenameAsync(item.FullPath, RemotePath.Combine(_currentPath, name));
-            await RefreshAsync(showHiddenFiles);
+            await RefreshAsync();
             return SftpOperationResult.Success("重命名完成。");
         }
         catch (Exception exception)
@@ -136,7 +133,7 @@ public sealed class SftpSessionController : IDisposable
         }
     }
 
-    public async Task<SftpOperationResult> DeleteAsync(RemoteFileItem item, bool showHiddenFiles)
+    public async Task<SftpOperationResult> DeleteAsync(RemoteFileItem item)
     {
         if (!CanModifyRemoteFiles() || item.Name == "..")
             return SftpOperationResult.Failure("当前项目不可删除。");
@@ -144,7 +141,7 @@ public sealed class SftpSessionController : IDisposable
         try
         {
             await _fileService.DeleteAsync(item);
-            await RefreshAsync(showHiddenFiles);
+            await RefreshAsync();
             return SftpOperationResult.Success("删除完成。");
         }
         catch (Exception exception)
@@ -156,8 +153,7 @@ public sealed class SftpSessionController : IDisposable
     public Task<SftpOperationResult> UploadAsync(
         string localFileName,
         Func<Task<Stream>> openInput,
-        Func<string, Task<bool>> confirmOverwrite,
-        bool showHiddenFiles) =>
+        Func<string, Task<bool>> confirmOverwrite) =>
         RunTransferAsync("上传", async cancellationToken =>
         {
             if (!SftpPathValidator.TryValidateRemoteName(localFileName, out var error))
@@ -170,7 +166,7 @@ public sealed class SftpSessionController : IDisposable
             using var input = await openInput();
             await _fileService.UploadAsync(input, remotePath, cancellationToken);
             return SftpOperationResult.Success($"已上传 {localFileName}。");
-        }, showHiddenFiles);
+        }, refreshDirectory: true);
 
     public Task<SftpOperationResult> DownloadAsync(
         RemoteFileItem item,
@@ -196,14 +192,14 @@ public sealed class SftpSessionController : IDisposable
             using var output = createLocalOutput(localPath);
             await _fileService.DownloadAsync(item.FullPath, output, cancellationToken);
             return SftpOperationResult.Success($"已下载 {item.Name}。");
-        }, showHiddenFiles: false);
+        }, refreshDirectory: false);
 
-    private async Task<SftpDirectoryListing> ListDirectoryAsync(string path, bool showHiddenFiles)
+    private async Task<SftpDirectoryListing> ListDirectoryAsync(string path)
     {
         Transition(SftpSessionState.ListingDirectory, $"正在读取 {path}…");
         try
         {
-            var items = await _fileService.ListDirectoryAsync(path, showHiddenFiles);
+            var items = await _fileService.ListDirectoryAsync(path);
             Transition(SftpSessionState.Idle, string.Empty);
             return SftpDirectoryListing.Success(path, items);
         }
@@ -218,7 +214,7 @@ public sealed class SftpSessionController : IDisposable
     private async Task<SftpOperationResult> RunTransferAsync(
         string action,
         Func<CancellationToken, Task<SftpOperationResult>> operation,
-        bool showHiddenFiles)
+        bool refreshDirectory)
     {
         if (!CanStartTransfer())
             return SftpOperationResult.Failure("当前操作尚未完成。");
@@ -236,7 +232,7 @@ public sealed class SftpSessionController : IDisposable
             }
 
             Transition(SftpSessionState.Idle, result.Message);
-            if (showHiddenFiles) await RefreshAsync(showHiddenFiles);
+            if (refreshDirectory) await RefreshAsync();
             return result;
         }
         catch (OperationCanceledException)

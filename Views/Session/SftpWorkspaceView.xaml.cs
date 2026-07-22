@@ -3,7 +3,6 @@ using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using Syncfusion.UI.Xaml.DataGrid;
 using Syncfusion.UI.Xaml.Grids;
 using System.Collections.ObjectModel;
@@ -38,22 +37,16 @@ public sealed partial class SftpWorkspaceView : UserControl
         SizeChanged += SftpWorkspaceView_SizeChanged;
     }
 
-    public bool ShowHiddenFiles => HiddenFilesButton.IsChecked == true;
     public RemoteFileItem? SelectedItem => RemoteTable.SelectedItem as RemoteFileItem;
 
-    public event EventHandler? CollapseRequested;
     public event EventHandler? RefreshRequested;
-    public event EventHandler? NavigateUpRequested;
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? NewFolderRequested;
     public event EventHandler? UploadRequested;
     public event EventHandler<RemoteFileItem>? DownloadRequested;
     public event EventHandler<RemoteFileItem>? RenameRequested;
     public event EventHandler<RemoteFileItem>? DeleteRequested;
-    public event EventHandler? HiddenFilesChanged;
     public event EventHandler? CancelTransferRequested;
-
-    public void SetShowHiddenFiles(bool value) => HiddenFilesButton.IsChecked = value;
 
     public void RenderDirectory(SftpDirectoryListing listing)
     {
@@ -165,31 +158,13 @@ public sealed partial class SftpWorkspaceView : UserControl
         RemoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
         RemoteTable.RecordContextFlyout = BuildRemoteRowMenu();
 
-        var iconCellStyle = new Style(typeof(GridCell));
-        iconCellStyle.Setters.Add(new Setter(Control.FontFamilyProperty, new FontFamily("Segoe Fluent Icons")));
-        iconCellStyle.Setters.Add(new Setter(Control.FontSizeProperty, 16d));
-        iconCellStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Center));
-
-        RemoteTable.Columns.Add(new GridTextColumn
-        {
-            HeaderText = string.Empty,
-            MappingName = nameof(RemoteFileItem.IconGlyph),
-            Width = 44,
-            AllowResizing = false,
-            AllowSorting = false,
-            AllowFiltering = false,
-            AllowDragging = false,
-            CellStyle = iconCellStyle,
-            TextAlignment = TextAlignment.Center
-        });
-        RemoteTable.Columns.Add(new GridTextColumn
+        RemoteTable.Columns.Add(new GridTemplateColumn
         {
             HeaderText = "名称",
             MappingName = nameof(RemoteFileItem.SortName),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.Name)),
+            CellTemplate = (DataTemplate)Resources["RemoteFileNameCellTemplate"],
             ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill,
-            MinimumWidth = 180,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            MinimumWidth = 180
         });
         RemoteTable.Columns.Add(new GridTextColumn
         {
@@ -251,21 +226,14 @@ public sealed partial class SftpWorkspaceView : UserControl
     private void SftpWorkspaceView_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         var isNarrow = e.NewSize.Width < 560;
-        SelectionStatus.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
         DirectoryStatus.MaxWidth = e.NewSize.Width < 760 ? 112 : 220;
         DirectoryStatusPanel.Visibility = !isNarrow || _snapshot.State == SftpSessionState.ListingDirectory
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
 
-    private void CollapseButton_Click(object sender, RoutedEventArgs e) =>
-        CollapseRequested?.Invoke(this, EventArgs.Empty);
-
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
-
-    private void NavigateUpButton_Click(object sender, RoutedEventArgs e) =>
-        NavigateUpRequested?.Invoke(this, EventArgs.Empty);
 
     private void NewFolderButton_Click(object sender, RoutedEventArgs e) =>
         NewFolderRequested?.Invoke(this, EventArgs.Empty);
@@ -274,11 +242,6 @@ public sealed partial class SftpWorkspaceView : UserControl
         UploadRequested?.Invoke(this, EventArgs.Empty);
 
     private void DownloadButton_Click(object sender, RoutedEventArgs e) => RequestDownload();
-    private void RenameButton_Click(object sender, RoutedEventArgs e) => RequestRename();
-    private void DeleteButton_Click(object sender, RoutedEventArgs e) => RequestDelete();
-
-    private void HiddenFilesButton_Click(object sender, RoutedEventArgs e) =>
-        HiddenFilesChanged?.Invoke(this, EventArgs.Empty);
 
     private void CancelTransferButton_Click(object sender, RoutedEventArgs e) =>
         CancelTransferRequested?.Invoke(this, EventArgs.Empty);
@@ -358,11 +321,6 @@ public sealed partial class SftpWorkspaceView : UserControl
     {
         var item = SelectedItem;
         DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { IsDirectory: false };
-        RenameButton.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
-        DeleteButton.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
-        var fileCount = _remoteFiles.Count(remote => remote.Name != "..");
-        SelectionStatus.Text = item is null ? $"{fileCount} 项" : $"已选择 {item.Name}";
-        ToolTipService.SetToolTip(SelectionStatus, item?.FullPath);
     }
 
     private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()

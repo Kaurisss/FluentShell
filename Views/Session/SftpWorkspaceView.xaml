@@ -3,10 +3,29 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:syncfusion="using:Syncfusion.UI.Xaml.DataGrid">
+    <UserControl.Resources>
+        <DataTemplate x:Key="RemoteFileNameCellTemplate">
+            <Grid Margin="12,0,0,0" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    FontFamily="Segoe Fluent Icons"
+                    FontSize="16"
+                    Text="{Binding IconGlyph}"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    Grid.Column="1"
+                    Text="{Binding Name}"
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
 
     <Grid Padding="0,8,0,10" RowSpacing="6">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -14,63 +33,8 @@
 
         <Grid ColumnSpacing="10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Button
-                x:Name="CollapseButton"
-                Content="&#xE70D;"
-                FontFamily="Segoe Fluent Icons"
-                FontSize="16"
-                Style="{StaticResource TitleBarSessionIconButtonStyle}"
-                AutomationProperties.Name="收起 SFTP 文件管理器"
-                ToolTipService.ToolTip="收起 SFTP 文件管理器"
-                Click="CollapseButton_Click" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock Text="SFTP 文件管理器" FontSize="15" FontWeight="SemiBold" />
-                <TextBlock
-                    x:Name="SelectionStatus"
-                    Text="0 项"
-                    FontSize="12"
-                    Foreground="{ThemeResource MutedTextBrush}" />
-            </StackPanel>
-            <CommandBar
-                x:Name="Toolbar"
-                Grid.Column="2"
-                Background="Transparent"
-                DefaultLabelPosition="Collapsed"
-                IsDynamicOverflowEnabled="True">
-                <AppBarButton Label="上一级" Icon="Up" Click="NavigateUpButton_Click" />
-                <AppBarButton Label="刷新" Icon="Refresh" Click="RefreshButton_Click" />
-                <AppBarButton Label="新建文件夹" Icon="Add" Click="NewFolderButton_Click" />
-                <AppBarButton Label="上传" Icon="Upload" Click="UploadButton_Click" />
-                <AppBarButton
-                    x:Name="DownloadButton"
-                    Label="下载"
-                    Icon="Download"
-                    Click="DownloadButton_Click" />
-                <AppBarButton
-                    x:Name="RenameButton"
-                    Label="重命名"
-                    Icon="Edit"
-                    Click="RenameButton_Click" />
-                <AppBarButton
-                    x:Name="DeleteButton"
-                    Label="删除"
-                    Icon="Delete"
-                    Click="DeleteButton_Click" />
-                <AppBarToggleButton
-                    x:Name="HiddenFilesButton"
-                    Label="显示隐藏文件"
-                    Icon="View"
-                    Click="HiddenFilesButton_Click" />
-            </CommandBar>
-        </Grid>
-
-        <Grid Grid.Row="1" ColumnSpacing="10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBox
@@ -78,6 +42,9 @@
                 PlaceholderText="远程路径"
                 FontFamily="Cascadia Mono"
                 FontSize="12"
+                Height="36"
+                MinHeight="0"
+                VerticalAlignment="Center"
                 IsSpellCheckEnabled="False"
                 KeyDown="PathBox_KeyDown" />
             <StackPanel
@@ -98,18 +65,50 @@
                     Foreground="{ThemeResource MutedTextBrush}"
                     TextTrimming="CharacterEllipsis" />
             </StackPanel>
+            <CommandBar
+                x:Name="Toolbar"
+                Grid.Column="2"
+                Background="Transparent"
+                DefaultLabelPosition="Collapsed"
+                IsDynamicOverflowEnabled="True">
+                <AppBarButton
+                    Style="{StaticResource CommandBarIconButtonStyle}"
+                    Label="刷新"
+                    Icon="Refresh"
+                    ToolTipService.ToolTip="刷新"
+                    Click="RefreshButton_Click" />
+                <AppBarButton
+                    Style="{StaticResource CommandBarIconButtonStyle}"
+                    Label="新建文件夹"
+                    Icon="Add"
+                    ToolTipService.ToolTip="新建文件夹"
+                    Click="NewFolderButton_Click" />
+                <AppBarButton
+                    Style="{StaticResource CommandBarIconButtonStyle}"
+                    Label="上传"
+                    Icon="Upload"
+                    ToolTipService.ToolTip="上传"
+                    Click="UploadButton_Click" />
+                <AppBarButton
+                    x:Name="DownloadButton"
+                    Style="{StaticResource CommandBarIconButtonStyle}"
+                    Label="下载"
+                    Icon="Download"
+                    ToolTipService.ToolTip="下载"
+                    Click="DownloadButton_Click" />
+            </CommandBar>
         </Grid>
 
         <syncfusion:SfDataGrid
             x:Name="RemoteTable"
-            Grid.Row="2"
+            Grid.Row="1"
             AutoGenerateColumns="False"
             IsReadOnly="True"
             SelectionUnit="Row"
             AllowSorting="True"
             AllowFiltering="True"
-            AllowResizingColumns="True"
-            AllowDraggingColumns="True"
+            AllowResizingColumns="False"
+            AllowDraggingColumns="False"
             AllowGrouping="False"
             AllowRowHoverHighlighting="True"
             ShowRowHeader="False"
@@ -118,7 +117,7 @@
             FontSize="14"
             ColumnWidthMode="AutoLastColumnFill" />
 
-        <Grid Grid.Row="3" ColumnSpacing="10">
+        <Grid Grid.Row="2" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

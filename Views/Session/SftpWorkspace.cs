@@ -7,31 +7,24 @@ namespace FluentShell.Views.Session;
 
 public sealed class SftpWorkspace : IDisposable
 {
-    private readonly ServerProfile _profile;
     private readonly SftpSessionController _controller;
     private readonly SftpWorkspaceView _view;
 
     public SftpWorkspace(
-        ServerProfile profile,
         IntPtr windowHandle,
         ISftpFileService fileService,
         ElementTheme workspaceTheme)
     {
-        _profile = profile;
         _controller = new SftpSessionController(fileService);
         _view = new SftpWorkspaceView(windowHandle, workspaceTheme);
-        _view.SetShowHiddenFiles(profile.ShowHiddenFiles);
         _controller.StateChanged += Controller_StateChanged;
-        _view.CollapseRequested += View_CollapseRequested;
         _view.RefreshRequested += View_RefreshRequested;
-        _view.NavigateUpRequested += View_NavigateUpRequested;
         _view.NavigateRequested += View_NavigateRequested;
         _view.NewFolderRequested += View_NewFolderRequested;
         _view.UploadRequested += View_UploadRequested;
         _view.DownloadRequested += View_DownloadRequested;
         _view.RenameRequested += View_RenameRequested;
         _view.DeleteRequested += View_DeleteRequested;
-        _view.HiddenFilesChanged += View_HiddenFilesChanged;
         _view.CancelTransferRequested += View_CancelTransferRequested;
         _view.RenderState(_controller.Snapshot);
     }
@@ -39,11 +32,9 @@ public sealed class SftpWorkspace : IDisposable
     public FrameworkElement View => _view;
     public bool IsTransferActive => _controller.Snapshot.State == SftpSessionState.Transferring;
 
-    public event EventHandler? CollapseRequested;
-
     public async Task<bool> RefreshAsync()
     {
-        var listing = await _controller.RefreshAsync(_view.ShowHiddenFiles);
+        var listing = await _controller.RefreshAsync();
         _view.RenderDirectory(listing);
         return listing.Succeeded;
     }
@@ -53,22 +44,16 @@ public sealed class SftpWorkspace : IDisposable
     private void Controller_StateChanged(object? sender, SftpSessionSnapshot snapshot) =>
         _view.RenderState(snapshot);
 
-    private void View_CollapseRequested(object? sender, EventArgs e) =>
-        CollapseRequested?.Invoke(this, EventArgs.Empty);
-
     private async void View_RefreshRequested(object? sender, EventArgs e) => await RefreshAsync();
 
-    private async void View_NavigateUpRequested(object? sender, EventArgs e) =>
-        await RenderDirectoryAsync(_controller.NavigateUpAsync(_view.ShowHiddenFiles));
-
     private async void View_NavigateRequested(object? sender, string path) =>
-        await RenderDirectoryAsync(_controller.NavigateToAsync(path, _view.ShowHiddenFiles));
+        await RenderDirectoryAsync(_controller.NavigateToAsync(path));
 
     private async void View_NewFolderRequested(object? sender, EventArgs e)
     {
         var name = await _view.PromptTextAsync("新建文件夹", "文件夹名称");
         if (string.IsNullOrWhiteSpace(name)) return;
-        await RenderOperationAsync(_controller.CreateDirectoryAsync(name, _view.ShowHiddenFiles));
+        await RenderOperationAsync(_controller.CreateDirectoryAsync(name));
     }
 
     private async void View_UploadRequested(object? sender, EventArgs e)
@@ -79,8 +64,7 @@ public sealed class SftpWorkspace : IDisposable
             var result = await _controller.UploadAsync(
                 file.Name,
                 file.OpenRead,
-                _view.ConfirmOverwriteAsync,
-                _view.ShowHiddenFiles);
+                _view.ConfirmOverwriteAsync);
             _view.ShowOperationResult(result);
         }
     }
@@ -102,19 +86,13 @@ public sealed class SftpWorkspace : IDisposable
     {
         var name = await _view.PromptTextAsync("重命名", "输入新名称");
         if (string.IsNullOrWhiteSpace(name)) return;
-        await RenderOperationAsync(_controller.RenameAsync(item, name, _view.ShowHiddenFiles));
+        await RenderOperationAsync(_controller.RenameAsync(item, name));
     }
 
     private async void View_DeleteRequested(object? sender, RemoteFileItem item)
     {
         if (!await _view.ConfirmDeleteAsync(item)) return;
-        await RenderOperationAsync(_controller.DeleteAsync(item, _view.ShowHiddenFiles));
-    }
-
-    private async void View_HiddenFilesChanged(object? sender, EventArgs e)
-    {
-        _profile.ShowHiddenFiles = _view.ShowHiddenFiles;
-        await RefreshAsync();
+        await RenderOperationAsync(_controller.DeleteAsync(item));
     }
 
     private void View_CancelTransferRequested(object? sender, EventArgs e) => _controller.CancelTransfer();
@@ -132,16 +110,13 @@ public sealed class SftpWorkspace : IDisposable
     public void Dispose()
     {
         _controller.StateChanged -= Controller_StateChanged;
-        _view.CollapseRequested -= View_CollapseRequested;
         _view.RefreshRequested -= View_RefreshRequested;
-        _view.NavigateUpRequested -= View_NavigateUpRequested;
         _view.NavigateRequested -= View_NavigateRequested;
         _view.NewFolderRequested -= View_NewFolderRequested;
         _view.UploadRequested -= View_UploadRequested;
         _view.DownloadRequested -= View_DownloadRequested;
         _view.RenameRequested -= View_RenameRequested;
         _view.DeleteRequested -= View_DeleteRequested;
-        _view.HiddenFilesChanged -= View_HiddenFilesChanged;
         _view.CancelTransferRequested -= View_CancelTransferRequested;
         _controller.Dispose();
     }

@@ -14,16 +14,13 @@ public sealed class SftpFileService : ISftpFileService
 
     public bool IsConnected => _clientProvider()?.IsConnected == true;
 
-    public async Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(
-        string path,
-        bool showHiddenFiles)
+    public async Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
     {
         var client = GetConnectedClient();
         return await Task.Run(() =>
         {
             var items = client.ListDirectory(path)
-                .Where(item => item.Name is not "." and not ".." &&
-                    (showHiddenFiles || !item.Name.StartsWith('.')))
+                .Where(item => SftpDirectoryEntryPolicy.ShouldDisplay(item.Name))
                 .OrderByDescending(item => item.IsDirectory)
                 .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(item => new RemoteFileItem

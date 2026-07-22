@@ -45,8 +45,7 @@ public sealed class ServerCatalog
             Authentication = source.Authentication,
             PrivateKeyPath = source.PrivateKeyPath,
             Notes = source.Notes,
-            HostFingerprint = source.HostFingerprint,
-            ShowHiddenFiles = source.ShowHiddenFiles
+            HostFingerprint = source.HostFingerprint
         };
         _profiles.Add(copy);
         await SaveAsync();

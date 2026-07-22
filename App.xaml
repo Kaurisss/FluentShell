@@ -59,31 +59,6 @@
             <StaticResource x:Key="AppBarButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
             <StaticResource x:Key="AppBarButtonBorderBrushDisabled" ResourceKey="ButtonBorderBrushDisabled" />
 
-            <StaticResource x:Key="AppBarToggleButtonBackground" ResourceKey="ToggleButtonBackground" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundPointerOver" ResourceKey="ToggleButtonBackgroundPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundPressed" ResourceKey="ToggleButtonBackgroundPressed" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundDisabled" ResourceKey="ToggleButtonBackgroundDisabled" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundChecked" ResourceKey="ToggleButtonBackgroundChecked" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPointerOver" ResourceKey="ToggleButtonBackgroundCheckedPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPressed" ResourceKey="ToggleButtonBackgroundCheckedPressed" />
-            <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedDisabled" ResourceKey="ToggleButtonBackgroundCheckedDisabled" />
-            <StaticResource x:Key="AppBarToggleButtonForeground" ResourceKey="ToggleButtonForeground" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundPointerOver" ResourceKey="ToggleButtonForegroundPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundPressed" ResourceKey="ToggleButtonForegroundPressed" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundDisabled" ResourceKey="ToggleButtonForegroundDisabled" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundChecked" ResourceKey="ToggleButtonForegroundChecked" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPointerOver" ResourceKey="ToggleButtonForegroundCheckedPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPressed" ResourceKey="ToggleButtonForegroundCheckedPressed" />
-            <StaticResource x:Key="AppBarToggleButtonForegroundCheckedDisabled" ResourceKey="ToggleButtonForegroundCheckedDisabled" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrush" ResourceKey="ToggleButtonBorderBrush" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushPointerOver" ResourceKey="ToggleButtonBorderBrushPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushPressed" ResourceKey="ToggleButtonBorderBrushPressed" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushDisabled" ResourceKey="ToggleButtonBorderBrushDisabled" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushChecked" ResourceKey="ToggleButtonBorderBrushChecked" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPointerOver" ResourceKey="ToggleButtonBorderBrushCheckedPointerOver" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPressed" ResourceKey="ToggleButtonBorderBrushCheckedPressed" />
-            <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedDisabled" ResourceKey="ToggleButtonBorderBrushCheckedDisabled" />
-
             <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
             </Style>
@@ -223,15 +198,7 @@
             <Style x:Key="CommandBarIconButtonStyle" TargetType="AppBarButton" BasedOn="{StaticResource DefaultAppBarButtonStyle}">
                 <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
                 <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
-                <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource ButtonBorderThemeThickness}" />
-                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
-            </Style>
-
-            <Style x:Key="CommandBarIconToggleButtonStyle" TargetType="AppBarToggleButton" BasedOn="{StaticResource DefaultAppBarToggleButtonStyle}">
-                <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
-                <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
                 <Setter Property="BorderThickness" Value="{ThemeResource ButtonBorderThemeThickness}" />

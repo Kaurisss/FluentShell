@@ -49,8 +49,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         var fileService = new SftpFileService(() => _activeService?.SftpClient);
-        _sftpWorkspace = new SftpWorkspace(profile, windowHandle, fileService, _workspaceTheme);
-        _sftpWorkspace.CollapseRequested += SftpWorkspace_CollapseRequested;
+        _sftpWorkspace = new SftpWorkspace(windowHandle, fileService, _workspaceTheme);
         _terminalPane.InputReceived += TerminalPane_InputReceived;
         _terminalPane.ResizeRequested += TerminalPane_ResizeRequested;
         _terminalPane.InitializationFailed += TerminalPane_InitializationFailed;
@@ -323,8 +322,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private async void ReconnectButton_Click(object sender, RoutedEventArgs e) => await ConnectAsync();
 
-    private void SftpWorkspace_CollapseRequested(object? sender, EventArgs e) => ToggleSftp();
-
     private void SftpRestoreButton_Click(object sender, RoutedEventArgs e) => ToggleSftp();
 
     private void Splitter_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e) =>
@@ -385,7 +382,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _metricsCts?.Cancel();
         _sftpWorkspace.CancelTransfer();
-        _sftpWorkspace.CollapseRequested -= SftpWorkspace_CollapseRequested;
         _terminalPane.InputReceived -= TerminalPane_InputReceived;
         _terminalPane.ResizeRequested -= TerminalPane_ResizeRequested;
         _terminalPane.InitializationFailed -= TerminalPane_InitializationFailed;

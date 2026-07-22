@@ -18,7 +18,7 @@ public sealed class SftpSessionControllerTests
         var states = new List<SftpSessionState>();
         controller.StateChanged += (_, snapshot) => states.Add(snapshot.State);
 
-        var listing = await controller.RefreshAsync(showHiddenFiles: false);
+        var listing = await controller.RefreshAsync();
 
         Assert.IsTrue(listing.Succeeded);
         CollectionAssert.AreEqual(
@@ -34,13 +34,13 @@ public sealed class SftpSessionControllerTests
         var fileService = new FakeSftpFileService { ListException = new InvalidOperationException("连接中断") };
         using var controller = new SftpSessionController(fileService);
 
-        var failed = await controller.RefreshAsync(showHiddenFiles: false);
+        var failed = await controller.RefreshAsync();
 
         Assert.IsFalse(failed.Succeeded);
         Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State);
 
         fileService.ListException = null;
-        var recovered = await controller.RefreshAsync(showHiddenFiles: false);
+        var recovered = await controller.RefreshAsync();
 
         Assert.IsTrue(recovered.Succeeded);
         Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
@@ -63,8 +63,7 @@ public sealed class SftpSessionControllerTests
         var upload = controller.UploadAsync(
             "日志.txt",
             () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])),
-            _ => Task.FromResult(true),
-            showHiddenFiles: false);
+            _ => Task.FromResult(true));
         await uploadStarted.Task;
         controller.CancelTransfer();
 
@@ -83,7 +82,7 @@ public sealed class SftpSessionControllerTests
         using var controller = new SftpSessionController(fileService);
         var item = new RemoteFileItem { Name = "safe.txt", FullPath = "/safe.txt" };
 
-        var result = await controller.RenameAsync(item, "../escape", showHiddenFiles: false);
+        var result = await controller.RenameAsync(item, "../escape");
 
         Assert.IsFalse(result.Succeeded);
         Assert.AreEqual(0, fileService.RenameCallCount);
@@ -128,7 +127,7 @@ public sealed class SftpSessionControllerTests
         public int RenameCallCount { get; private set; }
         public int DownloadCallCount { get; private set; }
 
-        public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path, bool showHiddenFiles)
+        public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
         {
             if (ListException is not null) return Task.FromException<IReadOnlyList<RemoteFileItem>>(ListException);
             return Task.FromResult(DirectoryItems);

@@ -6,7 +6,7 @@ public interface ISftpFileService
 {
     bool IsConnected { get; }
 
-    Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path, bool showHiddenFiles);
+    Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path);
     Task CreateDirectoryAsync(string path);
     Task<bool> ExistsAsync(string path);
     Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken);
