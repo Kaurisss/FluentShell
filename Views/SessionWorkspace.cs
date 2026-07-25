@@ -21,14 +21,12 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     private readonly ElementTheme _workspaceTheme;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly TerminalPane _terminalPane = new();
-    private readonly TextBlock _connectionState = new();
-    private readonly Button _reconnectButton = new();
     private readonly Grid _workspaceGrid = new();
     private readonly Button _sftpRestoreButton = new();
     private readonly SftpWorkspace _sftpWorkspace;
     private SshConnectionService? _activeService;
     private CancellationTokenSource? _metricsCts;
-    private bool _isConnecting;
+    private SessionConnectionState _connectionState = SessionConnectionState.Disconnected;
     private bool _isSftpCollapsed;
     private double _previousSftpHeight = 260;
 
@@ -60,6 +58,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public ServerProfile Profile => _profile;
     public string DisplayTitle => _profile.Name;
     public bool IsConnected => _activeService?.IsConnected == true;
+    public SessionConnectionState ConnectionState => _connectionState;
     public bool IsTransferActive => _sftpWorkspace.IsTransferActive;
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated;
@@ -132,25 +131,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         var grid = new Grid { Padding = new Thickness(0, 0, 0, 8) };
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.Children.Add(_terminalPane);
-
-        var statePanel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 4, 4, 0)
-        };
-        _connectionState.Text = "未连接";
-        _connectionState.Foreground = ThemeBrush("MutedTextBrush");
-        _connectionState.VerticalAlignment = VerticalAlignment.Center;
-        statePanel.Children.Add(_connectionState);
-        _reconnectButton.Content = "重新连接";
-        _reconnectButton.Visibility = Visibility.Collapsed;
-        _reconnectButton.Click += ReconnectButton_Click;
-        statePanel.Children.Add(_reconnectButton);
-        Canvas.SetZIndex(statePanel, 1);
-        grid.Children.Add(statePanel);
         return grid;
     }
 
@@ -168,18 +148,15 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     public async Task ConnectAsync()
     {
-        if (_isConnecting || IsConnected) return;
-        _isConnecting = true;
-        _connectionState.Text = "连接中……";
-        _reconnectButton.Visibility = Visibility.Collapsed;
+        if (_connectionState == SessionConnectionState.Connecting || IsConnected) return;
+        _connectionState = SessionConnectionState.Connecting;
         StatusChanged?.Invoke(this, "连接中");
         try
         {
             var secret = await _passwordProvider();
             if (secret is null)
             {
-                _connectionState.Text = "已取消";
-                _reconnectButton.Visibility = Visibility.Visible;
+                _connectionState = SessionConnectionState.Disconnected;
                 StatusChanged?.Invoke(this, "连接已取消");
                 return;
             }
@@ -187,14 +164,9 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         }
         catch (Exception ex)
         {
-            _connectionState.Text = "连接失败";
-            _reconnectButton.Visibility = Visibility.Visible;
+            _connectionState = SessionConnectionState.Disconnected;
             StatusChanged?.Invoke(this, $"连接失败：{ex.Message}");
             _terminalPane.Write($"\r\n[连接失败] {ex.Message}\r\n");
-        }
-        finally
-        {
-            _isConnecting = false;
         }
     }
 
@@ -223,8 +195,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             throw;
         }
 
-        _connectionState.Text = "已连接";
-        _reconnectButton.Visibility = Visibility.Collapsed;
+        _connectionState = SessionConnectionState.Connected;
         StatusChanged?.Invoke(this, "已连接");
         _terminalPane.Write("连接主机成功。\r\n");
         await _sftpWorkspace.RefreshAsync();
@@ -259,8 +230,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _dispatcherQueue.TryEnqueue(() =>
         {
-            _connectionState.Text = "已断开";
-            _reconnectButton.Visibility = Visibility.Visible;
+            _connectionState = SessionConnectionState.Disconnected;
             StatusChanged?.Invoke(this, "连接已断开");
             _terminalPane.Write("\r\n[连接已断开]\r\n");
         });
@@ -319,8 +289,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private void TerminalPane_InitializationFailed(object? sender, string message) =>
         _terminalPane.Write($"\r\n[终端初始化失败] {message}\r\n");
-
-    private async void ReconnectButton_Click(object sender, RoutedEventArgs e) => await ConnectAsync();
 
     private void SftpRestoreButton_Click(object sender, RoutedEventArgs e) => ToggleSftp();
 
@@ -385,7 +353,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         _terminalPane.InputReceived -= TerminalPane_InputReceived;
         _terminalPane.ResizeRequested -= TerminalPane_ResizeRequested;
         _terminalPane.InitializationFailed -= TerminalPane_InitializationFailed;
-        _reconnectButton.Click -= ReconnectButton_Click;
         _sftpRestoreButton.Click -= SftpRestoreButton_Click;
         _terminalPane.Dispose();
         _sftpWorkspace.Dispose();

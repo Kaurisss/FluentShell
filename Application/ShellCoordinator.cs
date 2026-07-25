@@ -3,10 +3,18 @@ using FluentShell.Services;
 
 namespace FluentShell.Core;
 
+public enum SessionConnectionState
+{
+    Disconnected,
+    Connecting,
+    Connected
+}
+
 public interface IShellSession : IAsyncDisposable
 {
     ServerProfile Profile { get; }
     bool IsConnected { get; }
+    SessionConnectionState ConnectionState { get; }
     bool IsTransferActive { get; }
 
     event EventHandler<ServerMetrics?> MetricsUpdated;
@@ -207,6 +215,30 @@ public sealed class ShellCoordinator
         _sessionSecrets.Remove(profile.Id);
         await _serverCatalog.SaveAsync();
         NotifyStateChanged();
+    }
+
+    public Task ReconnectSelectedSessionAsync() =>
+        SelectedSession is null ? Task.CompletedTask : ReconnectAsync(SelectedSession);
+
+    private async Task ReconnectAsync(IShellSession session)
+    {
+        if (!_sessions.Contains(session) || session.ConnectionState == SessionConnectionState.Connecting || session.IsConnected)
+            return;
+        if (!_sessions.TryBeginConnection(session.Profile.Id)) return;
+
+        ConnectionProgressChanged?.Invoke(
+            this,
+            new ConnectionProgressChangedEventArgs(true, $"正在重新连接 {session.Profile.Name}…"));
+        try
+        {
+            await session.ConnectAsync();
+        }
+        finally
+        {
+            _sessions.EndConnection(session.Profile.Id);
+            ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
+            NotifyStateChanged();
+        }
     }
 
     public async Task<bool> CloseSessionAsync(

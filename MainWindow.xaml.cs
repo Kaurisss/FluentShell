@@ -82,6 +82,7 @@ public sealed partial class MainWindow : Window
         _sessionHost.SessionCloseRequested += async (_, session) =>
             await _shell.CloseSessionAsync(session, ConfirmCloseSessionAsync);
         _sessionHost.ContentChanged += (_, session) => SessionContentPresenter.Content = session;
+        ConnectedSidebar.ReconnectRequested += ConnectedSidebar_ReconnectRequested;
 
         _serverCatalogPage.RefreshRequested += (_, _) => RenderServerCatalog();
         _serverCatalogPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
@@ -139,7 +140,7 @@ public sealed partial class MainWindow : Window
         _settingsPage.SetSettings(_shell.Settings, _shell.DataFolder);
         RenderServerCatalog();
         if (_shell.SelectedSession is SessionWorkspace workspace)
-            ConnectedSidebar.UpdateSession(workspace.Profile, workspace.IsConnected);
+            ConnectedSidebar.UpdateSession(workspace.Profile, workspace.ConnectionState);
     }
 
     private void RenderServerCatalog() => _serverCatalogPage.SetProfiles(_shell.Profiles);
@@ -311,6 +312,9 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(PaneToggleButton, accessibleName);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PaneToggleButton, accessibleName);
     }
+
+    private async void ConnectedSidebar_ReconnectRequested(object? sender, EventArgs e) =>
+        await _shell.ReconnectSelectedSessionAsync();
 
     private async void QuickConnectButton_Click(object sender, RoutedEventArgs e) => await OpenServerPickerAsync();
     private async void AddServerButton_Click(object sender, RoutedEventArgs e) => await _serverCatalogPage.ShowAddDialogAsync();

@@ -8,6 +8,16 @@
             <StackPanel Spacing="4">
                 <TextBlock x:Name="ServerNameText" Text="服务器" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                 <TextBlock x:Name="ServerStatusText" Text="正在连接" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontSize="13" />
+                <Button
+                    x:Name="ReconnectButton"
+                    Content="重新连接"
+                    Margin="0,4,0,0"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource AppAccentButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ReconnectButton_Click"
+                    AutomationProperties.Name="重新连接服务器"
+                    ToolTipService.ToolTip="重新连接服务器" />
             </StackPanel>
             <StackPanel Spacing="5">
                 <TextBlock x:Name="AddressText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />

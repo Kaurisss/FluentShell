@@ -16,7 +16,7 @@ public sealed class ShellCoordinatorTests
         var coordinator = CreateCoordinator((profile, _, _) =>
         {
             factoryCalls++;
-            return new FakeShellSession(profile, async () =>
+            return new FakeShellSession(profile, async _ =>
             {
                 connectStarted.SetResult();
                 await completeConnection.Task;
@@ -34,6 +34,33 @@ public sealed class ShellCoordinatorTests
         Assert.AreEqual(0, coordinator.SessionCount);
     }
 
+    [TestMethod]
+    public async Task Reconnect_selected_session_reuses_existing_session()
+    {
+        var factoryCalls = 0;
+        var connectCalls = 0;
+        FakeShellSession? session = null;
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            factoryCalls++;
+            session = new FakeShellSession(profile, current =>
+            {
+                connectCalls++;
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            });
+            return session;
+        });
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+
+        await coordinator.ConnectAsync(profile);
+        session!.SetConnectionState(SessionConnectionState.Disconnected);
+        await coordinator.ReconnectSelectedSessionAsync();
+
+        Assert.AreEqual(1, factoryCalls);
+        Assert.AreEqual(2, connectCalls);
+    }
+
     private static ShellCoordinator CreateCoordinator(
         Func<ServerProfile, Func<Task<string?>>, Func<HostFingerprintRequiredEventArgs, Task<bool>>, IShellSession> sessionFactory) =>
         new(
@@ -46,16 +73,17 @@ public sealed class ShellCoordinatorTests
 
     private sealed class FakeShellSession : IShellSession
     {
-        private readonly Func<Task> _connect;
+        private readonly Func<FakeShellSession, Task> _connect;
 
-        public FakeShellSession(ServerProfile profile, Func<Task> connect)
+        public FakeShellSession(ServerProfile profile, Func<FakeShellSession, Task> connect)
         {
             Profile = profile;
             _connect = connect;
         }
 
         public ServerProfile Profile { get; }
-        public bool IsConnected => false;
+        public bool IsConnected => ConnectionState == SessionConnectionState.Connected;
+        public SessionConnectionState ConnectionState { get; private set; } = SessionConnectionState.Disconnected;
         public bool IsTransferActive => false;
         public event EventHandler<ServerMetrics?>? MetricsUpdated
         {
@@ -69,7 +97,8 @@ public sealed class ShellCoordinatorTests
             remove { }
         }
 
-        public Task ConnectAsync() => _connect();
+        public Task ConnectAsync() => _connect(this);
+        public void SetConnectionState(SessionConnectionState connectionState) => ConnectionState = connectionState;
         public void SetActive(bool active) { }
         public void SetTerminalFontSize(double value) { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

@@ -1,3 +1,4 @@
+using FluentShell.Core;
 using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,16 +16,26 @@ public sealed partial class ConnectedServerSidebar : UserControl
         InitializeComponent();
     }
 
+    public event EventHandler? ReconnectRequested;
+
     public void SetPaneOpen(bool isPaneOpen)
     {
         ExpandedPanel.Visibility = isPaneOpen ? Visibility.Visible : Visibility.Collapsed;
         CompactPanel.Visibility = isPaneOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void UpdateSession(ServerProfile profile, bool isConnected)
+    public void UpdateSession(ServerProfile profile, SessionConnectionState connectionState)
     {
         ServerNameText.Text = profile.Name;
-        ServerStatusText.Text = isConnected ? "已连接" : "已断开";
+        ServerStatusText.Text = connectionState switch
+        {
+            SessionConnectionState.Connected => "已连接",
+            SessionConnectionState.Connecting => "连接中…",
+            _ => "已断开"
+        };
+        ReconnectButton.Visibility = connectionState == SessionConnectionState.Disconnected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         AddressText.Text = profile.Address;
         UserText.Text = $"用户：{profile.Username}";
     }
@@ -47,6 +58,9 @@ public sealed partial class ConnectedServerSidebar : UserControl
         BuildTextMetric("主机名", metrics.Hostname);
         BuildTextMetric("运行时间", metrics.Uptime);
     }
+
+    private void ReconnectButton_Click(object sender, RoutedEventArgs e) =>
+        ReconnectRequested?.Invoke(this, EventArgs.Empty);
 
     private void CompactPanel_SizeChanged(object sender, SizeChangedEventArgs e)
     {
