@@ -13,6 +13,7 @@ public sealed class HostFingerprintRequiredEventArgs : EventArgs
 
 public sealed class SshConnectionService : IAsyncDisposable
 {
+    private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(12);
     private readonly ServerProfile _profile;
     private readonly string _secret;
     private SshClient? _sshClient;
@@ -37,23 +38,90 @@ public sealed class SshConnectionService : IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Run(() => ConnectCore(cancellationToken), cancellationToken);
+        SshClient? sshClient = null;
+        SftpClient? sftpClient = null;
+        try
+        {
+            sshClient = new SshClient(CreateConnectionInfo());
+            sshClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(sshClient, cancellationToken).ConfigureAwait(false);
+
+            var shell = await AwaitOperationAsync(
+                Task.Run(
+                    () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
+                    cancellationToken),
+                cancellationToken).ConfigureAwait(false);
+
+            sftpClient = new SftpClient(CreateConnectionInfo());
+            sftpClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(sftpClient, cancellationToken).ConfigureAwait(false);
+
+            _sshClient = sshClient;
+            _shell = shell;
+            _sftpClient = sftpClient;
+            _readCts = new CancellationTokenSource();
+            _ = ReadOutputLoopAsync(_readCts.Token);
+        }
+        catch
+        {
+            _sshClient = null;
+            _shell = null;
+            _sftpClient = null;
+            ScheduleDispose(sftpClient);
+            ScheduleDispose(sshClient);
+            throw;
+        }
     }
 
-    private void ConnectCore(CancellationToken cancellationToken)
+    private static async Task ConnectClientAsync(BaseClient client, CancellationToken cancellationToken)
     {
-        var sshConnectionInfo = CreateConnectionInfo();
-        _sshClient = new SshClient(sshConnectionInfo);
-        _sshClient.HostKeyReceived += OnHostKeyReceived;
-        _sshClient.Connect();
-        cancellationToken.ThrowIfCancellationRequested();
+        await AwaitOperationAsync(client.ConnectAsync(cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
 
-        _shell = _sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096);
-        _sftpClient = new SftpClient(CreateConnectionInfo());
-        _sftpClient.HostKeyReceived += OnHostKeyReceived;
-        _sftpClient.Connect();
-        _readCts = new CancellationTokenSource();
-        _ = ReadOutputLoopAsync(_readCts.Token);
+    private static async Task AwaitOperationAsync(
+        Task operation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await operation.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ObserveFault(operation);
+            throw;
+        }
+    }
+
+    private static async Task<T> AwaitOperationAsync<T>(
+        Task<T> operation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await operation.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ObserveFault(operation);
+            throw;
+        }
+    }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            static completedTask => { _ = completedTask.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    private static void ScheduleDispose(BaseClient? client)
+    {
+        if (client is null) return;
+        _ = Task.Run(() =>
+        {
+            try { client.Dispose(); } catch { }
+        });
     }
 
     private ConnectionInfo CreateConnectionInfo()
@@ -66,7 +134,7 @@ public sealed class SshConnectionService : IAsyncDisposable
 
         return new ConnectionInfo(_profile.Host, _profile.Port, _profile.Username, auth)
         {
-            Timeout = TimeSpan.FromSeconds(12)
+            Timeout = ConnectionTimeout
         };
     }
 

@@ -8,6 +8,25 @@ namespace FluentShell.Tests;
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
+    public async Task Connection_failure_is_exposed_to_frontend()
+    {
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile, current =>
+        {
+            current.ReportConnectionFailure("Session operation has timed out");
+            return Task.CompletedTask;
+        }));
+        ConnectionFailureEventArgs? failureNotification = null;
+        coordinator.ConnectionFailed += (_, args) => failureNotification = args;
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+
+        await coordinator.ConnectAsync(profile);
+
+        Assert.IsNotNull(failureNotification, "连接失败时主窗口需要收到包含原因的通知。");
+        Assert.AreEqual(profile, failureNotification.Profile);
+        Assert.AreEqual("Session operation has timed out", failureNotification.Message);
+    }
+
+    [TestMethod]
     public async Task Connection_guard_deduplicates_pending_server_connection()
     {
         var connectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -97,7 +116,10 @@ public sealed class ShellCoordinatorTests
             remove { }
         }
 
+        public event EventHandler<string>? ConnectionFailed;
+
         public Task ConnectAsync() => _connect(this);
+        public void ReportConnectionFailure(string message) => ConnectionFailed?.Invoke(this, message);
         public void SetConnectionState(SessionConnectionState connectionState) => ConnectionState = connectionState;
         public void SetActive(bool active) { }
         public void SetTerminalFontSize(double value) { }

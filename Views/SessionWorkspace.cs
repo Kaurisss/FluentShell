@@ -63,6 +63,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated;
     public event EventHandler<string>? StatusChanged;
+    public event EventHandler<string>? ConnectionFailed;
 
     public void SetActive(bool active)
     {
@@ -166,6 +167,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         {
             _connectionState = SessionConnectionState.Disconnected;
             StatusChanged?.Invoke(this, $"连接失败：{ex.Message}");
+            ConnectionFailed?.Invoke(this, ex.Message);
             _terminalPane.Write($"\r\n[连接失败] {ex.Message}\r\n");
         }
     }

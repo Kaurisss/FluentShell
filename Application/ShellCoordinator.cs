@@ -19,6 +19,7 @@ public interface IShellSession : IAsyncDisposable
 
     event EventHandler<ServerMetrics?> MetricsUpdated;
     event EventHandler<string> StatusChanged;
+    event EventHandler<string> ConnectionFailed;
 
     Task ConnectAsync();
     void SetActive(bool active);
@@ -84,6 +85,7 @@ public sealed class ShellCoordinator
 
     public event EventHandler? StateChanged;
     public event EventHandler<ConnectionProgressChangedEventArgs>? ConnectionProgressChanged;
+    public event EventHandler<ConnectionFailureEventArgs>? ConnectionFailed;
     public event EventHandler<IShellSession>? SessionAdded;
     public event EventHandler<IShellSession>? SessionRemoved;
     public event EventHandler<IShellSession?>? SessionSelected;
@@ -290,12 +292,14 @@ public sealed class ShellCoordinator
     private void SubscribeSession(IShellSession session)
     {
         session.StatusChanged += Session_StatusChanged;
+        session.ConnectionFailed += Session_ConnectionFailed;
         session.MetricsUpdated += Session_MetricsUpdated;
     }
 
     private void UnsubscribeSession(IShellSession session)
     {
         session.StatusChanged -= Session_StatusChanged;
+        session.ConnectionFailed -= Session_ConnectionFailed;
         session.MetricsUpdated -= Session_MetricsUpdated;
     }
 
@@ -303,6 +307,12 @@ public sealed class ShellCoordinator
     {
         _lastResult = status;
         NotifyStateChanged();
+    }
+
+    private void Session_ConnectionFailed(object? sender, string message)
+    {
+        if (sender is IShellSession session)
+            ConnectionFailed?.Invoke(this, new ConnectionFailureEventArgs(session.Profile, message));
     }
 
     private void Session_MetricsUpdated(object? sender, ServerMetrics? metrics)
@@ -315,4 +325,5 @@ public sealed class ShellCoordinator
 }
 
 public sealed record ConnectionProgressChangedEventArgs(bool IsActive, string? Message);
+public sealed record ConnectionFailureEventArgs(ServerProfile Profile, string Message);
 public sealed record SessionMetricsUpdatedEventArgs(IShellSession Session, ServerMetrics Metrics);

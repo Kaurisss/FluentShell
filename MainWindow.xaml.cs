@@ -99,6 +99,11 @@ public sealed partial class MainWindow : Window
 
         _shell.StateChanged += (_, _) => RenderState();
         _shell.ConnectionProgressChanged += (_, args) => SetConnectionProgress(args);
+        _shell.ConnectionFailed += (_, args) => _dispatcherQueue.TryEnqueue(async () =>
+            await ShellDialogService.ShowMessageAsync(
+                Content.XamlRoot,
+                $"无法连接到 {args.Profile.Name}",
+                args.Message));
         _shell.SessionAdded += (_, session) =>
         {
             _sessionHost.Add((SessionWorkspace)session);
