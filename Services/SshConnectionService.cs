@@ -1,6 +1,7 @@
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using FluentShell.Models;
+using Org.BouncyCastle.Crypto;
 
 namespace FluentShell.Services;
 
@@ -122,6 +123,23 @@ public sealed class SshConnectionService : IAsyncDisposable
         {
             try { client.Dispose(); } catch { }
         });
+    }
+
+    internal static bool RequiresPrivateKeyPassphrase(string privateKeyPath)
+    {
+        try
+        {
+            _ = new PrivateKeyFile(privateKeyPath, null);
+            return false;
+        }
+        catch (SshPassPhraseNullOrEmptyException)
+        {
+            return true;
+        }
+        catch (InvalidCipherTextException)
+        {
+            return true;
+        }
     }
 
     private ConnectionInfo CreateConnectionInfo()

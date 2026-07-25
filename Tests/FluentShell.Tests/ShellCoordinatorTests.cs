@@ -1,6 +1,7 @@
 using FluentShell.Core;
 using FluentShell.Models;
 using FluentShell.Services;
+using System.Security.Cryptography;
 
 namespace FluentShell.Tests;
 
@@ -80,15 +81,113 @@ public sealed class ShellCoordinatorTests
         Assert.AreEqual(2, connectCalls);
     }
 
+    [TestMethod]
+    public async Task ConnectAsync_skips_prompt_for_unencrypted_private_key()
+    {
+        var privateKeyPath = CreateUnencryptedPrivateKey();
+        try
+        {
+            var promptCount = 0;
+            string? suppliedSecret = null;
+            var profile = new ServerProfile
+            {
+                Name = "无口令私钥服务器",
+                Host = "host",
+                Username = "user",
+                Authentication = AuthenticationMethod.PrivateKey,
+                PrivateKeyPath = privateKeyPath
+            };
+            var coordinator = CreateCoordinator(
+                (currentProfile, secretProvider, _) => new FakeShellSession(currentProfile, async _ =>
+                {
+                    suppliedSecret = await secretProvider();
+                }),
+                _ =>
+                {
+                    promptCount++;
+                    return Task.FromResult<string?>("不应请求私钥口令");
+                });
+
+            await coordinator.ConnectAsync(profile);
+
+            Assert.AreEqual(0, promptCount);
+            Assert.AreEqual(string.Empty, suppliedSecret);
+        }
+        finally
+        {
+            File.Delete(privateKeyPath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ConnectAsync_prompts_for_encrypted_private_key_without_saved_passphrase()
+    {
+        const string passphrase = "test-passphrase";
+        var privateKeyPath = CreateEncryptedPrivateKey(passphrase);
+        try
+        {
+            var promptCount = 0;
+            string? suppliedSecret = null;
+            var profile = new ServerProfile
+            {
+                Name = "加密私钥服务器",
+                Host = "host",
+                Username = "user",
+                Authentication = AuthenticationMethod.PrivateKey,
+                PrivateKeyPath = privateKeyPath
+            };
+            var coordinator = CreateCoordinator(
+                (currentProfile, secretProvider, _) => new FakeShellSession(currentProfile, async _ =>
+                {
+                    suppliedSecret = await secretProvider();
+                }),
+                _ =>
+                {
+                    promptCount++;
+                    return Task.FromResult<string?>(passphrase);
+                });
+
+            await coordinator.ConnectAsync(profile);
+
+            Assert.AreEqual(1, promptCount);
+            Assert.AreEqual(passphrase, suppliedSecret);
+        }
+        finally
+        {
+            File.Delete(privateKeyPath);
+        }
+    }
+
     private static ShellCoordinator CreateCoordinator(
-        Func<ServerProfile, Func<Task<string?>>, Func<HostFingerprintRequiredEventArgs, Task<bool>>, IShellSession> sessionFactory) =>
+        Func<ServerProfile, Func<Task<string?>>, Func<HostFingerprintRequiredEventArgs, Task<bool>>, IShellSession> sessionFactory,
+        Func<ServerProfile, Task<string?>>? secretPrompt = null) =>
         new(
             new SettingsStore(),
             new CredentialService(),
             new ServerCatalog(new ServerProfileStore(), new CredentialService()),
             sessionFactory,
-            _ => Task.FromResult<string?>(null),
+            secretPrompt ?? (_ => Task.FromResult<string?>(null)),
             _ => Task.FromResult(false));
+
+    private static string CreateUnencryptedPrivateKey()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"fluent-shell-{Guid.NewGuid():N}.pem");
+        using var key = RSA.Create(2048);
+        File.WriteAllText(path, key.ExportRSAPrivateKeyPem());
+        return path;
+    }
+
+    private static string CreateEncryptedPrivateKey(string passphrase)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"fluent-shell-{Guid.NewGuid():N}.pem");
+        using var key = RSA.Create(2048);
+        var encryption = new PbeParameters(
+            PbeEncryptionAlgorithm.Aes256Cbc,
+            HashAlgorithmName.SHA256,
+            100_000);
+        File.WriteAllText(path, key.ExportEncryptedPkcs8PrivateKeyPem(passphrase, encryption));
+        return path;
+    }
 
     private sealed class FakeShellSession : IShellSession
     {

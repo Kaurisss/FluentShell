@@ -272,6 +272,11 @@ public sealed class ShellCoordinator
             _sessionSecrets[profile.Id] = saved;
             return saved;
         }
+        if (profile.Authentication == AuthenticationMethod.PrivateKey &&
+            !SshConnectionService.RequiresPrivateKeyPassphrase(profile.PrivateKeyPath))
+        {
+            return string.Empty;
+        }
 
         var secret = await _secretPrompt(profile);
         if (secret is not null) _sessionSecrets[profile.Id] = secret;
