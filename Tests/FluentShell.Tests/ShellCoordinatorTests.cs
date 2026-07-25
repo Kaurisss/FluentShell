@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 namespace FluentShell.Tests;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
@@ -79,6 +80,78 @@ public sealed class ShellCoordinatorTests
 
         Assert.AreEqual(1, factoryCalls);
         Assert.AreEqual(2, connectCalls);
+    }
+
+    [TestMethod]
+    public async Task Selecting_current_session_does_not_restart_metrics_polling()
+    {
+        FakeShellSession? session = null;
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            session = new FakeShellSession(profile, current =>
+            {
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            });
+            return session;
+        });
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+
+        await coordinator.ConnectAsync(profile);
+        await coordinator.ConnectAsync(profile);
+
+        Assert.AreEqual(1, session!.MetricsPollingStarts);
+    }
+
+    [TestMethod]
+    public async Task Closing_selected_session_activates_next_session()
+    {
+        var sessions = new List<FakeShellSession>();
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            var session = new FakeShellSession(profile, current =>
+            {
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            });
+            sessions.Add(session);
+            return session;
+        });
+        var firstProfile = new ServerProfile { Name = "第一台", Host = "first", Username = "user" };
+        var secondProfile = new ServerProfile { Name = "第二台", Host = "second", Username = "user" };
+
+        await coordinator.ConnectAsync(firstProfile);
+        await coordinator.ConnectAsync(secondProfile);
+        await coordinator.CloseSessionAsync(sessions[1], _ => Task.FromResult(true));
+
+        Assert.AreSame(sessions[0], coordinator.SelectedSession);
+        Assert.AreEqual(2, sessions[0].MetricsPollingStarts);
+    }
+
+    [TestMethod]
+    public async Task Closing_inactive_session_does_not_restart_active_metrics_polling()
+    {
+        var sessions = new List<FakeShellSession>();
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            var session = new FakeShellSession(profile, current =>
+            {
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            });
+            sessions.Add(session);
+            return session;
+        });
+        var firstProfile = new ServerProfile { Name = "第一台", Host = "first", Username = "user" };
+        var secondProfile = new ServerProfile { Name = "第二台", Host = "second", Username = "user" };
+
+        await coordinator.ConnectAsync(firstProfile);
+        await coordinator.ConnectAsync(secondProfile);
+        await coordinator.ConnectAsync(firstProfile);
+        await coordinator.CloseSessionAsync(sessions[1], _ => Task.FromResult(true));
+
+        Assert.AreSame(sessions[0], coordinator.SelectedSession);
+        Assert.AreEqual(2, sessions[0].MetricsPollingStarts);
     }
 
     [TestMethod]
@@ -203,6 +276,7 @@ public sealed class ShellCoordinatorTests
         public bool IsConnected => ConnectionState == SessionConnectionState.Connected;
         public SessionConnectionState ConnectionState { get; private set; } = SessionConnectionState.Disconnected;
         public bool IsTransferActive => false;
+        public int MetricsPollingStarts { get; private set; }
         public event EventHandler<ServerMetrics?>? MetricsUpdated
         {
             add { }
@@ -220,7 +294,10 @@ public sealed class ShellCoordinatorTests
         public Task ConnectAsync() => _connect(this);
         public void ReportConnectionFailure(string message) => ConnectionFailed?.Invoke(this, message);
         public void SetConnectionState(SessionConnectionState connectionState) => ConnectionState = connectionState;
-        public void SetActive(bool active) { }
+        public void SetActive(bool active)
+        {
+            if (active) MetricsPollingStarts++;
+        }
         public void SetTerminalFontSize(double value) { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

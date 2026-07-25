@@ -22,6 +22,7 @@ public sealed class SshConnectionService : IAsyncDisposable
     private SftpClient? _sftpClient;
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
+    private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
 
     public SshConnectionService(ServerProfile profile, string secret)
     {
@@ -240,11 +241,32 @@ public sealed class SshConnectionService : IAsyncDisposable
         if (!IsConnected) return null;
         try
         {
-            const string metricsCommand = "LC_ALL=C top -bn1 | awk '/Cpu\\(s\\)/ {print \"CpuUsage=\" $2+$4}'; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
-            var command = await Task.Run(() => _sshClient!.RunCommand(metricsCommand).Result, cancellationToken);
-            return ParseMetrics(command);
+            await _metricsCommandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (!IsConnected) return null;
+
+                const string metricsCommand = "LC_ALL=C top -bn1 | awk '/Cpu\\(s\\)/ {print \"CpuUsage=\" $2+$4}'; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
+                using var command = _sshClient!.CreateCommand(metricsCommand);
+                // SSH.NET waits synchronously for channel-open before returning ExecuteAsync's task.
+                await Task.Run(
+                    () => command.ExecuteAsync(cancellationToken),
+                    cancellationToken).ConfigureAwait(false);
+                return ParseMetrics(command.Result);
+            }
+            finally
+            {
+                _metricsCommandGate.Release();
+            }
         }
-        catch { return null; }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static ServerMetrics ParseMetrics(string output)

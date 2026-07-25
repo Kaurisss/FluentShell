@@ -250,11 +250,12 @@ public sealed class ShellCoordinator
         if (!_sessions.Contains(session)) return false;
         if (session.IsTransferActive && !await confirmClose(session)) return false;
 
+        var wasSelected = ReferenceEquals(_sessions.Selected, session);
         var nextSession = _sessions.Remove(session);
         UnsubscribeSession(session);
         await session.DisposeAsync();
         SessionRemoved?.Invoke(this, session);
-        if (nextSession is not null) SelectSession(nextSession);
+        if (nextSession is not null) SelectSession(nextSession, forceActivation: wasSelected);
         else
         {
             _sessions.ClearSelection();
@@ -283,12 +284,16 @@ public sealed class ShellCoordinator
         return secret;
     }
 
-    private void SelectSession(IShellSession session)
+    private void SelectSession(IShellSession session, bool forceActivation = false)
     {
         if (!_sessions.Contains(session)) return;
+        var activationChanged = forceActivation || !ReferenceEquals(_sessions.Selected, session);
         _sessions.Select(session);
-        foreach (var candidate in _sessions.Sessions)
-            candidate.SetActive(ReferenceEquals(candidate, session));
+        if (activationChanged)
+        {
+            foreach (var candidate in _sessions.Sessions)
+                candidate.SetActive(ReferenceEquals(candidate, session));
+        }
         session.Profile.LastConnectedAt ??= DateTimeOffset.Now;
         SessionSelected?.Invoke(this, session);
         NotifyStateChanged();

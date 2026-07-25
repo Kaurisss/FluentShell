@@ -27,6 +27,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     private SshConnectionService? _activeService;
     private CancellationTokenSource? _metricsCts;
     private SessionConnectionState _connectionState = SessionConnectionState.Disconnected;
+    private bool _isActive;
     private bool _isSftpCollapsed;
     private double _previousSftpHeight = 260;
 
@@ -67,14 +68,17 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     public void SetActive(bool active)
     {
+        if (_isActive == active) return;
+
+        _isActive = active;
         if (!active)
         {
             _metricsCts?.Cancel();
+            return;
         }
-        else if (_activeService?.IsConnected == true)
-        {
+
+        if (_activeService?.IsConnected == true)
             _ = RefreshMetricsLoopAsync(_activeService);
-        }
     }
 
     public void SetTerminalFontSize(double value) => _terminalPane.SetFontSize(value);
@@ -202,7 +206,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         _terminalPane.Write("连接主机成功。\r\n");
         await _sftpWorkspace.RefreshAsync();
         _terminalPane.FocusTerminal();
-        _ = RefreshMetricsLoopAsync(service);
+        if (_isActive) _ = RefreshMetricsLoopAsync(service);
     }
 
     private void Connection_HostFingerprintRequired(
