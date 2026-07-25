@@ -1,6 +1,7 @@
 using FluentShell.Core;
 using FluentShell.Models;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -10,10 +11,14 @@ public sealed partial class ConnectedServerSidebar : UserControl
 {
     private readonly Dictionary<string, FrameworkElement> _metricElements = [];
     private readonly Dictionary<string, double> _compactMetricValues = [];
+    private Guid? _currentProfileId;
+    private SessionConnectionState _connectionState = SessionConnectionState.Disconnected;
+    private bool _hasFreshMetrics;
 
     public ConnectedServerSidebar()
     {
         InitializeComponent();
+        UpdateCompactPresentation();
     }
 
     public event EventHandler? ReconnectRequested;
@@ -26,6 +31,12 @@ public sealed partial class ConnectedServerSidebar : UserControl
 
     public void UpdateSession(ServerProfile profile, SessionConnectionState connectionState)
     {
+        var profileChanged = _currentProfileId != profile.Id;
+        _currentProfileId = profile.Id;
+        _connectionState = connectionState;
+        if (profileChanged || connectionState != SessionConnectionState.Connected)
+            ClearMetricPresentation();
+
         ServerNameText.Text = profile.Name;
         ServerStatusText.Text = connectionState switch
         {
@@ -38,16 +49,24 @@ public sealed partial class ConnectedServerSidebar : UserControl
             : Visibility.Collapsed;
         AddressText.Text = profile.Address;
         UserText.Text = $"用户：{profile.Username}";
+        AutomationProperties.SetName(CompactReconnectButton, $"重新连接 {profile.Name}");
+        ToolTipService.SetToolTip(CompactReconnectButton, $"重新连接 {profile.Name}");
+        UpdateCompactPresentation();
     }
 
-    public void UpdateMetrics(ServerMetrics metrics, bool showDetails)
+    public void UpdateMetrics(Guid profileId, ServerMetrics metrics, bool showDetails)
     {
+        if (_currentProfileId != profileId || _connectionState != SessionConnectionState.Connected)
+            return;
+
+        _hasFreshMetrics = true;
+        UpdateCompactPresentation();
         BuildProgressMetric("CPU", metrics.CpuPercent);
         BuildProgressMetric("内存", metrics.MemoryPercent);
         BuildProgressMetric("Swap", metrics.SwapPercent);
-        CompactCpuText.Text = $"{metrics.CpuPercent:0}%";
-        CompactMemoryText.Text = $"{metrics.MemoryPercent:0}%";
-        CompactSwapText.Text = $"{metrics.SwapPercent:0}%";
+        CompactCpuText.Text = FormatPercent(metrics.CpuPercent);
+        CompactMemoryText.Text = FormatPercent(metrics.MemoryPercent);
+        CompactSwapText.Text = FormatPercent(metrics.SwapPercent);
         UpdateCompactMetric("CPU", metrics.CpuPercent);
         UpdateCompactMetric("内存", metrics.MemoryPercent);
         UpdateCompactMetric("Swap", metrics.SwapPercent);
@@ -59,6 +78,41 @@ public sealed partial class ConnectedServerSidebar : UserControl
         BuildTextMetric("运行时间", metrics.Uptime);
     }
 
+    private void UpdateCompactPresentation()
+    {
+        var isDisconnected = _connectionState == SessionConnectionState.Disconnected;
+        var isConnecting = _connectionState == SessionConnectionState.Connecting;
+
+        CompactReconnectPanel.Visibility = isDisconnected ? Visibility.Visible : Visibility.Collapsed;
+        CompactConnectingPanel.Visibility = isConnecting ? Visibility.Visible : Visibility.Collapsed;
+        CompactConnectionProgressRing.IsActive = isConnecting;
+        CompactMetricsPanel.Visibility = _connectionState == SessionConnectionState.Connected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (!_hasFreshMetrics)
+            ClearCompactMetricValues();
+    }
+
+    private void ClearMetricPresentation()
+    {
+        _hasFreshMetrics = false;
+        _compactMetricValues.Clear();
+        _metricElements.Clear();
+        MetricsPanel.Children.Clear();
+        ClearCompactMetricValues();
+    }
+
+    private void ClearCompactMetricValues()
+    {
+        CompactCpuText.Text = string.Empty;
+        CompactMemoryText.Text = string.Empty;
+        CompactSwapText.Text = string.Empty;
+        CompactCpuFill.Width = 0;
+        CompactMemoryFill.Width = 0;
+        CompactSwapFill.Width = 0;
+    }
+
     private void ReconnectButton_Click(object sender, RoutedEventArgs e) =>
         ReconnectRequested?.Invoke(this, EventArgs.Empty);
 
@@ -68,9 +122,8 @@ public sealed partial class ConnectedServerSidebar : UserControl
             UpdateCompactMetric(metric.Key, metric.Value);
     }
 
-    private void UpdateCompactMetric(string label, double value)
+    private void UpdateCompactMetric(string label, double? value)
     {
-        _compactMetricValues[label] = Math.Clamp(value, 0, 100);
         var (track, fill) = label switch
         {
             "CPU" => (CompactCpuTrack, CompactCpuFill),
@@ -80,11 +133,23 @@ public sealed partial class ConnectedServerSidebar : UserControl
         };
         if (track is null || fill is null) return;
 
+        if (value is null)
+        {
+            _compactMetricValues.Remove(label);
+            fill.Width = 0;
+            fill.Height = track.ActualHeight;
+            return;
+        }
+
+        _compactMetricValues[label] = Math.Clamp(value.Value, 0, 100);
         fill.Width = track.ActualWidth * _compactMetricValues[label] / 100d;
         fill.Height = track.ActualHeight;
     }
 
-    private void BuildProgressMetric(string label, double value)
+    private static string FormatPercent(double? value) =>
+        value is null ? string.Empty : $"{value:0}%";
+
+    private void BuildProgressMetric(string label, double? value)
     {
         if (!_metricElements.TryGetValue(label, out var element))
         {
@@ -115,8 +180,8 @@ public sealed partial class ConnectedServerSidebar : UserControl
         }
 
         var children = ((StackPanel)element).Children;
-        ((TextBlock)((Grid)children[0]).Children[1]).Text = $"{value:0}%";
-        ((ProgressBar)children[1]).Value = value;
+        ((TextBlock)((Grid)children[0]).Children[1]).Text = FormatPercent(value);
+        ((ProgressBar)children[1]).Value = value ?? 0;
     }
 
     private void BuildTextMetric(string label, string value)

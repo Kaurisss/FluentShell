@@ -23,6 +23,7 @@ public sealed class SshConnectionService : IAsyncDisposable
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
     private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
+    private readonly LinuxCpuUsageCalculator _cpuUsageCalculator = new();
 
     public SshConnectionService(ServerProfile profile, string secret)
     {
@@ -246,7 +247,7 @@ public sealed class SshConnectionService : IAsyncDisposable
             {
                 if (!IsConnected) return null;
 
-                const string metricsCommand = "LC_ALL=C top -bn1 | awk '/Cpu\\(s\\)/ {print \"CpuUsage=\" $2+$4}'; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
+                const string metricsCommand = "head -n 1 /proc/stat; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
                 using var command = _sshClient!.CreateCommand(metricsCommand);
                 // SSH.NET waits synchronously for channel-open before returning ExecuteAsync's task.
                 await Task.Run(
@@ -269,10 +270,14 @@ public sealed class SshConnectionService : IAsyncDisposable
         }
     }
 
-    private static ServerMetrics ParseMetrics(string output)
+    private ServerMetrics ParseMetrics(string output)
     {
         var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-        var load = lines.FirstOrDefault(line => !line.Contains('=') && line.Count(character => character == ' ') >= 2) ?? "";
+        var cpuPercent = _cpuUsageCalculator.AddSample(lines.FirstOrDefault() ?? string.Empty);
+        var load = lines.FirstOrDefault(line =>
+            !line.StartsWith("cpu ", StringComparison.Ordinal) &&
+            !line.Contains('=') &&
+            line.Count(character => character == ' ') >= 2) ?? "";
         var values = lines.Where(line => line.Contains('='))
             .Select(line => line.Split('=', 2))
             .GroupBy(parts => parts[0])
@@ -285,7 +290,7 @@ public sealed class SshConnectionService : IAsyncDisposable
         var swap = swapTotal <= 0 ? 0 : (swapTotal - swapFree) / swapTotal * 100;
         return new ServerMetrics
         {
-            CpuPercent = Math.Clamp(values.GetValueOrDefault("CpuUsage"), 0, 100),
+            CpuPercent = cpuPercent,
             MemoryPercent = Math.Clamp(memory, 0, 100),
             SwapPercent = Math.Clamp(swap, 0, 100),
             LoadAverage = load.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "—",

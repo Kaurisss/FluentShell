@@ -125,7 +125,7 @@ public sealed partial class MainWindow : Window
         _shell.MetricsUpdated += (_, args) =>
         {
             if (ReferenceEquals(_shell.SelectedSession, args.Session))
-                ConnectedSidebar.UpdateMetrics(args.Metrics, !_sidebarCollapsed);
+                ConnectedSidebar.UpdateMetrics(args.Session.Profile.Id, args.Metrics, !_sidebarCollapsed);
         };
     }
 

@@ -29,43 +29,74 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel
+            <StackPanel
             x:Name="CompactPanel"
+            Width="52"
+            HorizontalAlignment="Center"
             Visibility="Collapsed"
-            Margin="8,16,8,12"
+            Margin="0,16,0,12"
             Spacing="14"
             SizeChanged="CompactPanel_SizeChanged"
             VerticalAlignment="Stretch">
-            <Grid RowSpacing="4">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="CPU" FontSize="10" />
-                <TextBlock x:Name="CompactCpuText" Grid.Column="1" Text="—" FontSize="10" />
-                <Grid x:Name="CompactCpuTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                    <Border x:Name="CompactCpuFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+            <StackPanel.RenderTransform>
+            <TranslateTransform X="4" />
+            </StackPanel.RenderTransform>
+            <StackPanel x:Name="CompactReconnectPanel" HorizontalAlignment="Center" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="已断开" FontSize="10" Foreground="{ThemeResource MutedTextBrush}" HorizontalAlignment="Center" />
+                <Button
+                    x:Name="CompactReconnectButton"
+                    Width="40"
+                    Height="40"
+                    Padding="0"
+                    Style="{StaticResource AppAccentButtonStyle}"
+                    Click="ReconnectButton_Click"
+                    AutomationProperties.Name="重新连接服务器"
+                    ToolTipService.ToolTip="重新连接服务器">
+                    <SymbolIcon Symbol="Refresh" Width="20" Height="20" />
+                </Button>
+            </StackPanel>
+
+            <StackPanel
+                x:Name="CompactConnectingPanel"
+                HorizontalAlignment="Center"
+                Visibility="Collapsed"
+                AutomationProperties.Name="正在连接服务器"
+                ToolTipService.ToolTip="正在连接服务器">
+                <ProgressRing x:Name="CompactConnectionProgressRing" Width="20" Height="20" IsActive="False" />
+            </StackPanel>
+
+            <StackPanel x:Name="CompactMetricsPanel" Spacing="14" Visibility="Collapsed">
+                <Grid RowSpacing="4" ColumnSpacing="4">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="CPU" FontSize="10" />
+                    <TextBlock x:Name="CompactCpuText" Grid.Column="1" FontSize="10" />
+                    <Grid x:Name="CompactCpuTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                        <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                        <Border x:Name="CompactCpuFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                    </Grid>
                 </Grid>
-            </Grid>
-            <Grid RowSpacing="4">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="内存" FontSize="10" />
-                <TextBlock x:Name="CompactMemoryText" Grid.Column="1" Text="—" FontSize="10" />
-                <Grid x:Name="CompactMemoryTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                    <Border x:Name="CompactMemoryFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                <Grid RowSpacing="4" ColumnSpacing="4">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="内存" FontSize="10" />
+                    <TextBlock x:Name="CompactMemoryText" Grid.Column="1" FontSize="10" />
+                    <Grid x:Name="CompactMemoryTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                        <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                        <Border x:Name="CompactMemoryFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                    </Grid>
                 </Grid>
-            </Grid>
-            <Grid RowSpacing="4">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="Swap" FontSize="10" />
-                <TextBlock x:Name="CompactSwapText" Grid.Column="1" Text="—" FontSize="10" />
-                <Grid x:Name="CompactSwapTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
-                    <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
-                    <Border x:Name="CompactSwapFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                <Grid RowSpacing="4" ColumnSpacing="4">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Swap" FontSize="10" />
+                    <TextBlock x:Name="CompactSwapText" Grid.Column="1" FontSize="10" />
+                    <Grid x:Name="CompactSwapTrack" Grid.Row="1" Grid.ColumnSpan="2" Height="5" HorizontalAlignment="Stretch">
+                        <Border Background="{ThemeResource SubtleStrokeBrush}" CornerRadius="2.5" />
+                        <Border x:Name="CompactSwapFill" Background="{ThemeResource AccentTextFillColorPrimaryBrush}" CornerRadius="2.5" HorizontalAlignment="Left" Width="0" />
+                    </Grid>
                 </Grid>
-            </Grid>
+            </StackPanel>
         </StackPanel>
     </Grid>
 </UserControl>

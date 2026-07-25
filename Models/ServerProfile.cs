@@ -96,7 +96,7 @@ public sealed partial class RemoteFileItem
 
 public sealed class ServerMetrics
 {
-    public double CpuPercent { get; init; }
+    public double? CpuPercent { get; init; }
     public double MemoryPercent { get; init; }
     public double SwapPercent { get; init; }
     public string LoadAverage { get; init; } = "—";
