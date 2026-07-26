@@ -18,6 +18,8 @@ public sealed partial class SftpWorkspaceView : UserControl
 {
     private readonly IntPtr _windowHandle;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
+    private CancellationTokenSource? _transientStatusClear;
+    private bool _isFailureDialogOpen;
     private SftpSessionSnapshot _snapshot = new(
         SftpSessionState.Idle,
         "/",
@@ -52,7 +54,8 @@ public sealed partial class SftpWorkspaceView : UserControl
     {
         if (!listing.Succeeded)
         {
-            TransferStatus.Text = listing.ErrorMessage ?? "读取目录失败。";
+            RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.Persistent(
+                listing.ErrorMessage ?? "读取目录失败。"));
             return;
         }
 
@@ -65,31 +68,103 @@ public sealed partial class SftpWorkspaceView : UserControl
 
     public void RenderState(SftpSessionSnapshot snapshot)
     {
+        var previousState = _snapshot.State;
         _snapshot = snapshot;
-        var isListing = snapshot.State == SftpSessionState.ListingDirectory;
-        DirectoryProgress.IsActive = isListing;
-        DirectoryProgress.Visibility = isListing ? Visibility.Visible : Visibility.Collapsed;
-        DirectoryStatus.Text = isListing ? snapshot.StatusMessage : snapshot.ErrorMessage ?? string.Empty;
-        ToolTipService.SetToolTip(DirectoryStatus, snapshot.ErrorMessage);
+        RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
         Toolbar.IsEnabled = snapshot.CanNavigate;
-        TransferProgress.Visibility = snapshot.State == SftpSessionState.Transferring
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        CancelTransferButton.Visibility = snapshot.State == SftpSessionState.Transferring
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        if (!string.IsNullOrWhiteSpace(snapshot.StatusMessage) && !isListing)
-            TransferStatus.Text = snapshot.StatusMessage;
         UpdateSelectionState();
+
+        if (snapshot.State == SftpSessionState.Failed && previousState != SftpSessionState.Failed)
+            _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
     }
 
     public void ShowOperationResult(SftpOperationResult result)
     {
-        TransferStatus.Text = result.Message;
-        if (!result.Succeeded)
-            ToolTipService.SetToolTip(TransferStatus, result.Message);
+        var persists = _snapshot.State == SftpSessionState.Failed;
+        RenderWorkspaceOperationStatus(persists
+            ? WorkspaceOperationStatusPresentation.Persistent(result.Message)
+            : WorkspaceOperationStatusPresentation.Transient(result.Message));
+    }
+
+    private void RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation presentation)
+    {
+        if (presentation.ClearsAfterDelay)
+            ScheduleTransientStatusClear();
+        else
+            CancelTransientStatusClear();
+
+        WorkspaceOperationStatusPanel.Visibility = presentation.IsVisible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        WorkspaceOperationProgress.IsActive = presentation.ShowsProgress;
+        WorkspaceOperationProgress.Visibility = presentation.ShowsProgress
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        WorkspaceOperationStatus.Text = presentation.Message;
+        ToolTipService.SetToolTip(WorkspaceOperationStatus, presentation.ToolTip ?? presentation.Message);
+        CancelTransferButton.Visibility = presentation.CanCancelTransfer
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void ScheduleTransientStatusClear()
+    {
+        CancelTransientStatusClear();
+        var cancellation = new CancellationTokenSource();
+        _transientStatusClear = cancellation;
+        _ = ClearTransientStatusAfterDelayAsync(cancellation);
+    }
+
+    private async Task ClearTransientStatusAfterDelayAsync(CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellation.Token);
+            if (!ReferenceEquals(_transientStatusClear, cancellation)) return;
+
+            _transientStatusClear = null;
+            WorkspaceOperationStatusPanel.Visibility = Visibility.Collapsed;
+            WorkspaceOperationStatus.Text = string.Empty;
+            ToolTipService.SetToolTip(WorkspaceOperationStatus, null);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelTransientStatusClear()
+    {
+        var cancellation = _transientStatusClear;
+        _transientStatusClear = null;
+        cancellation?.Cancel();
+    }
+
+    private async Task ShowFailureDialogAsync(string message)
+    {
+        if (_isFailureDialogOpen || string.IsNullOrWhiteSpace(message) || XamlRoot is null) return;
+
+        _isFailureDialogOpen = true;
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "SFTP 操作失败",
+                Content = message,
+                CloseButtonText = "确定",
+                XamlRoot = XamlRoot
+            };
+            await dialog.ShowAsync();
+        }
+        finally
+        {
+            _isFailureDialogOpen = false;
+        }
     }
 
     public async Task<string> PromptTextAsync(string title, string placeholder)
@@ -225,11 +300,7 @@ public sealed partial class SftpWorkspaceView : UserControl
 
     private void SftpWorkspaceView_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var isNarrow = e.NewSize.Width < 560;
-        DirectoryStatus.MaxWidth = e.NewSize.Width < 760 ? 112 : 220;
-        DirectoryStatusPanel.Visibility = !isNarrow || _snapshot.State == SftpSessionState.ListingDirectory
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        WorkspaceOperationStatus.MaxWidth = e.NewSize.Width < 760 ? 112 : 220;
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
@@ -314,13 +385,44 @@ public sealed partial class SftpWorkspaceView : UserControl
         var package = new DataPackage();
         package.SetText(item.FullPath);
         Clipboard.SetContent(package);
-        TransferStatus.Text = "已复制远程路径";
+        RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.Transient("已复制远程路径"));
     }
 
     private void UpdateSelectionState()
     {
         var item = SelectedItem;
         DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { IsDirectory: false };
+    }
+
+    private sealed record WorkspaceOperationStatusPresentation(
+        bool IsVisible,
+        bool ShowsProgress,
+        bool CanCancelTransfer,
+        bool ClearsAfterDelay,
+        string Message,
+        string? ToolTip)
+    {
+        public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot) => snapshot.State switch
+        {
+            SftpSessionState.ListingDirectory => Active(snapshot.StatusMessage, canCancelTransfer: false),
+            SftpSessionState.Transferring => Active(snapshot.StatusMessage, canCancelTransfer: true),
+            SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
+            SftpSessionState.Cancelled => Transient(snapshot.StatusMessage),
+            _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
+            _ => Hidden
+        };
+
+        public static WorkspaceOperationStatusPresentation Persistent(string message) =>
+            new(true, false, false, false, message, message);
+
+        public static WorkspaceOperationStatusPresentation Transient(string message) =>
+            new(true, false, false, true, message, message);
+
+        private static WorkspaceOperationStatusPresentation Active(string message, bool canCancelTransfer) =>
+            new(true, true, canCancelTransfer, false, message, message);
+
+        private static WorkspaceOperationStatusPresentation Hidden =>
+            new(false, false, false, false, string.Empty, null);
     }
 
     private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()

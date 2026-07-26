@@ -28,7 +28,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Grid ColumnSpacing="10">
@@ -48,22 +47,35 @@
                 IsSpellCheckEnabled="False"
                 KeyDown="PathBox_KeyDown" />
             <StackPanel
-                x:Name="DirectoryStatusPanel"
+                x:Name="WorkspaceOperationStatusPanel"
                 Grid.Column="1"
                 Orientation="Horizontal"
                 Spacing="8"
-                VerticalAlignment="Center">
+                VerticalAlignment="Center"
+                Visibility="Collapsed">
                 <ProgressRing
-                    x:Name="DirectoryProgress"
+                    x:Name="WorkspaceOperationProgress"
                     Width="16"
                     Height="16"
                     Visibility="Collapsed" />
                 <TextBlock
-                    x:Name="DirectoryStatus"
+                    x:Name="WorkspaceOperationStatus"
                     MaxWidth="220"
                     FontSize="12"
                     Foreground="{ThemeResource MutedTextBrush}"
-                    TextTrimming="CharacterEllipsis" />
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite" />
+                <Button
+                    x:Name="CancelTransferButton"
+                    Content="&#xE711;"
+                    FontFamily="Segoe Fluent Icons"
+                    FontSize="16"
+                    Style="{StaticResource TitleBarSessionIconButtonStyle}"
+                    AutomationProperties.Name="取消文件传输"
+                    ToolTipService.ToolTip="取消文件传输"
+                    Visibility="Collapsed"
+                    Click="CancelTransferButton_Click" />
             </StackPanel>
             <CommandBar
                 x:Name="Toolbar"
@@ -116,36 +128,5 @@
             RowHeight="40"
             FontSize="14"
             ColumnWidthMode="AutoLastColumnFill" />
-
-        <Grid Grid.Row="2" ColumnSpacing="10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-                x:Name="TransferStatus"
-                Text="暂无文件传输"
-                FontSize="12"
-                Foreground="{ThemeResource MutedTextBrush}"
-                TextTrimming="CharacterEllipsis" />
-            <ProgressBar
-                x:Name="TransferProgress"
-                Grid.Column="1"
-                Width="160"
-                IsIndeterminate="True"
-                Visibility="Collapsed" />
-            <Button
-                x:Name="CancelTransferButton"
-                Grid.Column="2"
-                Content="&#xE711;"
-                FontFamily="Segoe Fluent Icons"
-                FontSize="16"
-                Style="{StaticResource TitleBarSessionIconButtonStyle}"
-                AutomationProperties.Name="取消文件传输"
-                ToolTipService.ToolTip="取消文件传输"
-                Visibility="Collapsed"
-                Click="CancelTransferButton_Click" />
-        </Grid>
     </Grid>
 </UserControl>
