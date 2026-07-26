@@ -71,11 +71,11 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
     private void RenderDirectoryListing(SftpDirectoryListing listing)
     {
+        // 就地增删，不重新赋值 ItemsSource：整体重绑会让表格重算列宽，而填充剩余宽度的
+        // 那一列填不满，表头右侧会留下大片空白。
         RemoteTable.SelectedItem = null;
-        RemoteTable.ItemsSource = null;
         _remoteFiles.Clear();
         foreach (var item in listing.Items) _remoteFiles.Add(item);
-        RemoteTable.ItemsSource = _remoteFiles;
         PathBox.Text = listing.Path;
     }
 
