@@ -25,11 +25,8 @@ public sealed partial class MainWindow : Window
     private readonly OverviewPage _overviewPage = new();
     private readonly ServerCatalogPage _serverCatalogPage;
     private readonly SettingsPage _settingsPage;
+    private readonly ShellLayoutMode _layout = new();
     private bool _loaded;
-    private bool? _isNarrowLayout;
-    private bool _isApplyingResponsivePaneState;
-    private bool _paneWasOpenBeforeNarrow = true;
-    private bool _sidebarCollapsed;
 
     public MainWindow()
     {
@@ -130,7 +127,10 @@ public sealed partial class MainWindow : Window
         _shell.MetricsUpdated += (_, args) =>
         {
             if (ReferenceEquals(_shell.SelectedSession, args.Session))
-                ConnectedSidebar.UpdateMetrics(args.Session.Profile.Id, args.Metrics, !_sidebarCollapsed);
+                ConnectedSidebar.UpdateMetrics(
+                    args.Session.Profile.Id,
+                    args.Metrics,
+                    !_layout.IsSidebarCollapsed);
         };
     }
 
@@ -183,38 +183,24 @@ public sealed partial class MainWindow : Window
 
     private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_isNarrowLayout is not null) UpdateResponsiveLayout(e.NewSize.Width);
+        if (_layout.IsMeasured) UpdateResponsiveLayout(e.NewSize.Width);
     }
 
     private void UpdateResponsiveLayout(double width)
     {
-        var isNarrow = width < 720;
-        if (isNarrow != _isNarrowLayout)
+        var layout = _layout.Measure(width, RootNavigationView.IsPaneOpen);
+        if (layout.PaneStateChanged)
         {
-            _isApplyingResponsivePaneState = true;
-            try
+            using (_layout.BeginApplying())
             {
-                if (isNarrow)
-                {
-                    if (_isNarrowLayout is not null)
-                        _paneWasOpenBeforeNarrow = RootNavigationView.IsPaneOpen;
-                    _isNarrowLayout = true;
-                    RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.LeftMinimal;
-                    RootNavigationView.IsPaneOpen = false;
-                }
-                else
-                {
-                    RootNavigationView.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
-                    _isNarrowLayout = false;
-                    RootNavigationView.IsPaneOpen = _paneWasOpenBeforeNarrow;
-                }
-            }
-            finally
-            {
-                _isApplyingResponsivePaneState = false;
+                RootNavigationView.PaneDisplayMode = layout.PaneDisplay == NavigationPaneDisplay.LeftMinimal
+                    ? NavigationViewPaneDisplayMode.LeftMinimal
+                    : NavigationViewPaneDisplayMode.Left;
+                RootNavigationView.IsPaneOpen = layout.IsPaneOpen;
             }
         }
 
+        var isNarrow = layout.IsNarrow;
         var padding = isNarrow ? 16 : 30;
         ContentHeader.Padding = new Thickness(padding, isNarrow ? 16 : 24, padding, isNarrow ? 12 : 18);
         ContentHost.Padding = new Thickness(padding, 0, padding, isNarrow ? 16 : 28);
@@ -283,17 +269,17 @@ public sealed partial class MainWindow : Window
         NavigationView sender,
         NavigationViewSelectionChangedEventArgs args)
     {
-        if (_shell.SessionCount > 0 || args.SelectedItemContainer?.Tag is not string page) return;
+        if (_layout.IsNavigationLockedBySessions(_shell.SessionCount) ||
+            args.SelectedItemContainer?.Tag is not string page)
+        {
+            return;
+        }
         NavigateTo(page);
     }
 
     private void RootNavigationView_PaneOpening(NavigationView sender, object args)
     {
-        if (!_isApplyingResponsivePaneState && _isNarrowLayout == false)
-        {
-            _paneWasOpenBeforeNarrow = true;
-            _sidebarCollapsed = false;
-        }
+        _layout.NotePaneOpened();
         UpdatePaneToggleButton(true);
         ConnectedSidebar.SetPaneOpen(true);
     }
@@ -301,11 +287,7 @@ public sealed partial class MainWindow : Window
     private void RootNavigationView_PaneClosing(
         NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
-        if (!_isApplyingResponsivePaneState && _isNarrowLayout == false)
-        {
-            _paneWasOpenBeforeNarrow = false;
-            _sidebarCollapsed = true;
-        }
+        _layout.NotePaneClosed();
         UpdatePaneToggleButton(false);
         ConnectedSidebar.SetPaneOpen(false);
     }
