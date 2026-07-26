@@ -20,6 +20,7 @@ public sealed class SshConnectionService : ISshConnection
     private SshClient? _sshClient;
     private ShellStream? _shell;
     private SftpClient? _sftpClient;
+    private ISftpClient? _remoteFileClient;
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
     private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
@@ -36,7 +37,7 @@ public sealed class SshConnectionService : ISshConnection
     public event EventHandler? Disconnected;
 
     public bool IsConnected => _sshClient?.IsConnected == true;
-    public SftpClient? SftpClient => _sftpClient;
+    public ISftpClient? SftpClient => _remoteFileClient;
     public string? LastFingerprint { get; private set; }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -62,6 +63,7 @@ public sealed class SshConnectionService : ISshConnection
             _sshClient = sshClient;
             _shell = shell;
             _sftpClient = sftpClient;
+            _remoteFileClient = new SshNetSftpClient(sftpClient);
             _readCts = new CancellationTokenSource();
             _ = ReadOutputLoopAsync(_readCts.Token);
         }
@@ -70,6 +72,7 @@ public sealed class SshConnectionService : ISshConnection
             _sshClient = null;
             _shell = null;
             _sftpClient = null;
+            _remoteFileClient = null;
             ScheduleDispose(sftpClient);
             ScheduleDispose(sshClient);
             throw;

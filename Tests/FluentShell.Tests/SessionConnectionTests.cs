@@ -1,7 +1,6 @@
 using FluentShell.Core;
 using FluentShell.Models;
 using FluentShell.Services;
-using Renci.SshNet;
 
 namespace FluentShell.Tests;
 
@@ -167,17 +166,24 @@ public sealed class SessionConnectionTests
         var first = new FakeSshConnection();
         var second = new FakeSshConnection();
         var handedOut = new Queue<FakeSshConnection>([first, second]);
+        first.RemoteFileClient.AddFile("旧连接.txt", "/旧连接.txt");
+        second.RemoteFileClient.AddFile("新连接.txt", "/新连接.txt");
         await using var session = CreateSession(() => handedOut.Dequeue());
         var remoteFiles = session.RemoteFiles;
 
         await session.ConnectAsync();
         first.IsConnected = false;
         await session.ConnectAsync();
+        var items = await remoteFiles.ListDirectoryAsync("/");
 
         Assert.AreSame(
             remoteFiles,
             session.RemoteFiles,
             "远程文件入口在重连后必须仍是同一个实例，调用方不需要重新取用。");
+        Assert.AreEqual(
+            "新连接.txt",
+            items.Single().Name,
+            "重连后远程文件入口必须读到新连接，而不是被替换掉的那条。");
     }
 
     private static SessionConnection CreateSession(
@@ -210,7 +216,8 @@ public sealed class SessionConnectionTests
     private sealed class FakeSshConnection : ISshConnection
     {
         public bool IsConnected { get; set; }
-        public SftpClient? SftpClient => null;
+        public ISftpClient? SftpClient => IsConnected ? RemoteFileClient : null;
+        public FakeSftpClient RemoteFileClient { get; } = new();
         public Exception? ConnectFailure { get; init; }
         public int ConnectCount { get; private set; }
         public int DisposeCount { get; private set; }

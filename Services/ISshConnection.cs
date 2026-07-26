@@ -1,5 +1,4 @@
 using FluentShell.Models;
-using Renci.SshNet;
 
 namespace FluentShell.Services;
 
@@ -12,7 +11,7 @@ public interface ISshConnection : IAsyncDisposable
     bool IsConnected { get; }
 
     /// <summary>未连接时为 <c>null</c>。连接被替换后旧客户端不再可用。</summary>
-    SftpClient? SftpClient { get; }
+    ISftpClient? SftpClient { get; }
 
     event EventHandler<string>? OutputReceived;
     event EventHandler<HostFingerprintRequiredEventArgs>? HostFingerprintRequired;
