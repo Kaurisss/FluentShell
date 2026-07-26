@@ -38,11 +38,8 @@ public sealed partial class MainWindow : Window
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_windowHandle));
         ConfigureWindow();
 
-        var credentialService = new CredentialService();
         _shell = new ShellCoordinator(
-            new SettingsStore(),
-            credentialService,
-            new ServerCatalog(new ServerProfileStore(), credentialService),
+            new LocalStore(),
             (profile, secretProvider, fingerprintConfirmation) => new SessionWorkspace(
                 profile,
                 _windowHandle,

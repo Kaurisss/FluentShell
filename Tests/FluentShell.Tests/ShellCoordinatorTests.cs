@@ -6,9 +6,77 @@ using System.Security.Cryptography;
 namespace FluentShell.Tests;
 
 [TestClass]
-[DoNotParallelize]
 public sealed class ShellCoordinatorTests
 {
+    [TestMethod]
+    public async Task Connecting_does_not_clear_saved_profiles()
+    {
+        var first = new ServerProfile { Name = "第一台", Host = "first", Username = "user" };
+        var second = new ServerProfile { Name = "第二台", Host = "second", Username = "user" };
+        var store = new InMemoryLocalStore([first, second]);
+        var coordinator = CreateCoordinator(
+            (profile, _, _) => new FakeShellSession(profile, current =>
+            {
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            }),
+            store: store);
+        await coordinator.LoadAsync();
+
+        await coordinator.ConnectAsync(first);
+
+        CollectionAssert.AreEquivalent(
+            new[] { first, second },
+            store.PersistedProfiles.ToArray(),
+            "连接成功后写回的已保存服务器列表不得丢失条目。");
+    }
+
+    [TestMethod]
+    public async Task Updating_settings_persists_through_the_store()
+    {
+        var store = new InMemoryLocalStore();
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile, _ => Task.CompletedTask), store: store);
+        await coordinator.LoadAsync();
+
+        await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(TerminalFontSize: 18));
+
+        Assert.AreEqual(18, store.PersistedSettings.TerminalFontSize);
+    }
+
+    [TestMethod]
+    public async Task Disabling_remember_credentials_clears_saved_secrets()
+    {
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+        var store = new InMemoryLocalStore([profile]);
+        store.SaveSecret(profile, "秘密");
+        var coordinator = CreateCoordinator((current, _, _) => new FakeShellSession(current, _ => Task.CompletedTask), store: store);
+        await coordinator.LoadAsync();
+
+        await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(RememberCredentials: false));
+
+        Assert.IsNull(store.TryGetSecret(profile));
+    }
+
+    [TestMethod]
+    public async Task Connecting_records_last_connected_at_through_the_store()
+    {
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+        var store = new InMemoryLocalStore([profile]);
+        var coordinator = CreateCoordinator(
+            (current, _, _) => new FakeShellSession(current, session =>
+            {
+                session.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            }),
+            store: store);
+        await coordinator.LoadAsync();
+
+        await coordinator.ConnectAsync(profile);
+
+        Assert.IsNotNull(profile.LastConnectedAt);
+        Assert.AreEqual(1, store.SaveProfilesCallCount);
+    }
+
     [TestMethod]
     public async Task Connection_failure_is_exposed_to_frontend()
     {
@@ -233,11 +301,10 @@ public sealed class ShellCoordinatorTests
 
     private static ShellCoordinator CreateCoordinator(
         Func<ServerProfile, Func<Task<string?>>, Func<HostFingerprintRequiredEventArgs, Task<bool>>, IShellSession> sessionFactory,
-        Func<ServerProfile, Task<string?>>? secretPrompt = null) =>
+        Func<ServerProfile, Task<string?>>? secretPrompt = null,
+        ILocalStore? store = null) =>
         new(
-            new SettingsStore(),
-            new CredentialService(),
-            new ServerCatalog(new ServerProfileStore(), new CredentialService()),
+            store ?? new InMemoryLocalStore(),
             sessionFactory,
             secretPrompt ?? (_ => Task.FromResult<string?>(null)),
             _ => Task.FromResult(false));

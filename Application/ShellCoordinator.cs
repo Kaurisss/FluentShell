@@ -43,9 +43,7 @@ public sealed record AppSettingsUpdate(
 
 public sealed class ShellCoordinator
 {
-    private readonly SettingsStore _settingsStore;
-    private readonly CredentialService _credentialService;
-    private readonly ServerCatalog _serverCatalog;
+    private readonly ILocalStore _localStore;
     private readonly SessionCoordinator<IShellSession> _sessions = new(session => session.Profile.Id);
     private readonly Func<
         ServerProfile,
@@ -60,23 +58,19 @@ public sealed class ShellCoordinator
     private string _lastResult = "准备就绪";
 
     public ShellCoordinator(
-        SettingsStore settingsStore,
-        CredentialService credentialService,
-        ServerCatalog serverCatalog,
+        ILocalStore localStore,
         Func<ServerProfile, Func<Task<string?>>, Func<HostFingerprintRequiredEventArgs, Task<bool>>, IShellSession> sessionFactory,
         Func<ServerProfile, Task<string?>> secretPrompt,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation)
     {
-        _settingsStore = settingsStore;
-        _credentialService = credentialService;
-        _serverCatalog = serverCatalog;
+        _localStore = localStore;
         _sessionFactory = sessionFactory;
         _secretPrompt = secretPrompt;
         _fingerprintConfirmation = fingerprintConfirmation;
     }
 
-    public IReadOnlyList<ServerProfile> Profiles => _serverCatalog.Profiles;
-    public string DataFolder => _serverCatalog.DataFolder;
+    public IReadOnlyList<ServerProfile> Profiles => _localStore.Profiles;
+    public string DataFolder => _localStore.DataFolder;
     public AppSettings Settings => _settings;
     public string LastResult => _lastResult;
     public int SessionCount => _sessions.Count;
@@ -93,28 +87,27 @@ public sealed class ShellCoordinator
 
     public async Task LoadAsync()
     {
-        await _serverCatalog.LoadAsync();
-        _settings = await _settingsStore.LoadAsync();
+        _settings = await _localStore.LoadAsync();
         NotifyStateChanged();
     }
 
-    public bool HasSavedCredential(ServerProfile profile) => _credentialService.TryGet(profile) is not null;
+    public bool HasSavedCredential(ServerProfile profile) => _localStore.TryGetSecret(profile) is not null;
 
     public async Task SaveProfileAsync(ServerProfileUpdate update)
     {
         if (update.CredentialIdentityChanged)
-            _credentialService.Remove(update.Profile.Id, update.OriginalUsername);
+            _localStore.RemoveSecret(update.Profile.Id, update.OriginalUsername);
         if (update.SaveCredential)
         {
             if (!string.IsNullOrEmpty(update.EnteredSecret))
-                _credentialService.Save(update.Profile, update.EnteredSecret);
+                _localStore.SaveSecret(update.Profile, update.EnteredSecret);
         }
         else
         {
-            _credentialService.Remove(update.Profile);
+            _localStore.RemoveSecret(update.Profile);
         }
 
-        await _serverCatalog.AddOrUpdateAsync(update.Profile);
+        await _localStore.AddOrUpdateProfileAsync(update.Profile);
         NotifyStateChanged();
         if (!update.ConnectAfterSave) return;
 
@@ -126,19 +119,19 @@ public sealed class ShellCoordinator
 
     public async Task CopyProfileAsync(ServerProfile profile)
     {
-        await _serverCatalog.CopyAsync(profile);
+        await _localStore.CopyProfileAsync(profile);
         NotifyStateChanged();
     }
 
     public async Task DeleteProfileAsync(ServerProfile profile)
     {
-        await _serverCatalog.DeleteAsync(profile);
+        await _localStore.DeleteProfileAsync(profile);
         NotifyStateChanged();
     }
 
     public void ClearLocalData()
     {
-        _serverCatalog.Clear();
+        _localStore.ClearAll();
         NotifyStateChanged();
     }
 
@@ -160,10 +153,10 @@ public sealed class ShellCoordinator
         if (update.RememberCredentials is not null)
         {
             _settings.RememberCredentials = update.RememberCredentials.Value;
-            if (!update.RememberCredentials.Value) _credentialService.ClearAll();
+            if (!update.RememberCredentials.Value) _localStore.ClearSecrets();
         }
 
-        await _settingsStore.SaveAsync(_settings);
+        await _localStore.SaveSettingsAsync(_settings);
         NotifyStateChanged();
     }
 
@@ -214,11 +207,11 @@ public sealed class ShellCoordinator
             ? persistenceOverride
             : _settings.RememberCredentials;
         if (shouldPersistCredential && _sessionSecrets.TryGetValue(profile.Id, out var secret))
-            _credentialService.Save(profile, secret);
+            _localStore.SaveSecret(profile, secret);
         else if (!shouldPersistCredential)
-            _credentialService.Remove(profile);
+            _localStore.RemoveSecret(profile);
         _sessionSecrets.Remove(profile.Id);
-        await _serverCatalog.SaveAsync();
+        await _localStore.SaveProfilesAsync();
         NotifyStateChanged();
     }
 
@@ -271,7 +264,7 @@ public sealed class ShellCoordinator
     private async Task<string?> ResolveSecretAsync(ServerProfile profile)
     {
         if (_sessionSecrets.TryGetValue(profile.Id, out var provided)) return provided;
-        if (_credentialService.TryGet(profile) is string saved)
+        if (_localStore.TryGetSecret(profile) is string saved)
         {
             _sessionSecrets[profile.Id] = saved;
             return saved;
