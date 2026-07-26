@@ -15,19 +15,24 @@ public sealed class SftpWorkspace : IDisposable
 {
     private readonly SftpSessionController _controller;
     private readonly ISftpWorkspaceView _view;
-    private readonly Func<string, bool> _localFileExists;
-    private readonly Func<string, Stream> _createLocalOutput;
+    private readonly DownloadDestination _downloadDestination;
 
     public SftpWorkspace(
         ISftpFileService fileService,
         ISftpWorkspaceView view,
         Func<string, bool>? localFileExists = null,
-        Func<string, Stream>? createLocalOutput = null)
+        Func<string, Stream>? createLocalOutput = null,
+        Action<string>? createLocalDirectory = null,
+        Action<string>? deleteLocalFile = null,
+        Action<Action>? dispatchProgress = null)
     {
-        _controller = new SftpSessionController(fileService);
+        _controller = new SftpSessionController(fileService, dispatchProgress);
         _view = view;
-        _localFileExists = localFileExists ?? File.Exists;
-        _createLocalOutput = createLocalOutput ?? (path => File.Create(path));
+        _downloadDestination = new DownloadDestination(
+            localFileExists ?? File.Exists,
+            createLocalOutput ?? (path => File.Create(path)),
+            createLocalDirectory ?? (path => Directory.CreateDirectory(path)),
+            deleteLocalFile ?? File.Delete);
 
         _controller.SnapshotChanged += Controller_SnapshotChanged;
         _view.RefreshRequested += View_RefreshRequested;
@@ -75,8 +80,7 @@ public sealed class SftpWorkspace : IDisposable
         await _controller.DownloadAsync(
             item,
             destinationDirectory,
-            _localFileExists,
-            _createLocalOutput,
+            _downloadDestination,
             _view.ConfirmOverwriteAsync);
     }
 

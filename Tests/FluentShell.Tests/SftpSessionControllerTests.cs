@@ -202,21 +202,224 @@ public sealed class SftpSessionControllerTests
         await controller.DownloadAsync(
             item,
             Path.GetTempPath(),
-            _ =>
-            {
-                localFileChecks++;
-                return false;
-            },
-            _ =>
-            {
-                localOutputsCreated++;
-                return new MemoryStream();
-            },
+            new DownloadDestination(
+                _ =>
+                {
+                    localFileChecks++;
+                    return false;
+                },
+                _ =>
+                {
+                    localOutputsCreated++;
+                    return new MemoryStream();
+                },
+                _ => { },
+                _ => { }),
             _ => Task.FromResult(true));
 
         Assert.AreEqual(0, localFileChecks);
         Assert.AreEqual(0, localOutputsCreated);
         Assert.AreEqual(0, fileService.DownloadCallCount);
+    }
+
+    [TestMethod]
+    public async Task Directory_download_recreates_structure_and_downloads_nested_files()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "..", IsDirectory = true, FullPath = "/" },
+            new RemoteFileItem { Name = "甲.txt", FullPath = "/备份/甲.txt" },
+            new RemoteFileItem { Name = "深层", IsDirectory = true, FullPath = "/备份/深层" }
+        ];
+        fileService.ListingsByPath["/备份/深层"] =
+        [
+            new RemoteFileItem { Name = "乙.txt", FullPath = "/备份/深层/乙.txt" }
+        ];
+        using var controller = new SftpSessionController(fileService);
+        var createdDirectories = new List<string>();
+        var downloadedTo = new List<string>();
+        var root = Path.Combine(Path.GetTempPath(), "sftp下载");
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            root,
+            new DownloadDestination(
+                _ => false,
+                path =>
+                {
+                    downloadedTo.Add(path);
+                    return new MemoryStream();
+                },
+                createdDirectories.Add,
+                _ => { }),
+            _ => Task.FromResult(true));
+
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
+        CollectionAssert.AreEqual(
+            new[] { Path.Combine(root, "备份"), Path.Combine(root, "备份", "深层") },
+            createdDirectories,
+            "应先建父目录再建子目录。");
+        CollectionAssert.AreEqual(
+            new[] { Path.Combine(root, "备份", "甲.txt"), Path.Combine(root, "备份", "深层", "乙.txt") },
+            downloadedTo,
+            "两个文件都应落到对应的本地目录，合成的 .. 条目不参与。");
+        Assert.Contains("2 个文件", controller.Snapshot.StatusMessage);
+    }
+
+    [TestMethod]
+    public async Task Directory_download_skips_declined_overwrites_but_continues()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "已有.txt", FullPath = "/备份/已有.txt" },
+            new RemoteFileItem { Name = "新增.txt", FullPath = "/备份/新增.txt" }
+        ];
+        using var controller = new SftpSessionController(fileService);
+        var downloadedTo = new List<string>();
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            Path.GetTempPath(),
+            new DownloadDestination(
+                path => path.EndsWith("已有.txt", StringComparison.Ordinal),
+                path =>
+                {
+                    downloadedTo.Add(path);
+                    return new MemoryStream();
+                },
+                _ => { },
+                _ => { }),
+            _ => Task.FromResult(false));
+
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
+        Assert.HasCount(1, downloadedTo, "被拒绝覆盖的文件跳过，其余继续。");
+        Assert.Contains("跳过 1 个", controller.Snapshot.StatusMessage);
+    }
+
+    [TestMethod]
+    public async Task File_download_publishes_determinate_progress_and_clears_it_on_completion()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.DownloadSizesByPath["/日志.txt"] = 200;
+        using var controller = new SftpSessionController(fileService);
+        var snapshots = CaptureSnapshots(controller);
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "日志.txt", FullPath = "/日志.txt", SizeBytes = 200 },
+            Path.GetTempPath(),
+            new DownloadDestination(_ => false, _ => new MemoryStream(), _ => { }, _ => { }),
+            _ => Task.FromResult(true));
+
+        var progressed = snapshots.Where(s => s.TransferProgress is not null).ToList();
+        Assert.IsGreaterThan(0, progressed.Count, "传输过程中应发布确定进度。");
+        Assert.AreEqual(200, progressed[^1].TransferProgress!.BytesTransferred);
+        Assert.AreEqual(200, progressed[^1].TransferProgress!.TotalBytes);
+        Assert.IsNull(snapshots[^1].TransferProgress, "传输结束后的快照不应再携带进度。");
+    }
+
+    [TestMethod]
+    public async Task Directory_download_reports_progress_against_the_whole_tree()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "甲.txt", FullPath = "/备份/甲.txt", SizeBytes = 100 },
+            new RemoteFileItem { Name = "深层", IsDirectory = true, FullPath = "/备份/深层" }
+        ];
+        fileService.ListingsByPath["/备份/深层"] =
+        [
+            new RemoteFileItem { Name = "乙.txt", FullPath = "/备份/深层/乙.txt", SizeBytes = 300 }
+        ];
+        fileService.DownloadSizesByPath["/备份/甲.txt"] = 100;
+        fileService.DownloadSizesByPath["/备份/深层/乙.txt"] = 300;
+        using var controller = new SftpSessionController(fileService);
+        var snapshots = CaptureSnapshots(controller);
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            Path.GetTempPath(),
+            new DownloadDestination(_ => false, _ => new MemoryStream(), _ => { }, _ => { }),
+            _ => Task.FromResult(true));
+
+        var progressed = snapshots.Where(s => s.TransferProgress is not null).ToList();
+        Assert.IsGreaterThan(0, progressed.Count);
+        Assert.IsTrue(
+            progressed.All(s => s.TransferProgress!.TotalBytes == 400),
+            "进度总量应是整棵目录树的文件字节和。");
+        Assert.AreEqual(400, progressed[^1].TransferProgress!.BytesTransferred);
+    }
+
+    [TestMethod]
+    public async Task Directory_download_survives_single_entry_failures_and_reports_them()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "好.txt", FullPath = "/备份/好.txt" },
+            new RemoteFileItem { Name = "坏链接", FullPath = "/备份/坏链接" },
+            new RemoteFileItem { Name = "另一个.txt", FullPath = "/备份/另一个.txt" }
+        ];
+        // SFTP 对符号链接、特殊文件这类拒绝只报一句 "Failure"。
+        fileService.DownloadExceptionsByPath["/备份/坏链接"] = new InvalidOperationException("Failure");
+        using var controller = new SftpSessionController(fileService);
+        var downloadedTo = new List<string>();
+        var deleted = new List<string>();
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            Path.GetTempPath(),
+            new DownloadDestination(
+                _ => false,
+                path =>
+                {
+                    downloadedTo.Add(path);
+                    return new MemoryStream();
+                },
+                _ => { },
+                deleted.Add),
+            _ => Task.FromResult(true));
+
+        Assert.HasCount(3, downloadedTo, "一个条目失败不拖垮整批，后续条目照常尝试。");
+        Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State, "部分失败要弹窗解释，不能装成功。");
+        Assert.AreEqual(SftpFailureKind.Operation, controller.Snapshot.FailureKind);
+        Assert.Contains("已下载 2 个文件", controller.Snapshot.StatusMessage);
+        Assert.Contains("1 个失败", controller.Snapshot.StatusMessage);
+        Assert.Contains("坏链接", controller.Snapshot.StatusMessage);
+        Assert.Contains("远程主机拒绝", controller.Snapshot.StatusMessage, "原始的 Failure 要翻译成能行动的提示。");
+        Assert.HasCount(1, deleted, "失败留下的半截文件要清掉。");
+        Assert.EndsWith("坏链接", deleted[0]);
+    }
+
+    [TestMethod]
+    public async Task Directory_download_rejects_unsafe_entry_names_from_the_remote_host()
+    {
+        var fileService = new FakeSftpFileService();
+        fileService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "../逃逸.txt", FullPath = "/逃逸.txt" }
+        ];
+        using var controller = new SftpSessionController(fileService);
+        var localOutputsCreated = 0;
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            Path.GetTempPath(),
+            new DownloadDestination(
+                _ => false,
+                _ =>
+                {
+                    localOutputsCreated++;
+                    return new MemoryStream();
+                },
+                _ => { },
+                _ => { }),
+            _ => Task.FromResult(true));
+
+        Assert.AreEqual(0, localOutputsCreated, "远程条目名不可信，越界名不得触达本地文件系统。");
+        Assert.AreEqual(0, fileService.DownloadCallCount);
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State, "校验失败按未完成操作收尾，不是异常。");
     }
 
     private static List<SftpSessionSnapshot> CaptureSnapshots(SftpSessionController controller)
@@ -230,6 +433,7 @@ public sealed class SftpSessionControllerTests
     {
         public bool IsConnected { get; set; } = true;
         public List<RemoteFileItem> DirectoryItems { get; } = [];
+        public Dictionary<string, List<RemoteFileItem>> ListingsByPath { get; } = [];
         public Exception? ListException { get; set; }
         public Func<CancellationToken, Task>? UploadHandler { get; set; }
         public int RenameCallCount { get; private set; }
@@ -238,6 +442,8 @@ public sealed class SftpSessionControllerTests
         public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
         {
             if (ListException is not null) return Task.FromException<IReadOnlyList<RemoteFileItem>>(ListException);
+            if (ListingsByPath.TryGetValue(path, out var listing))
+                return Task.FromResult<IReadOnlyList<RemoteFileItem>>(listing.ToList());
             return Task.FromResult<IReadOnlyList<RemoteFileItem>>(DirectoryItems.ToList());
         }
 
@@ -257,9 +463,16 @@ public sealed class SftpSessionControllerTests
             return Task.CompletedTask;
         }
 
+        public Dictionary<string, int> DownloadSizesByPath { get; } = [];
+        public Dictionary<string, Exception> DownloadExceptionsByPath { get; } = [];
+
         public Task DownloadAsync(string remotePath, Stream output, CancellationToken cancellationToken)
         {
             DownloadCallCount++;
+            if (DownloadExceptionsByPath.TryGetValue(remotePath, out var exception))
+                return Task.FromException(exception);
+            if (DownloadSizesByPath.TryGetValue(remotePath, out var size))
+                output.Write(new byte[size]);
             return Task.CompletedTask;
         }
 

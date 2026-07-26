@@ -96,10 +96,17 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         WorkspaceOperationStatusPanel.Visibility = presentation.IsVisible
             ? Visibility.Visible
             : Visibility.Collapsed;
-        WorkspaceOperationProgress.IsActive = presentation.ShowsProgress;
-        WorkspaceOperationProgress.Visibility = presentation.ShowsProgress
+        // 有确定进度就用进度条，环形指示只兜底总量未知的阶段（统计中、上传）。
+        var showRing = presentation.ShowsProgress && presentation.ProgressPercent is null;
+        WorkspaceOperationProgress.IsActive = showRing;
+        WorkspaceOperationProgress.Visibility = showRing
             ? Visibility.Visible
             : Visibility.Collapsed;
+        WorkspaceTransferProgressBar.Visibility = presentation.ProgressPercent is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (presentation.ProgressPercent is double percent)
+            WorkspaceTransferProgressBar.Value = percent;
         WorkspaceOperationStatus.Text = presentation.Message;
         ToolTipService.SetToolTip(WorkspaceOperationStatus, presentation.ToolTip ?? presentation.Message);
         CancelTransferButton.Visibility = presentation.CanCancelTransfer
@@ -304,7 +311,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         {
             var item = SelectedItem;
             open.IsEnabled = _snapshot.CanNavigate && item?.IsDirectory == true;
-            download.IsEnabled = _snapshot.CanTransfer && item is { IsDirectory: false };
+            download.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
             copyPath.IsEnabled = item is not null;
             rename.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
             delete.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
@@ -383,7 +390,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
     private void RequestDownload()
     {
-        if (SelectedItem is { IsDirectory: false } item && _snapshot.CanTransfer)
+        if (SelectedItem is { Name: not ".." } item && _snapshot.CanTransfer)
             DownloadRequested?.Invoke(this, item);
     }
 
@@ -411,7 +418,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     private void UpdateSelectionState()
     {
         var item = SelectedItem;
-        DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { IsDirectory: false };
+        DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
     }
 
     private sealed record WorkspaceOperationStatusPresentation(
@@ -420,12 +427,16 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         bool CanCancelTransfer,
         bool ClearsAfterDelay,
         string Message,
-        string? ToolTip)
+        string? ToolTip,
+        double? ProgressPercent = null)
     {
         public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot) => snapshot.State switch
         {
             SftpSessionState.ListingDirectory => Active(snapshot.StatusMessage, canCancelTransfer: false),
-            SftpSessionState.Transferring => Active(snapshot.StatusMessage, canCancelTransfer: true),
+            SftpSessionState.Transferring => Active(
+                snapshot.StatusMessage,
+                canCancelTransfer: true,
+                snapshot.TransferProgress?.Percent),
             SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
             SftpSessionState.Cancelled => Transient(snapshot.StatusMessage),
             _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
@@ -438,8 +449,11 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         public static WorkspaceOperationStatusPresentation Transient(string message) =>
             new(true, false, false, true, message, message);
 
-        private static WorkspaceOperationStatusPresentation Active(string message, bool canCancelTransfer) =>
-            new(true, true, canCancelTransfer, false, message, message);
+        private static WorkspaceOperationStatusPresentation Active(
+            string message,
+            bool canCancelTransfer,
+            double? progressPercent = null) =>
+            new(true, true, canCancelTransfer, false, message, message, progressPercent);
 
         private static WorkspaceOperationStatusPresentation Hidden =>
             new(false, false, false, false, string.Empty, null);

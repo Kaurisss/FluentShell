@@ -66,7 +66,11 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             work => _dispatcherQueue.TryEnqueue(() => work()),
             CancelSftpTransfer);
         _sftpView = new SftpWorkspaceView(windowHandle, _workspaceTheme);
-        _sftpWorkspace = new SftpWorkspace(_connection.RemoteFiles, _sftpView);
+        // 字节进度回调来自传输流的写入线程，必须编组回 UI 线程再进快照发布。
+        _sftpWorkspace = new SftpWorkspace(
+            _connection.RemoteFiles,
+            _sftpView,
+            dispatchProgress: work => _dispatcherQueue.TryEnqueue(() => work()));
 
         _connection.Output += Connection_Output;
         _connection.StatusChanged += Connection_StatusChanged;
