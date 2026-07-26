@@ -1,3 +1,4 @@
+using FluentShell.Core;
 using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,27 +12,43 @@ public sealed partial class OverviewPage : UserControl
         InitializeComponent();
     }
 
-    public void SetOverview(IReadOnlyList<ServerProfile> profiles, string lastResult)
+    public event EventHandler? ConnectServerRequested;
+    public event EventHandler? AddServerRequested;
+    public event EventHandler<ServerProfile>? ConnectRequested;
+
+    public void SetOverview(IReadOnlyList<ServerProfile> profiles)
     {
-        SavedCountText.Text = profiles.Count.ToString();
-        var recent = profiles
-            .Where(server => server.LastConnectedAt is not null)
-            .OrderByDescending(server => server.LastConnectedAt)
-            .FirstOrDefault();
-        RecentServerText.Text = recent?.Name ?? "暂无";
-        RecentServerDetailText.Text = recent is null
-            ? "连接成功后会显示在这里"
-            : recent.LastConnectedLabel;
-        LastResultText.Text = lastResult;
-        LastResultDetailText.Text = recent is null ? "还没有连接记录" : recent.Address;
+        var state = OverviewConnectionQuery.Apply(profiles);
+        var hasProfiles = state.Mode != OverviewConnectionMode.Empty;
+
+        (ConnectionSectionTitle.Text, ConnectionSectionDescription.Text) = state.Mode switch
+        {
+            OverviewConnectionMode.Recent => (
+                "最近连接",
+                "继续使用最近成功连接过的服务器。"),
+            OverviewConnectionMode.SavedFallback => (
+                "可连接的服务器",
+                "选择一台已保存的服务器，建立新的 SSH 会话。"),
+            _ => (
+                "开始连接",
+                "先添加一台服务器配置，再从这里建立 SSH 会话。")
+        };
+
+        ConnectServerButton.IsEnabled = hasProfiles;
+        ConnectionCards.ItemsSource = state.Profiles;
+        ConnectionCards.Visibility = hasProfiles ? Visibility.Visible : Visibility.Collapsed;
+        EmptyState.Visibility = hasProfiles ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void UpdateResponsiveLayout(bool isNarrow)
+    private void ConnectServerButton_Click(object sender, RoutedEventArgs e) =>
+        ConnectServerRequested?.Invoke(this, EventArgs.Empty);
+
+    private void AddServerButton_Click(object sender, RoutedEventArgs e) =>
+        AddServerRequested?.Invoke(this, EventArgs.Empty);
+
+    private void ConnectButton_Click(object sender, RoutedEventArgs e)
     {
-        StatsGrid.ColumnSpacing = isNarrow ? 0 : 16;
-        StatsGrid.RowSpacing = isNarrow ? 12 : 0;
-        StatsGrid.RowDefinitions[1].Height = isNarrow ? GridLength.Auto : new GridLength(0);
-        Grid.SetRow(RecentCard, isNarrow ? 1 : 0);
-        Grid.SetColumn(RecentCard, isNarrow ? 0 : 1);
+        if ((sender as Button)?.Tag is ServerProfile profile)
+            ConnectRequested?.Invoke(this, profile);
     }
 }

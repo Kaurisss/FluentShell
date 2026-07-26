@@ -64,14 +64,9 @@
             <Grid x:Name="ContentRoot" Background="Transparent">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <Grid x:Name="ContentHeader" Padding="30,24,30,18">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel Spacing="3">
                         <TextBlock x:Name="PageTitleText" Text="概览" FontSize="24" FontWeight="SemiBold" />
-                        <TextBlock x:Name="PageSubtitleText" Text="管理服务器连接，查看最近活动。" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Button x:Name="QuickConnectButton" Content="快速连接" Click="QuickConnectButton_Click" />
-                        <Button x:Name="AddServerButton" Content="添加服务器" Click="AddServerButton_Click" Style="{StaticResource AppAccentButtonStyle}" />
+                        <TextBlock x:Name="PageSubtitleText" Text="从最近或已保存的服务器开始 SSH 会话。" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" />
                     </StackPanel>
                 </Grid>
                 <Grid Grid.Row="1" x:Name="ContentHost" Padding="30,0,30,28">

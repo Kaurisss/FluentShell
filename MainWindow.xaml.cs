@@ -84,6 +84,11 @@ public sealed partial class MainWindow : Window
         _sessionHost.ContentChanged += (_, session) => SessionContentPresenter.Content = session;
         ConnectedSidebar.ReconnectRequested += ConnectedSidebar_ReconnectRequested;
 
+        _overviewPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
+        _overviewPage.ConnectServerRequested += async (_, _) => await OpenServerPickerAsync();
+        _overviewPage.AddServerRequested += async (_, _) =>
+            await _serverCatalogPage.ShowAddDialogAsync(Content.XamlRoot);
+
         _serverCatalogPage.RefreshRequested += (_, _) => RenderServerCatalog();
         _serverCatalogPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
         _serverCatalogPage.CopyRequested += async (_, profile) => await _shell.CopyProfileAsync(profile);
@@ -141,7 +146,7 @@ public sealed partial class MainWindow : Window
 
     private void RenderState()
     {
-        _overviewPage.SetOverview(_shell.Profiles, _shell.LastResult);
+        _overviewPage.SetOverview(_shell.Profiles);
         _settingsPage.SetSettings(_shell.Settings, _shell.DataFolder);
         RenderServerCatalog();
         if (_shell.SelectedSession is SessionWorkspace workspace)
@@ -216,7 +221,6 @@ public sealed partial class MainWindow : Window
         SessionTabHost.Margin = isNarrow ? new Thickness(56, 0, 180, 0) : new Thickness(65, 0, 300, 0);
         ConnectionProgressText.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
         ConnectionProgressPanel.Spacing = isNarrow ? 0 : 8;
-        _overviewPage.UpdateResponsiveLayout(isNarrow);
         _serverCatalogPage.UpdateResponsiveLayout(isNarrow);
     }
 
@@ -238,7 +242,7 @@ public sealed partial class MainWindow : Window
         {
             "servers" => "添加、编辑和连接本机保存的服务器配置。",
             "settings" => "连接安全与界面偏好。",
-            _ => "管理服务器连接，查看最近活动。"
+            _ => "从最近或已保存的服务器开始 SSH 会话。"
         };
     }
 
@@ -320,9 +324,6 @@ public sealed partial class MainWindow : Window
 
     private async void ConnectedSidebar_ReconnectRequested(object? sender, EventArgs e) =>
         await _shell.ReconnectSelectedSessionAsync();
-
-    private async void QuickConnectButton_Click(object sender, RoutedEventArgs e) => await OpenServerPickerAsync();
-    private async void AddServerButton_Click(object sender, RoutedEventArgs e) => await _serverCatalogPage.ShowAddDialogAsync();
 
     private async Task OpenServerPickerAsync()
     {

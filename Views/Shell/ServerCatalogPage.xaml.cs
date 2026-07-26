@@ -87,7 +87,7 @@ public sealed partial class ServerCatalogPage : UserControl
         }
     }
 
-    public Task ShowAddDialogAsync() => ShowProfileDialogAsync(null);
+    public Task ShowAddDialogAsync(XamlRoot xamlRoot) => ShowProfileDialogAsync(null, xamlRoot);
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
@@ -116,10 +116,10 @@ public sealed partial class ServerCatalogPage : UserControl
     private async void EditButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is ServerProfile profile)
-            await ShowProfileDialogAsync(profile);
+            await ShowProfileDialogAsync(profile, XamlRoot);
     }
 
-    private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowProfileDialogAsync(null);
+    private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowProfileDialogAsync(null, XamlRoot);
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
@@ -136,11 +136,11 @@ public sealed partial class ServerCatalogPage : UserControl
             DeleteRequested?.Invoke(this, profile);
     }
 
-    private async Task ShowProfileDialogAsync(ServerProfile? editing)
+    private async Task ShowProfileDialogAsync(ServerProfile? editing, XamlRoot xamlRoot)
     {
         var result = await ServerProfileDialog.ShowAsync(editing, new ServerProfileDialogContext
         {
-            XamlRoot = XamlRoot,
+            XamlRoot = xamlRoot,
             WindowHandle = _windowHandle,
             MutedTextBrush = (Brush)Application.Current.Resources["MutedTextBrush"],
             HasSavedCredential = editing is not null && _hasSavedCredential(editing),
