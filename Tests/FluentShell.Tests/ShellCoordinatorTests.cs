@@ -35,7 +35,7 @@ public sealed class ShellCoordinatorTests
     public async Task Updating_settings_persists_through_the_store()
     {
         var store = new InMemoryLocalStore();
-        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile, _ => Task.CompletedTask), store: store);
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile), store: store);
         await coordinator.LoadAsync();
 
         await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(TerminalFontSize: 18));
@@ -49,7 +49,7 @@ public sealed class ShellCoordinatorTests
         var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
         var store = new InMemoryLocalStore([profile]);
         store.SaveSecret(profile, "秘密");
-        var coordinator = CreateCoordinator((current, _, _) => new FakeShellSession(current, _ => Task.CompletedTask), store: store);
+        var coordinator = CreateCoordinator((current, _, _) => new FakeShellSession(current), store: store);
         await coordinator.LoadAsync();
 
         await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(RememberCredentials: false));
@@ -329,43 +329,4 @@ public sealed class ShellCoordinatorTests
         return path;
     }
 
-    private sealed class FakeShellSession : IShellSession
-    {
-        private readonly Func<FakeShellSession, Task> _connect;
-
-        public FakeShellSession(ServerProfile profile, Func<FakeShellSession, Task> connect)
-        {
-            Profile = profile;
-            _connect = connect;
-        }
-
-        public ServerProfile Profile { get; }
-        public bool IsConnected => ConnectionState == SessionConnectionState.Connected;
-        public SessionConnectionState ConnectionState { get; private set; } = SessionConnectionState.Disconnected;
-        public bool IsTransferActive => false;
-        public int MetricsPollingStarts { get; private set; }
-        public event EventHandler<ServerMetrics?>? MetricsUpdated
-        {
-            add { }
-            remove { }
-        }
-
-        public event EventHandler<string>? StatusChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public event EventHandler<string>? ConnectionFailed;
-
-        public Task ConnectAsync() => _connect(this);
-        public void ReportConnectionFailure(string message) => ConnectionFailed?.Invoke(this, message);
-        public void SetConnectionState(SessionConnectionState connectionState) => ConnectionState = connectionState;
-        public void SetActive(bool active)
-        {
-            if (active) MetricsPollingStarts++;
-        }
-        public void SetTerminalFontSize(double value) { }
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
 }

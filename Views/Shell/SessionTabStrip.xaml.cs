@@ -1,14 +1,14 @@
-using FluentShell.Views;
+using FluentShell.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace FluentShell.Views.Shell;
 
-public sealed partial class SessionTabStrip : UserControl
+public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
 {
-    private readonly Dictionary<SessionWorkspace, ToggleButton> _tabButtons = [];
-    private readonly Dictionary<SessionWorkspace, Grid> _tabContainers = [];
+    private readonly Dictionary<IShellSession, ToggleButton> _tabButtons = [];
+    private readonly Dictionary<IShellSession, Grid> _tabContainers = [];
     private bool _updatingSelection;
 
     public SessionTabStrip()
@@ -17,11 +17,12 @@ public sealed partial class SessionTabStrip : UserControl
     }
 
     public event EventHandler? NewSessionRequested;
-    public event EventHandler<SessionWorkspace>? SessionSelected;
-    public event EventHandler<SessionWorkspace>? SessionCloseRequested;
+    public event EventHandler<IShellSession>? SessionSelected;
+    public event EventHandler<IShellSession>? SessionCloseRequested;
 
-    public void Add(SessionWorkspace session)
+    public void Add(IShellSession session)
     {
+        var presentation = SessionTabPresentation.For(session);
         var container = new Grid
         {
             Height = 40,
@@ -33,7 +34,7 @@ public sealed partial class SessionTabStrip : UserControl
             Tag = session,
             Content = new TextBlock
             {
-                Text = session.DisplayTitle,
+                Text = presentation.Title,
                 FontSize = 14,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -43,10 +44,10 @@ public sealed partial class SessionTabStrip : UserControl
             Padding = new Thickness(12, 0, 40, 0),
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        ToolTipService.SetToolTip(tabButton, session.DisplayTitle);
+        ToolTipService.SetToolTip(tabButton, presentation.ToolTip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
             tabButton,
-            $"切换到 {session.DisplayTitle} 会话");
+            presentation.SelectAccessibleName);
         tabButton.Checked += TabButton_Checked;
         container.Children.Add(tabButton);
 
@@ -59,10 +60,10 @@ public sealed partial class SessionTabStrip : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 4, 0)
         };
-        ToolTipService.SetToolTip(closeButton, "关闭会话");
+        ToolTipService.SetToolTip(closeButton, presentation.CloseToolTip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
             closeButton,
-            $"关闭 {session.DisplayTitle} 会话");
+            presentation.CloseAccessibleName);
         closeButton.Click += CloseButton_Click;
         container.Children.Add(closeButton);
 
@@ -71,7 +72,7 @@ public sealed partial class SessionTabStrip : UserControl
         TabPanel.Children.Insert(Math.Max(0, TabPanel.Children.Count - 1), container);
     }
 
-    public void Select(SessionWorkspace session)
+    public void Select(IShellSession session)
     {
         _updatingSelection = true;
         foreach (var (candidate, button) in _tabButtons)
@@ -79,7 +80,7 @@ public sealed partial class SessionTabStrip : UserControl
         _updatingSelection = false;
     }
 
-    public void Remove(SessionWorkspace session)
+    public void Remove(IShellSession session)
     {
         if (_tabButtons.Remove(session, out var tabButton))
             tabButton.Checked -= TabButton_Checked;
@@ -95,14 +96,14 @@ public sealed partial class SessionTabStrip : UserControl
 
     private void TabButton_Checked(object sender, RoutedEventArgs e)
     {
-        if (_updatingSelection || (sender as ToggleButton)?.Tag is not SessionWorkspace session)
+        if (_updatingSelection || (sender as ToggleButton)?.Tag is not IShellSession session)
             return;
         SessionSelected?.Invoke(this, session);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.Tag is SessionWorkspace session)
+        if ((sender as FrameworkElement)?.Tag is IShellSession session)
             SessionCloseRequested?.Invoke(this, session);
     }
 }

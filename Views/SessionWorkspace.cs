@@ -71,6 +71,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     public ServerProfile Profile => _profile;
     public string DisplayTitle => _profile.Name;
+    public object ContentElement => this;
     public bool IsConnected => _connection.IsConnected;
     public SessionConnectionState ConnectionState => _connection.State;
     public bool IsTransferActive => _sftpWorkspace.IsTransferActive;

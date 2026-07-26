@@ -20,7 +20,8 @@ public sealed partial class MainWindow : Window
     private readonly IntPtr _windowHandle;
     private readonly AppWindow _appWindow;
     private readonly ShellCoordinator _shell;
-    private readonly SessionHost _sessionHost = new();
+    private readonly SessionTabStrip _sessionTabStrip = new();
+    private readonly SessionHost _sessionHost;
     private readonly OverviewPage _overviewPage = new();
     private readonly ServerCatalogPage _serverCatalogPage;
     private readonly SettingsPage _settingsPage;
@@ -38,6 +39,7 @@ public sealed partial class MainWindow : Window
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_windowHandle));
         ConfigureWindow();
 
+        _sessionHost = new SessionHost(_sessionTabStrip);
         _shell = new ShellCoordinator(
             new LocalStore(),
             (profile, secretProvider, fingerprintConfirmation) => new SessionWorkspace(
@@ -74,12 +76,13 @@ public sealed partial class MainWindow : Window
 
     private void WireModules()
     {
-        SessionTabHost.Content = _sessionHost.TabStrip;
+        SessionTabHost.Content = _sessionTabStrip;
         _sessionHost.NewSessionRequested += async (_, _) => await OpenServerPickerAsync();
         _sessionHost.SessionSelected += async (_, session) => await _shell.ConnectAsync(session.Profile);
         _sessionHost.SessionCloseRequested += async (_, session) =>
             await _shell.CloseSessionAsync(session, ConfirmCloseSessionAsync);
-        _sessionHost.ContentChanged += (_, session) => SessionContentPresenter.Content = session;
+        _sessionHost.ContentChanged += (_, session) =>
+            SessionContentPresenter.Content = session?.ContentElement;
         ConnectedSidebar.ReconnectRequested += ConnectedSidebar_ReconnectRequested;
 
         _overviewPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
@@ -109,21 +112,20 @@ public sealed partial class MainWindow : Window
                 args.Message));
         _shell.SessionAdded += (_, session) =>
         {
-            _sessionHost.Add((SessionWorkspace)session);
+            _sessionHost.Add(session);
             ShowConnectedLayout();
         };
-        _shell.SessionRemoved += (_, session) => _sessionHost.Remove((SessionWorkspace)session);
+        _shell.SessionRemoved += (_, session) => _sessionHost.Remove(session);
         _shell.SessionSelected += (_, session) =>
         {
-            if (session is SessionWorkspace workspace)
-            {
-                _sessionHost.Select(workspace);
-                ShowConnectedLayout();
-            }
-            else
+            if (session is null)
             {
                 ShowUnconnectedLayout("servers");
+                return;
             }
+
+            _sessionHost.Select(session);
+            ShowConnectedLayout();
         };
         _shell.MetricsUpdated += (_, args) =>
         {
@@ -147,8 +149,8 @@ public sealed partial class MainWindow : Window
         _overviewPage.SetOverview(_shell.Profiles);
         _settingsPage.SetSettings(_shell.Settings, _shell.DataFolder);
         RenderServerCatalog();
-        if (_shell.SelectedSession is SessionWorkspace workspace)
-            ConnectedSidebar.UpdateSession(workspace.Profile, workspace.ConnectionState);
+        if (_shell.SelectedSession is { } session)
+            ConnectedSidebar.UpdateSession(session.Profile, session.ConnectionState);
     }
 
     private void RenderServerCatalog() => _serverCatalogPage.SetProfiles(_shell.Profiles);

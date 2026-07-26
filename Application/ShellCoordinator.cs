@@ -13,6 +13,13 @@ public enum SessionConnectionState
 public interface IShellSession : IAsyncDisposable
 {
     ServerProfile Profile { get; }
+
+    /// <summary>标签栏上显示的会话名称。</summary>
+    string DisplayTitle { get; }
+
+    /// <summary>会话在内容区呈现的元素，交给外壳的内容宿主显示。</summary>
+    object ContentElement { get; }
+
     bool IsConnected { get; }
     SessionConnectionState ConnectionState { get; }
     bool IsTransferActive { get; }
