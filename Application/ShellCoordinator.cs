@@ -153,7 +153,10 @@ public sealed class ShellCoordinator
                 session.SetTerminalFontSize(update.TerminalFontSize.Value);
         }
         if (update.DownloadDirectory is not null)
+        {
             _settings.DownloadDirectory = update.DownloadDirectory;
+            _settings.HasCustomDownloadDirectory = true;
+        }
         if (update.RememberCredentials is not null)
         {
             _settings.RememberCredentials = update.RememberCredentials.Value;
