@@ -22,7 +22,7 @@ public sealed partial class SftpWorkspaceView : UserControl
     private bool _isFailureDialogOpen;
     private SftpSessionSnapshot _snapshot = new(
         SftpSessionState.Idle,
-        "/",
+        SftpDirectoryListing.Empty("/"),
         false,
         false,
         false,
@@ -50,26 +50,17 @@ public sealed partial class SftpWorkspaceView : UserControl
     public event EventHandler<RemoteFileItem>? DeleteRequested;
     public event EventHandler? CancelTransferRequested;
 
-    public void RenderDirectory(SftpDirectoryListing listing)
-    {
-        if (!listing.Succeeded)
-        {
-            RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.Persistent(
-                listing.ErrorMessage ?? "读取目录失败。"));
-            return;
-        }
-
-        RemoteTable.SelectedItem = null;
-        _remoteFiles.Clear();
-        foreach (var item in listing.Items) _remoteFiles.Add(item);
-        PathBox.Text = listing.Path;
-        UpdateSelectionState();
-    }
-
-    public void RenderState(SftpSessionSnapshot snapshot)
+    public void Render(SftpSessionSnapshot snapshot)
     {
         var previousState = _snapshot.State;
+        var previousListing = _snapshot.DirectoryListing;
         _snapshot = snapshot;
+
+        if (!ReferenceEquals(previousListing, snapshot.DirectoryListing))
+            RenderDirectoryListing(snapshot.DirectoryListing);
+        else if (snapshot.State == SftpSessionState.Failed)
+            PathBox.Text = snapshot.DirectoryListing.Path;
+
         RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
@@ -80,12 +71,14 @@ public sealed partial class SftpWorkspaceView : UserControl
             _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
     }
 
-    public void ShowOperationResult(SftpOperationResult result)
+    private void RenderDirectoryListing(SftpDirectoryListing listing)
     {
-        var persists = _snapshot.State == SftpSessionState.Failed;
-        RenderWorkspaceOperationStatus(persists
-            ? WorkspaceOperationStatusPresentation.Persistent(result.Message)
-            : WorkspaceOperationStatusPresentation.Transient(result.Message));
+        RemoteTable.SelectedItem = null;
+        RemoteTable.ItemsSource = null;
+        _remoteFiles.Clear();
+        foreach (var item in listing.Items) _remoteFiles.Add(item);
+        RemoteTable.ItemsSource = _remoteFiles;
+        PathBox.Text = listing.Path;
     }
 
     private void RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation presentation)
@@ -226,6 +219,7 @@ public sealed partial class SftpWorkspaceView : UserControl
 
     private void ConfigureRemoteTable()
     {
+        RemoteTable.CanMaintainScrollPosition = false;
         RemoteTable.ItemsSource = _remoteFiles;
         RemoteTable.CellDoubleTapped += RemoteTable_CellDoubleTapped;
         RemoteTable.SelectionChanged += RemoteTable_SelectionChanged;
