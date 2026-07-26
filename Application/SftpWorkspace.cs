@@ -63,7 +63,9 @@ public sealed class SftpWorkspace : IDisposable
 
     public async Task UploadAsync()
     {
-        foreach (var file in await _view.PickUploadFilesAsync())
+        var files = await _view.PickUploadFilesAsync();
+        if (files.Count > 0) _view.ShowTransferStatus();
+        foreach (var file in files)
         {
             await _controller.UploadAsync(file.Name, file.OpenRead, _view.ConfirmOverwriteAsync);
             // 用户按下取消是针对整批的，不只是当前这个文件：控制器停在 Cancelled 上，
@@ -77,6 +79,7 @@ public sealed class SftpWorkspace : IDisposable
         var destinationDirectory = await _view.PickDownloadDirectoryAsync();
         if (destinationDirectory is null) return;
 
+        _view.ShowTransferStatus();
         await _controller.DownloadAsync(
             item,
             destinationDirectory,

@@ -58,13 +58,21 @@
                     Width="16"
                     Height="16"
                     Visibility="Collapsed" />
-                <ProgressBar
-                    x:Name="WorkspaceTransferProgressBar"
-                    Width="140"
-                    Minimum="0"
-                    Maximum="100"
-                    VerticalAlignment="Center"
-                    Visibility="Collapsed" />
+                <Button
+                    x:Name="TransferStatusButton"
+                    Style="{StaticResource TitleBarSessionIconButtonStyle}"
+                    Width="Auto"
+                    MinWidth="0"
+                    Padding="10,0"
+                    AutomationProperties.Name="查看文件传输状态"
+                    ToolTipService.ToolTip="查看文件传输状态"
+                    Visibility="Collapsed"
+                    Click="TransferStatusButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <ProgressRing x:Name="TransferStatusButtonRing" Width="16" Height="16" IsActive="True" />
+                        <TextBlock x:Name="TransferStatusButtonLabel" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
                 <TextBlock
                     x:Name="WorkspaceOperationStatus"
                     MaxWidth="220"
@@ -73,16 +81,6 @@
                     TextTrimming="CharacterEllipsis"
                     VerticalAlignment="Center"
                     AutomationProperties.LiveSetting="Polite" />
-                <Button
-                    x:Name="CancelTransferButton"
-                    Content="&#xE711;"
-                    FontFamily="Segoe Fluent Icons"
-                    FontSize="16"
-                    Style="{StaticResource TitleBarSessionIconButtonStyle}"
-                    AutomationProperties.Name="取消文件传输"
-                    ToolTipService.ToolTip="取消文件传输"
-                    Visibility="Collapsed"
-                    Click="CancelTransferButton_Click" />
             </StackPanel>
             <CommandBar
                 x:Name="Toolbar"
@@ -98,12 +96,6 @@
                     Click="RefreshButton_Click" />
                 <AppBarButton
                     Style="{StaticResource CommandBarIconButtonStyle}"
-                    Label="新建文件夹"
-                    Icon="Add"
-                    ToolTipService.ToolTip="新建文件夹"
-                    Click="NewFolderButton_Click" />
-                <AppBarButton
-                    Style="{StaticResource CommandBarIconButtonStyle}"
                     Label="上传"
                     Icon="Upload"
                     ToolTipService.ToolTip="上传"
@@ -117,6 +109,25 @@
                     Click="DownloadButton_Click" />
             </CommandBar>
         </Grid>
+
+        <!-- 非模态传输面板：锚在传输状态按钮上，开着不挡目录浏览，关掉传输继续。 -->
+        <TeachingTip
+            x:Name="TransferTip"
+            Target="{x:Bind TransferStatusButton}"
+            Title="文件传输"
+            PreferredPlacement="Bottom"
+            CloseButtonContent="关闭"
+            ActionButtonClick="TransferTip_ActionButtonClick"
+            Closed="TransferTip_Closed">
+            <StackPanel Spacing="10" MinWidth="300" Margin="0,8,0,0">
+                <TextBlock x:Name="TransferTipMessage" TextWrapping="Wrap" />
+                <ProgressBar x:Name="TransferTipBar" Minimum="0" Maximum="100" />
+                <TextBlock
+                    x:Name="TransferTipBytes"
+                    FontSize="12"
+                    Foreground="{ThemeResource MutedTextBrush}" />
+            </StackPanel>
+        </TeachingTip>
 
         <syncfusion:SfDataGrid
             x:Name="RemoteTable"

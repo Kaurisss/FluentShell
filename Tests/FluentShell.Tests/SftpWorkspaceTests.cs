@@ -90,6 +90,24 @@ public sealed class SftpWorkspaceTests
         await workspace.DownloadAsync(item);
 
         Assert.AreEqual(0, fileService.DownloadCallCount, "未选择目录时不应发起传输。");
+        Assert.AreEqual(0, view.ShowTransferStatusCallCount, "没有传输就不该弹传输状态面板。");
+    }
+
+    [TestMethod]
+    public async Task Download_opens_the_transfer_status_panel_once()
+    {
+        var item = new RemoteFileItem { Name = "日志.txt", FullPath = "/日志.txt" };
+        var fileService = new FakeSftpFileService();
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = Path.GetTempPath() };
+        using var workspace = new SftpWorkspace(
+            fileService,
+            view,
+            localFileExists: _ => false,
+            createLocalOutput: _ => new MemoryStream());
+
+        await workspace.DownloadAsync(item);
+
+        Assert.AreEqual(1, view.ShowTransferStatusCallCount, "选好目录、传输开始时打开一次传输状态面板。");
     }
 
     [TestMethod]
@@ -192,6 +210,9 @@ public sealed class SftpWorkspaceTests
         public void Render(SftpSessionSnapshot snapshot) => LastSnapshot = snapshot;
 
         public string? LastPromptInitialText { get; private set; }
+        public int ShowTransferStatusCallCount { get; private set; }
+
+        public void ShowTransferStatus() => ShowTransferStatusCallCount++;
 
         public Task<string> PromptTextAsync(string title, string placeholder, string initialText = "")
         {

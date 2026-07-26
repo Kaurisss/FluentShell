@@ -60,6 +60,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         else if (snapshot.State == SftpSessionState.Failed)
             PathBox.Text = snapshot.DirectoryListing.Path;
 
+        RenderTransferTip(snapshot);
         RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
@@ -75,6 +76,89 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
         }
     }
+
+    public void ShowTransferStatus()
+    {
+        if (!TransferTip.IsOpen)
+        {
+            // 打开时第一份传输快照可能还没到，别让面板展示上一批的旧内容。
+            if (_snapshot.State != SftpSessionState.Transferring)
+            {
+                TransferTipMessage.Text = "正在准备传输…";
+                TransferTipBar.IsIndeterminate = true;
+                TransferTipBytes.Text = string.Empty;
+            }
+            TransferTip.IsOpen = true;
+        }
+        UpdateTransferStatusButton();
+    }
+
+    private void TransferStatusButton_Click(object sender, RoutedEventArgs e)
+    {
+        TransferTip.IsOpen = !TransferTip.IsOpen;
+        UpdateTransferStatusButton();
+    }
+
+    private void TransferTip_ActionButtonClick(TeachingTip sender, object args) =>
+        CancelTransferRequested?.Invoke(this, EventArgs.Empty);
+
+    private void TransferTip_Closed(TeachingTip sender, TeachingTipClosedEventArgs args) =>
+        UpdateTransferStatusButton();
+
+    private void RenderTransferTip(SftpSessionSnapshot snapshot)
+    {
+        // 取消与失败由内联提示和失败弹窗接手；其余状态保持面板打开——
+        // 多文件批次在文件之间会短暂回到读取/空闲态，见状态就关会让面板闪没。
+        if (snapshot.State is SftpSessionState.Failed or SftpSessionState.Cancelled)
+        {
+            TransferTip.IsOpen = false;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.StatusMessage))
+            TransferTipMessage.Text = snapshot.StatusMessage;
+        // 只有传输中可取消；其余阶段收起动作按钮。
+        TransferTip.ActionButtonContent = snapshot.State == SftpSessionState.Transferring
+            ? "取消传输"
+            : null;
+
+        var progress = snapshot.State == SftpSessionState.Transferring ? snapshot.TransferProgress : null;
+        TransferTipBar.Visibility = snapshot.State is SftpSessionState.Transferring or SftpSessionState.ListingDirectory
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        TransferTipBar.IsIndeterminate = progress is null;
+        if (progress is not null) TransferTipBar.Value = progress.Percent;
+        TransferTipBytes.Text = progress is null
+            ? string.Empty
+            : $"{FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes)}";
+    }
+
+    /// <summary>
+    /// 传输状态按钮既是传输中的活动指示，也是面板开着时的锚点——
+    /// 面板未关就不能藏按钮，否则 TeachingTip 失去目标会飘。
+    /// </summary>
+    private void UpdateTransferStatusButton()
+    {
+        var transferring = _snapshot.State == SftpSessionState.Transferring;
+        var busy = transferring ||
+            (TransferTip.IsOpen && _snapshot.State == SftpSessionState.ListingDirectory);
+        TransferStatusButton.Visibility = transferring || TransferTip.IsOpen
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        TransferStatusButtonRing.IsActive = busy;
+        TransferStatusButtonRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        TransferStatusButtonLabel.Text = transferring
+            ? _snapshot.TransferProgress?.Percent is double percent ? $"{(int)percent}%" : "…"
+            : busy ? "…" : "完成";
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024d:0.0} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024d:0.0} MB",
+        _ => $"{bytes / 1024d / 1024d / 1024d:0.0} GB"
+    };
 
     private void RenderDirectoryListing(SftpDirectoryListing listing)
     {
@@ -93,25 +177,21 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         else
             CancelTransientStatusClear();
 
-        WorkspaceOperationStatusPanel.Visibility = presentation.IsVisible
+        WorkspaceOperationStatusPanel.Visibility =
+            presentation.ShowsInlineMessage || presentation.ShowsListingIndicator || presentation.IsTransferring
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        WorkspaceOperationProgress.IsActive = presentation.ShowsListingIndicator;
+        WorkspaceOperationProgress.Visibility = presentation.ShowsListingIndicator
             ? Visibility.Visible
             : Visibility.Collapsed;
-        // 有确定进度就用进度条，环形指示只兜底总量未知的阶段（统计中、上传）。
-        var showRing = presentation.ShowsProgress && presentation.ProgressPercent is null;
-        WorkspaceOperationProgress.IsActive = showRing;
-        WorkspaceOperationProgress.Visibility = showRing
+        // 传输中内联只留一个带进度的小按钮，详情都在传输面板里。
+        UpdateTransferStatusButton();
+        WorkspaceOperationStatus.Visibility = presentation.ShowsInlineMessage
             ? Visibility.Visible
             : Visibility.Collapsed;
-        WorkspaceTransferProgressBar.Visibility = presentation.ProgressPercent is null
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-        if (presentation.ProgressPercent is double percent)
-            WorkspaceTransferProgressBar.Value = percent;
         WorkspaceOperationStatus.Text = presentation.Message;
         ToolTipService.SetToolTip(WorkspaceOperationStatus, presentation.ToolTip ?? presentation.Message);
-        CancelTransferButton.Visibility = presentation.CanCancelTransfer
-            ? Visibility.Visible
-            : Visibility.Collapsed;
     }
 
     private void ScheduleTransientStatusClear()
@@ -193,6 +273,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
     public async Task<bool> ConfirmOverwriteAsync(string name)
     {
+        // 传输面板是非模态的 TeachingTip，与 ContentDialog 可以共存，无须收起。
         var dialog = new ContentDialog
         {
             Title = "文件已存在",
@@ -295,12 +376,20 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         rename.Click += (_, _) => RequestRename();
         var delete = new MenuFlyoutItem { Text = "删除" };
         delete.Click += (_, _) => RequestDelete();
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹" };
+        newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
+        var properties = new MenuFlyoutItem { Text = "属性" };
+        properties.Click += (_, _) => _ = ShowSelectedItemPropertiesAsync();
         menu.Items.Add(open);
         menu.Items.Add(download);
         menu.Items.Add(copyPath);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(rename);
         menu.Items.Add(delete);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(newFolder);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(properties);
         // Syncfusion 的 GridCell 样式把字体设成了系统上并不存在的 "Segoe UI Variable Static Text"，
         // 右键菜单挂在单元格下会继承它；而 Segoe UI Variable 系列同样不含中文字形，菜单文字只能走
         // 字体回退，在本机落到宋体系的衬线字体上。菜单项全是中文，这里直接指定含中文字形的黑体。
@@ -315,6 +404,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             copyPath.IsEnabled = item is not null;
             rename.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
             delete.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
+            // 新建文件夹作用于当前目录，与选中项无关。
+            newFolder.IsEnabled = _snapshot.CanModifyRemoteFiles;
+            // ".." 是本地合成的父目录条目，大小、修改时间都是占位值，没有属性可看。
+            properties.IsEnabled = item is { Name: not ".." };
         };
         return menu;
     }
@@ -327,16 +420,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
 
-    private void NewFolderButton_Click(object sender, RoutedEventArgs e) =>
-        NewFolderRequested?.Invoke(this, EventArgs.Empty);
-
     private void UploadButton_Click(object sender, RoutedEventArgs e) =>
         UploadRequested?.Invoke(this, EventArgs.Empty);
 
     private void DownloadButton_Click(object sender, RoutedEventArgs e) => RequestDownload();
-
-    private void CancelTransferButton_Click(object sender, RoutedEventArgs e) =>
-        CancelTransferRequested?.Invoke(this, EventArgs.Empty);
 
     private void RemoteTable_CellDoubleTapped(object? sender, GridCellDoubleTappedEventArgs e) =>
         OpenSelectedDirectory();
@@ -415,6 +502,53 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.Transient("已复制远程路径"));
     }
 
+    private async Task ShowSelectedItemPropertiesAsync()
+    {
+        if (SelectedItem is not { Name: not ".." } item || XamlRoot is null) return;
+
+        var dialog = new ContentDialog
+        {
+            Title = $"“{item.Name}”属性",
+            Content = BuildPropertiesPanel(item),
+            CloseButtonText = "关闭",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot
+        };
+        await dialog.ShowAsync();
+    }
+
+    private static Grid BuildPropertiesPanel(RemoteFileItem item)
+    {
+        var panel = new Grid { ColumnSpacing = 16, RowSpacing = 8, MinWidth = 360 };
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        void AddRow(string label, string value)
+        {
+            var row = panel.RowDefinitions.Count;
+            panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var labelBlock = new TextBlock { Text = label, Opacity = 0.7 };
+            Grid.SetRow(labelBlock, row);
+            var valueBlock = new TextBlock
+            {
+                Text = value,
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true
+            };
+            Grid.SetRow(valueBlock, row);
+            Grid.SetColumn(valueBlock, 1);
+            panel.Children.Add(labelBlock);
+            panel.Children.Add(valueBlock);
+        }
+
+        AddRow("名称", item.Name);
+        AddRow("类型", item.TypeLabel);
+        AddRow("远程路径", item.FullPath);
+        AddRow("大小", item.IsDirectory ? "—" : $"{item.SizeLabel}（{item.SizeBytes:N0} 字节）");
+        AddRow("修改时间", item.ModifiedLabel);
+        return panel;
+    }
+
     private void UpdateSelectionState()
     {
         var item = SelectedItem;
@@ -422,21 +556,29 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     }
 
     private sealed record WorkspaceOperationStatusPresentation(
-        bool IsVisible,
-        bool ShowsProgress,
-        bool CanCancelTransfer,
+        bool ShowsInlineMessage,
+        bool ShowsListingIndicator,
+        bool IsTransferring,
         bool ClearsAfterDelay,
         string Message,
-        string? ToolTip,
-        double? ProgressPercent = null)
+        string? ToolTip)
     {
         public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot) => snapshot.State switch
         {
-            SftpSessionState.ListingDirectory => Active(snapshot.StatusMessage, canCancelTransfer: false),
-            SftpSessionState.Transferring => Active(
+            SftpSessionState.ListingDirectory => new(
+                ShowsInlineMessage: true,
+                ShowsListingIndicator: true,
+                IsTransferring: false,
+                ClearsAfterDelay: false,
                 snapshot.StatusMessage,
-                canCancelTransfer: true,
-                snapshot.TransferProgress?.Percent),
+                snapshot.StatusMessage),
+            SftpSessionState.Transferring => new(
+                ShowsInlineMessage: false,
+                ShowsListingIndicator: false,
+                IsTransferring: true,
+                ClearsAfterDelay: false,
+                snapshot.StatusMessage,
+                snapshot.StatusMessage),
             SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
             SftpSessionState.Cancelled => Transient(snapshot.StatusMessage),
             _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
@@ -448,12 +590,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
         public static WorkspaceOperationStatusPresentation Transient(string message) =>
             new(true, false, false, true, message, message);
-
-        private static WorkspaceOperationStatusPresentation Active(
-            string message,
-            bool canCancelTransfer,
-            double? progressPercent = null) =>
-            new(true, true, canCancelTransfer, false, message, message, progressPercent);
 
         private static WorkspaceOperationStatusPresentation Hidden =>
             new(false, false, false, false, string.Empty, null);

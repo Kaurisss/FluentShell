@@ -26,6 +26,12 @@ public interface ISftpWorkspaceView
 
     void Render(SftpSessionSnapshot snapshot);
 
+    /// <summary>
+    /// 打开传输状态面板。由工作区在一批传输真正开始时调用一次——
+    /// 视图无法从快照区分"新的一批"与"批内的下一个文件"，这个时机只有流程知道。
+    /// </summary>
+    void ShowTransferStatus();
+
     /// <summary>返回空串表示用户取消。<paramref name="initialText"/> 预填在输入框里并被全选。</summary>
     Task<string> PromptTextAsync(string title, string placeholder, string initialText = "");
 
