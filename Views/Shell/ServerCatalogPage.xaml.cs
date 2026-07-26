@@ -130,6 +130,7 @@ public sealed partial class ServerCatalogPage : UserControl
             Content = $"确定删除“{profile.Name}”吗？不会影响远程主机。",
             PrimaryButtonText = "删除",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)

@@ -23,6 +23,30 @@ public sealed class ShellLayoutModeTests
     }
 
     [TestMethod]
+    public void Session_layout_keeps_less_room_around_the_content_than_page_layout()
+    {
+        var session = ShellLayoutMode.MeasureContentSpacing(isNarrow: false, isSessionLayout: true);
+        var page = ShellLayoutMode.MeasureContentSpacing(isNarrow: false, isSessionLayout: false);
+
+        Assert.IsLessThan(page.Horizontal, session.Horizontal, "会话左右留白必须比页面窄。");
+        Assert.IsLessThan(page.Bottom, session.Bottom, "会话底部留白必须比页面窄。");
+        Assert.IsGreaterThan(0, session.Horizontal, "留白收窄但不归零，内容不该贴着窗口边。");
+    }
+
+    [TestMethod]
+    public void Narrow_screens_keep_less_room_around_the_content_than_wide_ones()
+    {
+        foreach (var isSessionLayout in new[] { true, false })
+        {
+            var narrow = ShellLayoutMode.MeasureContentSpacing(isNarrow: true, isSessionLayout);
+            var wide = ShellLayoutMode.MeasureContentSpacing(isNarrow: false, isSessionLayout);
+
+            Assert.IsLessThanOrEqualTo(wide.Horizontal, narrow.Horizontal, $"isSessionLayout={isSessionLayout}");
+            Assert.IsLessThanOrEqualTo(wide.Bottom, narrow.Bottom, $"isSessionLayout={isSessionLayout}");
+        }
+    }
+
+    [TestMethod]
     public void Exactly_at_the_breakpoint_is_not_narrow()
     {
         var layout = new ShellLayoutMode();

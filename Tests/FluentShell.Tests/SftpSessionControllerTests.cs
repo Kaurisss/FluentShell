@@ -49,6 +49,10 @@ public sealed class SftpSessionControllerTests
         await controller.RefreshAsync();
 
         Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State);
+        Assert.AreEqual(
+            SftpFailureKind.DirectoryRead,
+            controller.Snapshot.FailureKind,
+            "目录读取失败应标记为 DirectoryRead，视图据此只做内联提示、不弹窗。");
         Assert.HasCount(1, controller.Snapshot.DirectoryListing.Items);
         Assert.AreSame(initialItem, controller.Snapshot.DirectoryListing.Items[0]);
 
@@ -56,6 +60,27 @@ public sealed class SftpSessionControllerTests
         await controller.RefreshAsync();
 
         Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
+    }
+
+    [TestMethod]
+    public async Task Failed_transfer_is_marked_as_operation_failure()
+    {
+        var fileService = new FakeSftpFileService
+        {
+            UploadHandler = _ => Task.FromException(new InvalidOperationException("磁盘已满"))
+        };
+        using var controller = new SftpSessionController(fileService);
+
+        await controller.UploadAsync(
+            "上传.bin",
+            () => Task.FromResult<Stream>(new MemoryStream()),
+            _ => Task.FromResult(true));
+
+        Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State);
+        Assert.AreEqual(
+            SftpFailureKind.Operation,
+            controller.Snapshot.FailureKind,
+            "明确下达的文件操作失败应标记为 Operation，视图据此弹窗提示。");
     }
 
     [TestMethod]

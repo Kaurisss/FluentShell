@@ -23,6 +23,7 @@ public static class ShellDialogService
             Content = box,
             PrimaryButtonText = "连接",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary ? box.Password : null;
@@ -44,6 +45,7 @@ public static class ShellDialogService
             FontFamily = new FontFamily("Cascadia Mono"),
             TextWrapping = TextWrapping.Wrap
         });
+        // 有意不设 DefaultButton：信任主机指纹是安全决定，不该被顺手的 Enter 确认掉。
         var dialog = new ContentDialog
         {
             Title = "确认服务器指纹",
@@ -62,6 +64,7 @@ public static class ShellDialogService
             Title = title,
             Content = message,
             CloseButtonText = "知道了",
+            DefaultButton = ContentDialogButton.Close,
             XamlRoot = xamlRoot
         };
         await dialog.ShowAsync();
@@ -76,6 +79,7 @@ public static class ShellDialogService
             ItemsSource = profiles,
             DisplayMemberPath = nameof(ServerProfile.Name),
             SelectionMode = ListViewSelectionMode.Single,
+            IsItemClickEnabled = true,
             MinWidth = 380,
             MaxHeight = 420
         };
@@ -85,11 +89,24 @@ public static class ShellDialogService
             Content = list,
             PrimaryButtonText = "连接",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+            // 没有选中项时"连接"不可点，避免点了没反应还悄悄关掉对话框。
+            IsPrimaryButtonEnabled = false,
             XamlRoot = xamlRoot
         };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary
-            ? list.SelectedItem as ServerProfile
-            : null;
+        list.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = list.SelectedItem is not null;
+
+        // 单击条目直接连接，省掉"先选中再点连接"的第二步。
+        ServerProfile? clicked = null;
+        list.ItemClick += (_, e) =>
+        {
+            clicked = e.ClickedItem as ServerProfile;
+            dialog.Hide();
+        };
+
+        var result = await dialog.ShowAsync();
+        if (clicked is not null) return clicked;
+        return result == ContentDialogResult.Primary ? list.SelectedItem as ServerProfile : null;
     }
 
     public static async Task<bool> ConfirmCloseSessionAsync(XamlRoot xamlRoot, string serverName)
@@ -100,6 +117,8 @@ public static class ShellDialogService
             Content = $"关闭“{serverName}”标签页会取消当前文件传输，是否继续？",
             PrimaryButtonText = "关闭标签页",
             CloseButtonText = "继续传输",
+            // 默认落在安全侧：Enter 不应该顺手取消一场正在进行的传输。
+            DefaultButton = ContentDialogButton.Close,
             XamlRoot = xamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;

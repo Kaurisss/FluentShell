@@ -205,6 +205,46 @@
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
             </Style>
 
+            <Style x:Key="WorkspaceSplitterStyle" TargetType="Thumb">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Stretch" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Thumb">
+                            <!-- 整块是命中区域，中间那条线才是视觉上的拆分条 -->
+                            <Grid Background="Transparent">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="SplitterLine.Height" Value="3" />
+                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="SplitterLine.Height" Value="3" />
+                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled" />
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Border
+                                    x:Name="SplitterLine"
+                                    Height="1"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource SubtleStrokeBrush}"
+                                    CornerRadius="1" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style x:Key="TitleBarSessionIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="Background" Value="Transparent" />

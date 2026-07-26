@@ -82,7 +82,7 @@ public sealed class SftpWorkspace : IDisposable
 
     public async Task RenameAsync(RemoteFileItem item)
     {
-        var name = await _view.PromptTextAsync("重命名", "输入新名称");
+        var name = await _view.PromptTextAsync("重命名", "输入新名称", item.Name);
         if (string.IsNullOrWhiteSpace(name)) return;
         await _controller.RenameAsync(item, name);
     }

@@ -88,6 +88,8 @@ public sealed partial class SettingsPage : UserControl
             Content = "这会删除所有已保存的服务器配置和已记录的主机指纹，远程服务器不会受到影响。",
             PrimaryButtonText = "清除",
             CloseButtonText = "取消",
+            // 一键清空全部本地数据不可恢复，Enter 默认落在取消上。
+            DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)

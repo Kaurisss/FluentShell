@@ -12,6 +12,18 @@ public enum SftpSessionState
     Failed
 }
 
+/// <summary>
+/// 失败的种类，决定视图用多重的方式打扰用户：目录读取失败是浏览途中的常态
+/// （没权限的目录、敲错的路径），内联提示就够；文件操作失败对应一次明确下达的
+/// 指令没有完成，值得弹窗。
+/// </summary>
+public enum SftpFailureKind
+{
+    None,
+    DirectoryRead,
+    Operation
+}
+
 public sealed record SftpDirectoryListing(string Path, IReadOnlyList<RemoteFileItem> Items)
 {
     public static SftpDirectoryListing Empty(string path) => new(path, []);
@@ -25,7 +37,8 @@ public sealed record SftpSessionSnapshot(
     bool CanModifyRemoteFiles,
     bool CanTransfer,
     string StatusMessage,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    SftpFailureKind FailureKind = SftpFailureKind.None)
 {
     public string CurrentPath => DirectoryListing.Path;
 }
@@ -39,6 +52,7 @@ public sealed class SftpSessionController : IDisposable
     private SftpSessionState _state = SftpSessionState.Idle;
     private string _statusMessage = string.Empty;
     private string? _errorMessage;
+    private SftpFailureKind _failureKind = SftpFailureKind.None;
 
     public SftpSessionController(ISftpFileService fileService)
     {
@@ -271,12 +285,12 @@ public sealed class SftpSessionController : IDisposable
     }
 
     private void FailDirectoryRead(string message) =>
-        Transition(SftpSessionState.Failed, message, message);
+        Transition(SftpSessionState.Failed, message, message, SftpFailureKind.DirectoryRead);
 
     private void FailOperation(string action, Exception exception)
     {
         var message = $"{action}：{exception.Message}";
-        Transition(SftpSessionState.Failed, message, message);
+        Transition(SftpSessionState.Failed, message, message, SftpFailureKind.Operation);
     }
 
     private void PublishOperationStatus(string message) =>
@@ -286,11 +300,16 @@ public sealed class SftpSessionController : IDisposable
     private bool CanModifyRemoteFiles() => CanNavigate() && _fileService.IsConnected;
     private bool CanStartTransfer() => CanNavigate() && _fileService.IsConnected;
 
-    private void Transition(SftpSessionState state, string statusMessage, string? errorMessage = null)
+    private void Transition(
+        SftpSessionState state,
+        string statusMessage,
+        string? errorMessage = null,
+        SftpFailureKind failureKind = SftpFailureKind.None)
     {
         _state = state;
         _statusMessage = statusMessage;
         _errorMessage = errorMessage;
+        _failureKind = state == SftpSessionState.Failed ? failureKind : SftpFailureKind.None;
         SnapshotChanged?.Invoke(this, CreateSnapshot());
     }
 
@@ -303,7 +322,8 @@ public sealed class SftpSessionController : IDisposable
             CanModifyRemoteFiles(),
             CanStartTransfer(),
             _statusMessage,
-            _errorMessage);
+            _errorMessage,
+            _failureKind);
 
     public void Dispose()
     {

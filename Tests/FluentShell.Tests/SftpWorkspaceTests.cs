@@ -66,6 +66,20 @@ public sealed class SftpWorkspaceTests
     }
 
     [TestMethod]
+    public async Task Rename_prompt_is_prefilled_with_the_current_name()
+    {
+        var item = new RemoteFileItem { Name = "旧名.txt", FullPath = "/旧名.txt" };
+        var fileService = new FakeSftpFileService();
+        fileService.DirectoryItems.Add(item);
+        var view = new RecordingSftpWorkspaceView { PromptAnswer = string.Empty };
+        using var workspace = new SftpWorkspace(fileService, view);
+
+        await workspace.RenameAsync(item);
+
+        Assert.AreEqual("旧名.txt", view.LastPromptInitialText, "重命名对话框应预填当前名称。");
+    }
+
+    [TestMethod]
     public async Task Download_without_a_chosen_directory_does_not_transfer()
     {
         var item = new RemoteFileItem { Name = "日志.txt", FullPath = "/日志.txt" };
@@ -177,8 +191,13 @@ public sealed class SftpWorkspaceTests
 
         public void Render(SftpSessionSnapshot snapshot) => LastSnapshot = snapshot;
 
-        public Task<string> PromptTextAsync(string title, string placeholder) =>
-            Task.FromResult(PromptAnswer);
+        public string? LastPromptInitialText { get; private set; }
+
+        public Task<string> PromptTextAsync(string title, string placeholder, string initialText = "")
+        {
+            LastPromptInitialText = initialText;
+            return Task.FromResult(PromptAnswer);
+        }
 
         public Task<bool> ConfirmOverwriteAsync(string name) => Task.FromResult(OverwriteAnswer);
 

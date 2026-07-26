@@ -18,6 +18,11 @@ public sealed record ShellLayout(
     NavigationPaneDisplay PaneDisplay,
     bool IsPaneOpen);
 
+/// <summary>内容区四周的留白。</summary>
+/// <param name="Horizontal">左右留白。</param>
+/// <param name="Bottom">底部留白。</param>
+public sealed record ShellContentSpacing(double Horizontal, double Bottom);
+
 /// <summary>
 /// 外壳的响应式布局规则：由窗口宽度与用户意图计算布局模式与导航面板状态。
 /// </summary>
@@ -43,6 +48,15 @@ public sealed class ShellLayoutMode
 
     /// <summary>存在任何会话时导航被锁定：会话内容占据内容区，切换导航项没有去处。</summary>
     public bool IsNavigationLockedBySessions(int sessionCount) => sessionCount > 0;
+
+    /// <summary>
+    /// 内容区留白。会话布局比页面布局收得更紧：终端和目录列表要的是可视面积，
+    /// 页面列表要的是呼吸感，两者不共用一套数值。
+    /// </summary>
+    public static ShellContentSpacing MeasureContentSpacing(bool isNarrow, bool isSessionLayout) =>
+        isSessionLayout
+            ? new ShellContentSpacing(isNarrow ? 8 : 12, isNarrow ? 8 : 10)
+            : new ShellContentSpacing(isNarrow ? 16 : 30, isNarrow ? 16 : 28);
 
     public ShellLayout Measure(double width, bool isPaneOpen)
     {

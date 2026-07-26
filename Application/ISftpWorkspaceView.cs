@@ -26,8 +26,8 @@ public interface ISftpWorkspaceView
 
     void Render(SftpSessionSnapshot snapshot);
 
-    /// <summary>返回空串表示用户取消。</summary>
-    Task<string> PromptTextAsync(string title, string placeholder);
+    /// <summary>返回空串表示用户取消。<paramref name="initialText"/> 预填在输入框里并被全选。</summary>
+    Task<string> PromptTextAsync(string title, string placeholder, string initialText = "");
 
     Task<bool> ConfirmOverwriteAsync(string name);
     Task<bool> ConfirmDeleteAsync(RemoteFileItem item);

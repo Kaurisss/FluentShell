@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     private readonly SettingsPage _settingsPage;
     private readonly ShellLayoutMode _layout = new();
     private bool _loaded;
+    private bool _isSessionLayout;
 
     public MainWindow()
     {
@@ -201,13 +202,27 @@ public sealed partial class MainWindow : Window
         }
 
         var isNarrow = layout.IsNarrow;
-        var padding = isNarrow ? 16 : 30;
-        ContentHeader.Padding = new Thickness(padding, isNarrow ? 16 : 24, padding, isNarrow ? 12 : 18);
-        ContentHost.Padding = new Thickness(padding, 0, padding, isNarrow ? 16 : 28);
+        ApplyContentSpacing();
         SessionTabHost.Margin = isNarrow ? new Thickness(56, 0, 180, 0) : new Thickness(65, 0, 300, 0);
         ConnectionProgressText.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
         ConnectionProgressPanel.Spacing = isNarrow ? 0 : 8;
         _serverCatalogPage.UpdateResponsiveLayout(isNarrow);
+    }
+
+    /// <summary>
+    /// 内容区留白随窗口宽度和"是否在会话里"两件事变化，两者都可能单独发生，
+    /// 所以应用动作单独成一个方法，由各自的入口调用。
+    /// </summary>
+    private void ApplyContentSpacing()
+    {
+        var isNarrow = _layout.IsNarrow;
+        var spacing = ShellLayoutMode.MeasureContentSpacing(isNarrow, _isSessionLayout);
+        ContentHeader.Padding = new Thickness(
+            spacing.Horizontal,
+            isNarrow ? 16 : 24,
+            spacing.Horizontal,
+            isNarrow ? 12 : 18);
+        ContentHost.Padding = new Thickness(spacing.Horizontal, 0, spacing.Horizontal, spacing.Bottom);
     }
 
     private void NavigateTo(string page)
@@ -234,6 +249,8 @@ public sealed partial class MainWindow : Window
 
     private void ShowConnectedLayout()
     {
+        _isSessionLayout = true;
+        ApplyContentSpacing();
         ContentHeader.Visibility = Visibility.Collapsed;
         PageContentPresenter.Visibility = Visibility.Collapsed;
         SessionContentPresenter.Visibility = Visibility.Visible;
@@ -247,6 +264,8 @@ public sealed partial class MainWindow : Window
 
     private void ShowUnconnectedLayout(string page)
     {
+        _isSessionLayout = false;
+        ApplyContentSpacing();
         ContentHeader.Visibility = Visibility.Visible;
         PageContentPresenter.Visibility = Visibility.Visible;
         SessionContentPresenter.Visibility = Visibility.Collapsed;

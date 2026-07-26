@@ -3,6 +3,7 @@ using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Syncfusion.UI.Xaml.DataGrid;
 using Syncfusion.UI.Xaml.Grids;
 using System.Collections.ObjectModel;
@@ -65,8 +66,14 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         Toolbar.IsEnabled = snapshot.CanNavigate;
         UpdateSelectionState();
 
-        if (snapshot.State == SftpSessionState.Failed && previousState != SftpSessionState.Failed)
+        // 目录读取失败是浏览途中的常态（没权限、路径敲错），内联状态足够；
+        // 只有明确下达的文件操作失败才值得用弹窗打断。
+        if (snapshot.State == SftpSessionState.Failed &&
+            previousState != SftpSessionState.Failed &&
+            snapshot.FailureKind == SftpFailureKind.Operation)
+        {
             _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
+        }
     }
 
     private void RenderDirectoryListing(SftpDirectoryListing listing)
@@ -148,6 +155,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
                 Title = "SFTP 操作失败",
                 Content = message,
                 CloseButtonText = "确定",
+                DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot
             };
             await dialog.ShowAsync();
@@ -158,15 +166,19 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         }
     }
 
-    public async Task<string> PromptTextAsync(string title, string placeholder)
+    public async Task<string> PromptTextAsync(string title, string placeholder, string initialText = "")
     {
-        var box = new TextBox { PlaceholderText = placeholder };
+        var box = new TextBox { PlaceholderText = placeholder, Text = initialText };
+        // 预填全选：重命名时直接输入即整体替换，想改一部分再点进去。
+        box.SelectionStart = 0;
+        box.SelectionLength = initialText.Length;
         var dialog = new ContentDialog
         {
             Title = title,
             Content = box,
             PrimaryButtonText = "确定",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary ? box.Text : string.Empty;
@@ -180,6 +192,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             Content = $"“{name}”已存在，是否覆盖？",
             PrimaryButtonText = "覆盖",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
@@ -190,9 +203,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         var dialog = new ContentDialog
         {
             Title = "确认删除",
-            Content = $"确定删除“{item.Name}”吗？仅允许删除空目录。",
+            Content = item.IsDirectory
+                ? $"确定删除文件夹“{item.Name}”吗？仅允许删除空文件夹。"
+                : $"确定删除文件“{item.Name}”吗？",
             PrimaryButtonText = "删除",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
@@ -278,6 +294,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(rename);
         menu.Items.Add(delete);
+        // Syncfusion 的 GridCell 样式把字体设成了系统上并不存在的 "Segoe UI Variable Static Text"，
+        // 右键菜单挂在单元格下会继承它；而 Segoe UI Variable 系列同样不含中文字形，菜单文字只能走
+        // 字体回退，在本机落到宋体系的衬线字体上。菜单项全是中文，这里直接指定含中文字形的黑体。
+        var menuFontFamily = new FontFamily("Microsoft YaHei UI");
+        foreach (var item in menu.Items.OfType<MenuFlyoutItem>())
+            item.FontFamily = menuFontFamily;
         menu.Opened += (_, _) =>
         {
             var item = SelectedItem;
@@ -337,6 +359,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         {
             e.Handled = true;
             RequestDelete();
+        }
+        else if (e.Key == Windows.System.VirtualKey.Back && _snapshot.CanNavigate)
+        {
+            // 与资源管理器一致：Backspace 返回上级目录。".." 由 RemotePath.Normalize 解析。
+            e.Handled = true;
+            NavigateRequested?.Invoke(this, "..");
         }
     }
 

@@ -135,6 +135,37 @@ public static class ServerProfileDialog
             form.Children.Add(child);
         }
 
+        // 校验错误就地显示在表单里，而不是关掉对话框再弹提示——那样用户填的内容全丢了。
+        var validationError = new TextBlock
+        {
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed
+        };
+        form.Children.Add(validationError);
+
+        string? Validate()
+        {
+            if (string.IsNullOrWhiteSpace(name.Text) ||
+                string.IsNullOrWhiteSpace(host.Text) ||
+                string.IsNullOrWhiteSpace(user.Text))
+            {
+                return "显示名称、主机地址和用户名不能为空。";
+            }
+            if (authentication.SelectedIndex == 1 && string.IsNullOrWhiteSpace(keyPath.Text))
+                return "私钥认证需要选择一个本机私钥文件。";
+            return null;
+        }
+
+        void CancelCloseWhenInvalid(ContentDialog _, ContentDialogButtonClickEventArgs args)
+        {
+            var error = Validate();
+            if (error is null) return;
+            args.Cancel = true;
+            validationError.Text = error;
+            validationError.Visibility = Visibility.Visible;
+        }
+
         var dialog = new ContentDialog
         {
             Title = editing is null ? "添加服务器" : "编辑服务器",
@@ -142,29 +173,13 @@ public static class ServerProfileDialog
             PrimaryButtonText = editing is null ? "保存" : "保存修改",
             SecondaryButtonText = "保存并连接",
             CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
             XamlRoot = context.XamlRoot
         };
+        dialog.PrimaryButtonClick += CancelCloseWhenInvalid;
+        dialog.SecondaryButtonClick += CancelCloseWhenInvalid;
         var dialogResult = await dialog.ShowAsync();
         if (dialogResult == ContentDialogResult.None) return null;
-
-        if (string.IsNullOrWhiteSpace(name.Text) ||
-            string.IsNullOrWhiteSpace(host.Text) ||
-            string.IsNullOrWhiteSpace(user.Text))
-        {
-            await ShowMessageAsync(
-                context.XamlRoot,
-                "信息不完整",
-                "显示名称、主机地址和用户名不能为空。");
-            return null;
-        }
-        if (authentication.SelectedIndex == 1 && string.IsNullOrWhiteSpace(keyPath.Text))
-        {
-            await ShowMessageAsync(
-                context.XamlRoot,
-                "请选择私钥",
-                "私钥认证需要选择一个本机私钥文件。");
-            return null;
-        }
 
         var selectedAuthentication = authentication.SelectedIndex == 1
             ? AuthenticationMethod.PrivateKey
@@ -221,18 +236,4 @@ public static class ServerProfileDialog
         return row;
     }
 
-    private static async Task ShowMessageAsync(
-        XamlRoot xamlRoot,
-        string title,
-        string message)
-    {
-        var dialog = new ContentDialog
-        {
-            Title = title,
-            Content = message,
-            CloseButtonText = "知道了",
-            XamlRoot = xamlRoot
-        };
-        await dialog.ShowAsync();
-    }
 }

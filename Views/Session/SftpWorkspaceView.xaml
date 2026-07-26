@@ -24,7 +24,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Padding="0,8,0,10" RowSpacing="6">
+    <Grid Padding="0,8,0,0" RowSpacing="6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
