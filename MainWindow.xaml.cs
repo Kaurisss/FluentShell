@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
             (profile, secretProvider, fingerprintConfirmation) => new SessionWorkspace(
                 profile,
                 _windowHandle,
+                secret => new SshConnectionService(profile, secret),
                 fingerprintConfirmation,
                 secretProvider,
                 RootGrid.ActualTheme),

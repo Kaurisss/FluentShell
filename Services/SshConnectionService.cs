@@ -12,7 +12,7 @@ public sealed class HostFingerprintRequiredEventArgs : EventArgs
     public bool Accepted { get; set; }
 }
 
-public sealed class SshConnectionService : IAsyncDisposable
+public sealed class SshConnectionService : ISshConnection
 {
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(12);
     private readonly ServerProfile _profile;
