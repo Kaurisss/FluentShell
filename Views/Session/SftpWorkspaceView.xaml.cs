@@ -12,9 +12,7 @@ using WinRT.Interop;
 
 namespace FluentShell.Views.Session;
 
-public sealed record SftpUploadFile(string Name, Func<Task<Stream>> OpenRead);
-
-public sealed partial class SftpWorkspaceView : UserControl
+public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 {
     private readonly IntPtr _windowHandle;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];

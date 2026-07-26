@@ -26,6 +26,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     private readonly Grid _workspaceGrid = new();
     private readonly Button _sftpRestoreButton = new();
     private readonly SessionConnection _connection;
+    private readonly SftpWorkspaceView _sftpView;
     private readonly SftpWorkspace _sftpWorkspace;
     private bool _isSftpCollapsed;
     private double _previousSftpHeight = 260;
@@ -52,7 +53,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             fingerprintConfirmation,
             work => _dispatcherQueue.TryEnqueue(() => work()),
             CancelSftpTransfer);
-        _sftpWorkspace = new SftpWorkspace(windowHandle, _connection.RemoteFiles, _workspaceTheme);
+        _sftpView = new SftpWorkspaceView(windowHandle, _workspaceTheme);
+        _sftpWorkspace = new SftpWorkspace(_connection.RemoteFiles, _sftpView);
 
         _connection.Output += Connection_Output;
         _connection.StatusChanged += Connection_StatusChanged;
@@ -113,8 +115,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         Grid.SetRow(splitter, 1);
         _workspaceGrid.Children.Add(splitter);
 
-        Grid.SetRow(_sftpWorkspace.View, 2);
-        _workspaceGrid.Children.Add(_sftpWorkspace.View);
+        Grid.SetRow(_sftpView, 2);
+        _workspaceGrid.Children.Add(_sftpView);
 
         var restoreRow = new Grid { Padding = new Thickness(0, 4, 0, 4) };
         _sftpRestoreButton.Content = CreateFluentPathIcon(PanelBottomExpandPath);
@@ -206,7 +208,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             _workspaceGrid.RowDefinitions[2].Height = new GridLength(_previousSftpHeight);
         }
 
-        _sftpWorkspace.View.Visibility = _isSftpCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        _sftpView.Visibility = _isSftpCollapsed ? Visibility.Collapsed : Visibility.Visible;
         _sftpRestoreButton.Visibility = _isSftpCollapsed ? Visibility.Visible : Visibility.Collapsed;
     }
 
