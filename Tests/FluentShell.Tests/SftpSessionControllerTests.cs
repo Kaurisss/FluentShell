@@ -63,7 +63,7 @@ public sealed class SftpSessionControllerTests
     }
 
     [TestMethod]
-    public async Task Failed_transfer_is_marked_as_operation_failure()
+    public async Task Failed_transfer_surfaces_on_the_transfer_axis_without_touching_browse_state()
     {
         var fileService = new FakeSftpFileService
         {
@@ -76,11 +76,9 @@ public sealed class SftpSessionControllerTests
             () => Task.FromResult<Stream>(new MemoryStream()),
             _ => Task.FromResult(true));
 
-        Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State);
-        Assert.AreEqual(
-            SftpFailureKind.Operation,
-            controller.Snapshot.FailureKind,
-            "明确下达的文件操作失败应标记为 Operation，视图据此弹窗提示。");
+        Assert.AreEqual(SftpTransferState.Failed, controller.Snapshot.Transfer.State, "传输失败落在传输轴上，视图据此弹窗。");
+        Assert.Contains("磁盘已满", controller.Snapshot.Transfer.Message);
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State, "浏览轴不受传输失败影响。");
     }
 
     [TestMethod]
@@ -174,8 +172,68 @@ public sealed class SftpSessionControllerTests
         await upload;
 
         Assert.AreEqual("上传已取消。", controller.Snapshot.StatusMessage);
-        Assert.AreEqual(SftpSessionState.Cancelled, controller.Snapshot.State);
+        Assert.AreEqual(SftpTransferState.Cancelled, controller.Snapshot.Transfer.State);
         Assert.IsTrue(controller.Snapshot.CanNavigate);
+        Assert.IsTrue(controller.Snapshot.CanTransfer, "取消后应允许开始下一次传输。");
+    }
+
+    [TestMethod]
+    public async Task Browsing_stays_available_while_a_transfer_is_running()
+    {
+        var uploadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var uploadRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transferService = new FakeSftpFileService
+        {
+            UploadHandler = async _ =>
+            {
+                uploadStarted.SetResult();
+                await uploadRelease.Task;
+            }
+        };
+        var browseService = new FakeSftpFileService();
+        browseService.DirectoryItems.Add(new RemoteFileItem { Name = "文档", IsDirectory = true, FullPath = "/文档" });
+        using var controller = new SftpSessionController(browseService, transferService);
+
+        var upload = controller.UploadAsync(
+            "大文件.bin",
+            () => Task.FromResult<Stream>(new MemoryStream([1])),
+            _ => Task.FromResult(true));
+        await uploadStarted.Task;
+
+        Assert.IsTrue(controller.Snapshot.CanNavigate, "传输进行中必须仍可浏览目录。");
+        Assert.IsTrue(controller.Snapshot.CanModifyRemoteFiles, "传输进行中仍可重命名/删除/新建。");
+        Assert.IsFalse(controller.Snapshot.CanTransfer, "同时只允许一个传输。");
+
+        await controller.RefreshAsync();
+
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State, "浏览在传输期间照常完成。");
+        Assert.HasCount(1, controller.Snapshot.DirectoryListing.Items);
+        Assert.IsTrue(controller.Snapshot.Transfer.IsActive, "浏览不打断传输。");
+
+        uploadRelease.SetResult();
+        await upload;
+        Assert.AreEqual(SftpTransferState.Completed, controller.Snapshot.Transfer.State);
+    }
+
+    [TestMethod]
+    public async Task Directory_download_runs_entirely_on_the_transfer_channel()
+    {
+        var browseService = new FakeSftpFileService();
+        var transferService = new FakeSftpFileService();
+        transferService.ListingsByPath["/备份"] =
+        [
+            new RemoteFileItem { Name = "甲.txt", FullPath = "/备份/甲.txt" }
+        ];
+        using var controller = new SftpSessionController(browseService, transferService);
+
+        await controller.DownloadAsync(
+            new RemoteFileItem { Name = "备份", IsDirectory = true, FullPath = "/备份" },
+            Path.GetTempPath(),
+            new DownloadDestination(_ => false, _ => new MemoryStream(), _ => { }, _ => { }),
+            _ => Task.FromResult(true));
+
+        Assert.AreEqual(1, transferService.DownloadCallCount, "统计与传输都走传输通道。");
+        Assert.AreEqual(0, browseService.DownloadCallCount, "浏览通道不承担传输。");
     }
 
     [TestMethod]
@@ -312,11 +370,11 @@ public sealed class SftpSessionControllerTests
             new DownloadDestination(_ => false, _ => new MemoryStream(), _ => { }, _ => { }),
             _ => Task.FromResult(true));
 
-        var progressed = snapshots.Where(s => s.TransferProgress is not null).ToList();
+        var progressed = snapshots.Where(s => s.Transfer.Progress is not null).ToList();
         Assert.IsGreaterThan(0, progressed.Count, "传输过程中应发布确定进度。");
-        Assert.AreEqual(200, progressed[^1].TransferProgress!.BytesTransferred);
-        Assert.AreEqual(200, progressed[^1].TransferProgress!.TotalBytes);
-        Assert.IsNull(snapshots[^1].TransferProgress, "传输结束后的快照不应再携带进度。");
+        Assert.AreEqual(200, progressed[^1].Transfer.Progress!.BytesTransferred);
+        Assert.AreEqual(200, progressed[^1].Transfer.Progress!.TotalBytes);
+        Assert.IsNull(snapshots[^1].Transfer.Progress, "传输结束后的快照不应再携带进度。");
     }
 
     [TestMethod]
@@ -343,12 +401,12 @@ public sealed class SftpSessionControllerTests
             new DownloadDestination(_ => false, _ => new MemoryStream(), _ => { }, _ => { }),
             _ => Task.FromResult(true));
 
-        var progressed = snapshots.Where(s => s.TransferProgress is not null).ToList();
+        var progressed = snapshots.Where(s => s.Transfer.Progress is not null).ToList();
         Assert.IsGreaterThan(0, progressed.Count);
         Assert.IsTrue(
-            progressed.All(s => s.TransferProgress!.TotalBytes == 400),
+            progressed.All(s => s.Transfer.Progress!.TotalBytes == 400),
             "进度总量应是整棵目录树的文件字节和。");
-        Assert.AreEqual(400, progressed[^1].TransferProgress!.BytesTransferred);
+        Assert.AreEqual(400, progressed[^1].Transfer.Progress!.BytesTransferred);
     }
 
     [TestMethod]
@@ -382,8 +440,7 @@ public sealed class SftpSessionControllerTests
             _ => Task.FromResult(true));
 
         Assert.HasCount(3, downloadedTo, "一个条目失败不拖垮整批，后续条目照常尝试。");
-        Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State, "部分失败要弹窗解释，不能装成功。");
-        Assert.AreEqual(SftpFailureKind.Operation, controller.Snapshot.FailureKind);
+        Assert.AreEqual(SftpTransferState.Failed, controller.Snapshot.Transfer.State, "部分失败要弹窗解释，不能装成功。");
         Assert.Contains("已下载 2 个文件", controller.Snapshot.StatusMessage);
         Assert.Contains("1 个失败", controller.Snapshot.StatusMessage);
         Assert.Contains("坏链接", controller.Snapshot.StatusMessage);

@@ -19,6 +19,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
     private CancellationTokenSource? _transientStatusClear;
     private bool _isFailureDialogOpen;
+    private MenuFlyout? _emptyAreaMenu;
     private SftpSessionSnapshot _snapshot = new(
         SftpSessionState.Idle,
         SftpDirectoryListing.Empty("/"),
@@ -52,6 +53,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     public void Render(SftpSessionSnapshot snapshot)
     {
         var previousState = _snapshot.State;
+        var previousTransferState = _snapshot.Transfer.State;
         var previousListing = _snapshot.DirectoryListing;
         _snapshot = snapshot;
 
@@ -65,6 +67,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
         Toolbar.IsEnabled = snapshot.CanNavigate;
+        UploadButton.IsEnabled = snapshot.CanTransfer;
         UpdateSelectionState();
 
         // 目录读取失败是浏览途中的常态（没权限、路径敲错），内联状态足够；
@@ -75,6 +78,13 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         {
             _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
         }
+
+        // 传输失败在自己的轴上弹窗解释（部分完成的明细都在消息里）。
+        if (snapshot.Transfer.State == SftpTransferState.Failed &&
+            previousTransferState != SftpTransferState.Failed)
+        {
+            _ = ShowFailureDialogAsync(snapshot.Transfer.Message);
+        }
     }
 
     public void ShowTransferStatus()
@@ -82,7 +92,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         if (!TransferTip.IsOpen)
         {
             // 打开时第一份传输快照可能还没到，别让面板展示上一批的旧内容。
-            if (_snapshot.State != SftpSessionState.Transferring)
+            if (!_snapshot.Transfer.IsActive)
             {
                 TransferTipMessage.Text = "正在准备传输…";
                 TransferTipBar.IsIndeterminate = true;
@@ -107,25 +117,21 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
     private void RenderTransferTip(SftpSessionSnapshot snapshot)
     {
-        // 取消与失败由内联提示和失败弹窗接手；其余状态保持面板打开——
-        // 多文件批次在文件之间会短暂回到读取/空闲态，见状态就关会让面板闪没。
-        if (snapshot.State is SftpSessionState.Failed or SftpSessionState.Cancelled)
+        var transfer = snapshot.Transfer;
+        // 取消与失败由内联提示和失败弹窗接手；完成保持面板打开显示汇总。
+        if (transfer.State is SftpTransferState.Failed or SftpTransferState.Cancelled)
         {
             TransferTip.IsOpen = false;
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(snapshot.StatusMessage))
-            TransferTipMessage.Text = snapshot.StatusMessage;
+        if (!string.IsNullOrWhiteSpace(transfer.Message))
+            TransferTipMessage.Text = transfer.Message;
         // 只有传输中可取消；其余阶段收起动作按钮。
-        TransferTip.ActionButtonContent = snapshot.State == SftpSessionState.Transferring
-            ? "取消传输"
-            : null;
+        TransferTip.ActionButtonContent = transfer.IsActive ? "取消传输" : null;
 
-        var progress = snapshot.State == SftpSessionState.Transferring ? snapshot.TransferProgress : null;
-        TransferTipBar.Visibility = snapshot.State is SftpSessionState.Transferring or SftpSessionState.ListingDirectory
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        var progress = transfer.Progress;
+        TransferTipBar.Visibility = transfer.IsActive ? Visibility.Visible : Visibility.Collapsed;
         TransferTipBar.IsIndeterminate = progress is null;
         if (progress is not null) TransferTipBar.Value = progress.Percent;
         TransferTipBytes.Text = progress is null
@@ -139,17 +145,19 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     /// </summary>
     private void UpdateTransferStatusButton()
     {
-        var transferring = _snapshot.State == SftpSessionState.Transferring;
-        var busy = transferring ||
-            (TransferTip.IsOpen && _snapshot.State == SftpSessionState.ListingDirectory);
-        TransferStatusButton.Visibility = transferring || TransferTip.IsOpen
+        var transfer = _snapshot.Transfer;
+        TransferStatusButton.Visibility = transfer.IsActive || TransferTip.IsOpen
             ? Visibility.Visible
             : Visibility.Collapsed;
-        TransferStatusButtonRing.IsActive = busy;
-        TransferStatusButtonRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        TransferStatusButtonLabel.Text = transferring
-            ? _snapshot.TransferProgress?.Percent is double percent ? $"{(int)percent}%" : "…"
-            : busy ? "…" : "完成";
+        TransferStatusButtonRing.IsActive = transfer.IsActive;
+        TransferStatusButtonRing.Visibility = transfer.IsActive ? Visibility.Visible : Visibility.Collapsed;
+        TransferStatusButtonLabel.Text = transfer.State switch
+        {
+            SftpTransferState.Transferring =>
+                transfer.Progress?.Percent is double percent ? $"{(int)percent}%" : "…",
+            SftpTransferState.Completed => "完成",
+            _ => "…"
+        };
     }
 
     private static string FormatBytes(long bytes) => bytes switch
@@ -328,6 +336,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RemoteTable.GridContextFlyoutOpening += RemoteTable_GridContextFlyoutOpening;
         RemoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
         RemoteTable.RecordContextFlyout = BuildRemoteRowMenu();
+        // 行上的右键由 RecordContextFlyout 接管；这里兜住落在空白区的右键，
+        // 否则空目录（连 ".." 行都没有时）就没有新建文件夹的入口了。
+        _emptyAreaMenu = BuildEmptyAreaMenu();
+        RemoteTable.RightTapped += RemoteTable_RightTapped;
 
         RemoteTable.Columns.Add(new GridTemplateColumn
         {
@@ -390,12 +402,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         menu.Items.Add(newFolder);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(properties);
-        // Syncfusion 的 GridCell 样式把字体设成了系统上并不存在的 "Segoe UI Variable Static Text"，
-        // 右键菜单挂在单元格下会继承它；而 Segoe UI Variable 系列同样不含中文字形，菜单文字只能走
-        // 字体回退，在本机落到宋体系的衬线字体上。菜单项全是中文，这里直接指定含中文字形的黑体。
-        var menuFontFamily = new FontFamily("Microsoft YaHei UI");
-        foreach (var item in menu.Items.OfType<MenuFlyoutItem>())
-            item.FontFamily = menuFontFamily;
+        ApplyChineseMenuFont(menu);
         menu.Opened += (_, _) =>
         {
             var item = SelectedItem;
@@ -410,6 +417,66 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             properties.IsEnabled = item is { Name: not ".." };
         };
         return menu;
+    }
+
+    private MenuFlyout BuildEmptyAreaMenu()
+    {
+        var menu = new MenuFlyout();
+        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
+        var upload = new MenuFlyoutItem { Text = "上传" };
+        upload.Click += (_, _) => UploadRequested?.Invoke(this, EventArgs.Empty);
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹" };
+        newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
+        menu.Items.Add(refresh);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(upload);
+        menu.Items.Add(newFolder);
+        ApplyChineseMenuFont(menu);
+        menu.Opened += (_, _) =>
+        {
+            refresh.IsEnabled = _snapshot.CanNavigate;
+            upload.IsEnabled = _snapshot.CanTransfer;
+            newFolder.IsEnabled = _snapshot.CanModifyRemoteFiles;
+        };
+        return menu;
+    }
+
+    /// <summary>
+    /// Syncfusion 的表格样式把字体设成了系统上并不存在的 "Segoe UI Variable Static Text"，
+    /// 右键菜单挂在表格下会继承它；而 Segoe UI Variable 系列同样不含中文字形，菜单文字只能走
+    /// 字体回退，在本机落到宋体系的衬线字体上。菜单项全是中文，这里直接指定含中文字形的黑体。
+    /// </summary>
+    private static void ApplyChineseMenuFont(MenuFlyout menu)
+    {
+        var menuFontFamily = new FontFamily("Microsoft YaHei UI");
+        foreach (var item in menu.Items.OfType<MenuFlyoutItem>())
+            item.FontFamily = menuFontFamily;
+    }
+
+    private void RemoteTable_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        // 落在单元格、表头或滚动条上的右键不归这里管：单元格有行菜单，表头、滚动条不该弹目录菜单。
+        if (e.OriginalSource is DependencyObject source && IsOnRowOrChrome(source)) return;
+
+        e.Handled = true;
+        _emptyAreaMenu?.ShowAt(RemoteTable, e.GetPosition(RemoteTable));
+    }
+
+    private bool IsOnRowOrChrome(DependencyObject source)
+    {
+        for (var current = source;
+             current is not null && !ReferenceEquals(current, RemoteTable);
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is GridCell
+                or GridHeaderCellControl
+                or Microsoft.UI.Xaml.Controls.Primitives.ScrollBar)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void SftpWorkspaceView_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -563,27 +630,24 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         string Message,
         string? ToolTip)
     {
-        public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot) => snapshot.State switch
+        public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot)
         {
-            SftpSessionState.ListingDirectory => new(
-                ShowsInlineMessage: true,
-                ShowsListingIndicator: true,
-                IsTransferring: false,
-                ClearsAfterDelay: false,
-                snapshot.StatusMessage,
-                snapshot.StatusMessage),
-            SftpSessionState.Transferring => new(
-                ShowsInlineMessage: false,
-                ShowsListingIndicator: false,
-                IsTransferring: true,
-                ClearsAfterDelay: false,
-                snapshot.StatusMessage,
-                snapshot.StatusMessage),
-            SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
-            SftpSessionState.Cancelled => Transient(snapshot.StatusMessage),
-            _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
-            _ => Hidden
-        };
+            var presentation = snapshot.State switch
+            {
+                SftpSessionState.ListingDirectory => new WorkspaceOperationStatusPresentation(
+                    ShowsInlineMessage: true,
+                    ShowsListingIndicator: true,
+                    IsTransferring: false,
+                    ClearsAfterDelay: false,
+                    snapshot.StatusMessage,
+                    snapshot.StatusMessage),
+                SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
+                _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
+                _ => Hidden
+            };
+            // 传输在自己的轴上进行，与浏览状态叠加呈现。
+            return presentation with { IsTransferring = snapshot.Transfer.IsActive };
+        }
 
         public static WorkspaceOperationStatusPresentation Persistent(string message) =>
             new(true, false, false, false, message, message);

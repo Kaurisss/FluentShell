@@ -13,6 +13,12 @@ public interface ISshConnection : IAsyncDisposable
     /// <summary>未连接时为 <c>null</c>。连接被替换后旧客户端不再可用。</summary>
     ISftpClient? SftpClient { get; }
 
+    /// <summary>
+    /// 传输专用的第二条 SFTP 通道，未连接时为 <c>null</c>。
+    /// 与 <see cref="SftpClient"/> 隔离，使目录浏览不必排在大文件传输后面。
+    /// </summary>
+    ISftpClient? TransferSftpClient { get; }
+
     event EventHandler<string>? OutputReceived;
     event EventHandler<HostFingerprintRequiredEventArgs>? HostFingerprintRequired;
     event EventHandler? Disconnected;

@@ -24,9 +24,10 @@ public sealed class SftpWorkspace : IDisposable
         Func<string, Stream>? createLocalOutput = null,
         Action<string>? createLocalDirectory = null,
         Action<string>? deleteLocalFile = null,
-        Action<Action>? dispatchProgress = null)
+        Action<Action>? dispatchProgress = null,
+        ISftpFileService? transferFileService = null)
     {
-        _controller = new SftpSessionController(fileService, dispatchProgress);
+        _controller = new SftpSessionController(fileService, transferFileService, dispatchProgress);
         _view = view;
         _downloadDestination = new DownloadDestination(
             localFileExists ?? File.Exists,
@@ -46,7 +47,7 @@ public sealed class SftpWorkspace : IDisposable
         _view.Render(_controller.Snapshot);
     }
 
-    public bool IsTransferActive => _controller.Snapshot.State == SftpSessionState.Transferring;
+    public bool IsTransferActive => _controller.Snapshot.Transfer.IsActive;
 
     public Task RefreshAsync() => _controller.RefreshAsync();
 
@@ -68,9 +69,9 @@ public sealed class SftpWorkspace : IDisposable
         foreach (var file in files)
         {
             await _controller.UploadAsync(file.Name, file.OpenRead, _view.ConfirmOverwriteAsync);
-            // 用户按下取消是针对整批的，不只是当前这个文件：控制器停在 Cancelled 上，
+            // 用户按下取消是针对整批的，不只是当前这个文件：传输轴停在 Cancelled 上，
             // 而 Cancelled 允许下一次传输开始，所以停止的判断必须在这里做。
-            if (_controller.Snapshot.State == SftpSessionState.Cancelled) return;
+            if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) return;
         }
     }
 

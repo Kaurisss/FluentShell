@@ -29,6 +29,7 @@ public sealed class SessionConnection : IAsyncDisposable
     private readonly Action<Action> _post;
     private readonly Action _cancelTransfers;
     private readonly ISftpFileService _remoteFiles;
+    private readonly ISftpFileService _transferRemoteFiles;
     private ISshConnection? _active;
     private CancellationTokenSource? _metricsCts;
     private SessionConnectionState _state = SessionConnectionState.Disconnected;
@@ -49,11 +50,15 @@ public sealed class SessionConnection : IAsyncDisposable
         _post = post;
         _cancelTransfers = cancelTransfers;
         _remoteFiles = new SftpFileService(() => _active?.SftpClient);
+        _transferRemoteFiles = new SftpFileService(() => _active?.TransferSftpClient);
     }
 
     public SessionConnectionState State => _state;
     public bool IsConnected => _active?.IsConnected == true;
     public ISftpFileService RemoteFiles => _remoteFiles;
+
+    /// <summary>传输专用通道上的远程文件 I/O，浏览与传输互不排队。</summary>
+    public ISftpFileService TransferRemoteFiles => _transferRemoteFiles;
 
     /// <summary>写往终端的文本：主机输出与本模块产生的连接提示。</summary>
     public event EventHandler<string>? Output;

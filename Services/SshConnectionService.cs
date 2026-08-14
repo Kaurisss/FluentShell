@@ -20,7 +20,9 @@ public sealed class SshConnectionService : ISshConnection
     private SshClient? _sshClient;
     private ShellStream? _shell;
     private SftpClient? _sftpClient;
+    private SftpClient? _transferSftpClient;
     private ISftpClient? _remoteFileClient;
+    private ISftpClient? _transferFileClient;
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
     private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
@@ -38,12 +40,14 @@ public sealed class SshConnectionService : ISshConnection
 
     public bool IsConnected => _sshClient?.IsConnected == true;
     public ISftpClient? SftpClient => _remoteFileClient;
+    public ISftpClient? TransferSftpClient => _transferFileClient;
     public string? LastFingerprint { get; private set; }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         SshClient? sshClient = null;
         SftpClient? sftpClient = null;
+        SftpClient? transferSftpClient = null;
         try
         {
             sshClient = new SshClient(CreateConnectionInfo());
@@ -60,10 +64,18 @@ public sealed class SshConnectionService : ISshConnection
             sftpClient.HostKeyReceived += OnHostKeyReceived;
             await ConnectClientAsync(sftpClient, cancellationToken).ConfigureAwait(false);
 
+            // 传输走独立连接：SSH.NET 客户端不保证并发安全，
+            // 浏览目录不该排在大文件传输后面。
+            transferSftpClient = new SftpClient(CreateConnectionInfo());
+            transferSftpClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(transferSftpClient, cancellationToken).ConfigureAwait(false);
+
             _sshClient = sshClient;
             _shell = shell;
             _sftpClient = sftpClient;
+            _transferSftpClient = transferSftpClient;
             _remoteFileClient = new SshNetSftpClient(sftpClient);
+            _transferFileClient = new SshNetSftpClient(transferSftpClient);
             _readCts = new CancellationTokenSource();
             _ = ReadOutputLoopAsync(_readCts.Token);
         }
@@ -72,7 +84,10 @@ public sealed class SshConnectionService : ISshConnection
             _sshClient = null;
             _shell = null;
             _sftpClient = null;
+            _transferSftpClient = null;
             _remoteFileClient = null;
+            _transferFileClient = null;
+            ScheduleDispose(transferSftpClient);
             ScheduleDispose(sftpClient);
             ScheduleDispose(sshClient);
             throw;
@@ -311,6 +326,8 @@ public sealed class SshConnectionService : ISshConnection
         {
             await Task.Run(() =>
             {
+                try { _transferSftpClient?.Disconnect(); } catch { }
+                try { _transferSftpClient?.Dispose(); } catch { }
                 try { _sftpClient?.Disconnect(); } catch { }
                 try { _sftpClient?.Dispose(); } catch { }
                 try { _sshClient?.Disconnect(); } catch { }

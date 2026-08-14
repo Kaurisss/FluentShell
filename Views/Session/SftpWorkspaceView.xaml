@@ -43,7 +43,9 @@
                 FontSize="12"
                 Height="36"
                 MinHeight="0"
+                Padding="10,8,6,8"
                 VerticalAlignment="Center"
+                VerticalContentAlignment="Center"
                 IsSpellCheckEnabled="False"
                 KeyDown="PathBox_KeyDown" />
             <StackPanel
@@ -95,6 +97,7 @@
                     ToolTipService.ToolTip="刷新"
                     Click="RefreshButton_Click" />
                 <AppBarButton
+                    x:Name="UploadButton"
                     Style="{StaticResource CommandBarIconButtonStyle}"
                     Label="上传"
                     Icon="Upload"

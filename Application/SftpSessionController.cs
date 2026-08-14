@@ -3,13 +3,33 @@ using FluentShell.Services;
 
 namespace FluentShell.Core;
 
+/// <summary>浏览轴的状态。传输在独立的传输轴上进行（<see cref="SftpTransferState"/>），
+/// 两轴各走一条 SFTP 通道，浏览不必等传输。</summary>
 public enum SftpSessionState
 {
     Idle,
     ListingDirectory,
+    Failed
+}
+
+/// <summary>传输轴的状态。终态（完成/取消/失败）连同消息保留到下一次传输开始。</summary>
+public enum SftpTransferState
+{
+    None,
     Transferring,
+    Completed,
     Cancelled,
     Failed
+}
+
+public sealed record SftpTransferSnapshot(
+    SftpTransferState State,
+    string Message,
+    SftpTransferProgress? Progress)
+{
+    public static readonly SftpTransferSnapshot None = new(SftpTransferState.None, string.Empty, null);
+
+    public bool IsActive => State == SftpTransferState.Transferring;
 }
 
 /// <summary>
@@ -38,9 +58,11 @@ public sealed record SftpSessionSnapshot(
     bool CanTransfer,
     string StatusMessage,
     string? ErrorMessage,
-    SftpFailureKind FailureKind = SftpFailureKind.None,
-    SftpTransferProgress? TransferProgress = null)
+    SftpFailureKind FailureKind = SftpFailureKind.None)
 {
+    /// <summary>传输轴。与浏览轴并行，浏览状态不受传输影响。</summary>
+    public SftpTransferSnapshot Transfer { get; init; } = SftpTransferSnapshot.None;
+
     public string CurrentPath => DirectoryListing.Path;
 }
 
@@ -62,6 +84,7 @@ public sealed class SftpSessionController : IDisposable
     private const int MaxDownloadDepth = 32;
 
     private readonly ISftpFileService _fileService;
+    private readonly ISftpFileService _transferService;
     private readonly Action<Action> _dispatchProgress;
     private readonly SemaphoreSlim _transferGate = new(1, 1);
     private SftpDirectoryListing _directoryListing = SftpDirectoryListing.Empty("/");
@@ -70,16 +93,23 @@ public sealed class SftpSessionController : IDisposable
     private string _statusMessage = string.Empty;
     private string? _errorMessage;
     private SftpFailureKind _failureKind = SftpFailureKind.None;
-    private SftpTransferProgress? _transferProgress;
+    private SftpTransferSnapshot _transfer = SftpTransferSnapshot.None;
 
-    /// <param name="fileService">远程文件操作。</param>
+    /// <param name="fileService">浏览轴的远程文件操作：目录列表、重命名、删除、新建。</param>
+    /// <param name="transferFileService">
+    /// 传输轴的远程文件操作。给独立通道才能边传输边浏览；缺省复用浏览通道（供测试用）。
+    /// </param>
     /// <param name="dispatchProgress">
     /// 字节进度回调发生在传输流的写入线程上，与其余一律在调用方线程发布的快照不同，
     /// 必须经此接缝编组回调用方线程。缺省为就地执行（供测试用）。
     /// </param>
-    public SftpSessionController(ISftpFileService fileService, Action<Action>? dispatchProgress = null)
+    public SftpSessionController(
+        ISftpFileService fileService,
+        ISftpFileService? transferFileService = null,
+        Action<Action>? dispatchProgress = null)
     {
         _fileService = fileService;
+        _transferService = transferFileService ?? fileService;
         _dispatchProgress = dispatchProgress ?? (work => work());
     }
 
@@ -89,7 +119,7 @@ public sealed class SftpSessionController : IDisposable
 
     public void CancelTransfer()
     {
-        if (_state != SftpSessionState.Transferring) return;
+        if (!_transfer.IsActive) return;
         _transferCts?.Cancel();
     }
 
@@ -199,11 +229,11 @@ public sealed class SftpSessionController : IDisposable
                 return OperationOutcome.Failure(error);
 
             var remotePath = RemotePath.Combine(_directoryListing.Path, localFileName);
-            if (await _fileService.ExistsAsync(remotePath) && !await confirmOverwrite(localFileName))
+            if (await _transferService.ExistsAsync(remotePath) && !await confirmOverwrite(localFileName))
                 return OperationOutcome.Failure("已跳过现有文件。");
 
             using var input = await openInput();
-            await _fileService.UploadAsync(input, remotePath, cancellationToken);
+            await _transferService.UploadAsync(input, remotePath, cancellationToken);
             return OperationOutcome.Success($"已上传 {localFileName}。");
         }, refreshDirectory: true);
 
@@ -234,7 +264,7 @@ public sealed class SftpSessionController : IDisposable
                     using var output = new ByteCountingStream(
                         destination.CreateOutput(localPath),
                         reporter.OnCurrentFileBytes);
-                    await _fileService.DownloadAsync(item.FullPath, output, cancellationToken);
+                    await _transferService.DownloadAsync(item.FullPath, output, cancellationToken);
                 }
                 catch
                 {
@@ -247,7 +277,7 @@ public sealed class SftpSessionController : IDisposable
 
             // 目录先统计再传输：总量已知，进度才能是确定的。统计阶段快照没有进度，
             // 视图在这段时间退回不确定指示。
-            Transition(SftpSessionState.Transferring, $"正在统计 {item.Name} 中的文件…");
+            TransitionTransfer(SftpTransferState.Transferring, $"正在统计 {item.Name} 中的文件…");
             var plan = new List<PlannedDownload>();
             var collectFailure = await CollectDownloadPlanAsync(
                 item.FullPath,
@@ -273,13 +303,13 @@ public sealed class SftpSessionController : IDisposable
                     continue;
                 }
 
-                Transition(SftpSessionState.Transferring, $"正在下载 {file.RelativePath}…");
+                TransitionTransfer(SftpTransferState.Transferring, $"正在下载 {file.RelativePath}…");
                 try
                 {
                     using var output = new ByteCountingStream(
                         destination.CreateOutput(file.LocalPath),
                         directoryReporter.OnCurrentFileBytes);
-                    await _fileService.DownloadAsync(file.RemotePath, output, cancellationToken);
+                    await _transferService.DownloadAsync(file.RemotePath, output, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -327,9 +357,9 @@ public sealed class SftpSessionController : IDisposable
             return OperationOutcome.Failure($"“{relativePath}”层级过深，可能存在循环链接。");
 
         // 大目录树的统计要走完整棵树，逐目录汇报发现数，别让用户以为卡死了。
-        Transition(SftpSessionState.Transferring, $"正在统计 {relativePath}…（已发现 {plan.Count} 个文件）");
+        TransitionTransfer(SftpTransferState.Transferring, $"正在统计 {relativePath}…（已发现 {plan.Count} 个文件）");
         destination.CreateDirectory(localDirectory);
-        var entries = await _fileService.ListDirectoryAsync(remotePath);
+        var entries = await _transferService.ListDirectoryAsync(remotePath);
         foreach (var entry in entries)
         {
             // 目录列表为呈现合成的父目录条目，不属于目录内容。
@@ -373,8 +403,8 @@ public sealed class SftpSessionController : IDisposable
     private void PublishTransferProgress(SftpTransferProgress progress)
     {
         // 编组过来的进度可能晚于传输收尾到达，传输已结束就丢弃。
-        if (_state != SftpSessionState.Transferring) return;
-        _transferProgress = progress;
+        if (!_transfer.IsActive) return;
+        _transfer = _transfer with { Progress = progress };
         SnapshotChanged?.Invoke(this, CreateSnapshot());
     }
 
@@ -416,38 +446,42 @@ public sealed class SftpSessionController : IDisposable
     {
         if (!CanStartTransfer())
         {
-            PublishOperationStatus("当前操作尚未完成。");
+            PublishOperationStatus(_transfer.IsActive ? "已有传输正在进行。" : "SFTP 尚未连接。");
             return;
         }
 
         await _transferGate.WaitAsync();
         _transferCts = new CancellationTokenSource();
-        Transition(SftpSessionState.Transferring, $"正在{action}…");
+        TransitionTransfer(SftpTransferState.Transferring, $"正在{action}…");
         try
         {
             var result = await operation(_transferCts.Token);
             if (!result.Succeeded)
             {
                 // Error 是部分完成、值得弹窗解释的结果；普通 Failure（校验、用户拒绝）安静收尾。
-                if (result.IsError)
-                    Transition(SftpSessionState.Failed, result.Message, result.Message, SftpFailureKind.Operation);
-                else
-                    Transition(SftpSessionState.Idle, result.Message);
+                TransitionTransfer(
+                    result.IsError ? SftpTransferState.Failed : SftpTransferState.Completed,
+                    result.Message);
+                PublishOperationStatus(result.Message);
                 return;
             }
 
+            TransitionTransfer(SftpTransferState.Completed, result.Message);
             if (refreshDirectory)
                 await RefreshDirectoryAsync(_directoryListing.Path, result.Message);
             else
-                Transition(SftpSessionState.Idle, result.Message);
+                PublishOperationStatus(result.Message);
         }
         catch (OperationCanceledException)
         {
-            Transition(SftpSessionState.Cancelled, $"{action}已取消。");
+            TransitionTransfer(SftpTransferState.Cancelled, $"{action}已取消。");
+            PublishOperationStatus($"{action}已取消。");
         }
         catch (Exception exception)
         {
-            FailOperation($"{action}失败", exception);
+            var message = $"{action}失败：{DescribeError(exception)}";
+            TransitionTransfer(SftpTransferState.Failed, message);
+            PublishOperationStatus(message);
         }
         finally
         {
@@ -487,9 +521,9 @@ public sealed class SftpSessionController : IDisposable
     private void PublishOperationStatus(string message) =>
         Transition(_state, message);
 
-    private bool CanNavigate() => _state is not SftpSessionState.ListingDirectory and not SftpSessionState.Transferring;
+    private bool CanNavigate() => _state != SftpSessionState.ListingDirectory;
     private bool CanModifyRemoteFiles() => CanNavigate() && _fileService.IsConnected;
-    private bool CanStartTransfer() => CanNavigate() && _fileService.IsConnected;
+    private bool CanStartTransfer() => !_transfer.IsActive && _transferService.IsConnected;
 
     private void Transition(
         SftpSessionState state,
@@ -501,8 +535,14 @@ public sealed class SftpSessionController : IDisposable
         _statusMessage = statusMessage;
         _errorMessage = errorMessage;
         _failureKind = state == SftpSessionState.Failed ? failureKind : SftpFailureKind.None;
-        // 传输途中的状态更新（逐文件消息）保留进度；离开传输态即清空。
-        if (state != SftpSessionState.Transferring) _transferProgress = null;
+        SnapshotChanged?.Invoke(this, CreateSnapshot());
+    }
+
+    private void TransitionTransfer(SftpTransferState state, string message)
+    {
+        // 传输途中的消息更新（逐文件、统计心跳）保留进度；进入终态即清空。
+        var progress = state == SftpTransferState.Transferring ? _transfer.Progress : null;
+        _transfer = new SftpTransferSnapshot(state, message, progress);
         SnapshotChanged?.Invoke(this, CreateSnapshot());
     }
 
@@ -510,14 +550,16 @@ public sealed class SftpSessionController : IDisposable
         new(
             _state,
             _directoryListing,
-            _state is SftpSessionState.ListingDirectory or SftpSessionState.Transferring,
+            _state == SftpSessionState.ListingDirectory || _transfer.IsActive,
             CanNavigate(),
             CanModifyRemoteFiles(),
             CanStartTransfer(),
             _statusMessage,
             _errorMessage,
-            _failureKind,
-            _transferProgress);
+            _failureKind)
+        {
+            Transfer = _transfer
+        };
 
     public void Dispose()
     {

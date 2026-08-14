@@ -133,7 +133,7 @@ public sealed class SftpWorkspaceTests
         await workspace.UploadAsync();
 
         Assert.AreEqual(1, fileService.UploadCallCount, "用户取消后不应继续上传剩余文件。");
-        Assert.AreEqual(SftpSessionState.Cancelled, view.LastSnapshot.State);
+        Assert.AreEqual(SftpTransferState.Cancelled, view.LastSnapshot!.Transfer.State);
     }
 
     [TestMethod]

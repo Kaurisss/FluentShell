@@ -217,6 +217,7 @@ public sealed class SessionConnectionTests
     {
         public bool IsConnected { get; set; }
         public ISftpClient? SftpClient => IsConnected ? RemoteFileClient : null;
+        public ISftpClient? TransferSftpClient => IsConnected ? RemoteFileClient : null;
         public FakeSftpClient RemoteFileClient { get; } = new();
         public Exception? ConnectFailure { get; init; }
         public int ConnectCount { get; private set; }
