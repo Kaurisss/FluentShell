@@ -43,7 +43,7 @@
                 FontSize="12"
                 Height="36"
                 MinHeight="0"
-                Padding="10,8,6,8"
+                Padding="10,10,6,10"
                 VerticalAlignment="Center"
                 VerticalContentAlignment="Center"
                 IsSpellCheckEnabled="False"

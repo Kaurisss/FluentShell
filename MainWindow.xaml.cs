@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private readonly ShellLayoutMode _layout = new();
     private bool _loaded;
     private bool _isSessionLayout;
+    private ConnectionDialog? _connectionDialog;
 
     public MainWindow()
     {
@@ -204,8 +205,6 @@ public sealed partial class MainWindow : Window
         var isNarrow = layout.IsNarrow;
         ApplyContentSpacing();
         SessionTabHost.Margin = isNarrow ? new Thickness(56, 0, 180, 0) : new Thickness(65, 0, 300, 0);
-        ConnectionProgressText.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
-        ConnectionProgressPanel.Spacing = isNarrow ? 0 : 8;
         _serverCatalogPage.UpdateResponsiveLayout(isNarrow);
     }
 
@@ -342,11 +341,38 @@ public sealed partial class MainWindow : Window
     private Task<bool> ConfirmCloseSessionAsync(IShellSession session) =>
         ShellDialogService.ConfirmCloseSessionAsync(Content.XamlRoot, session.Profile.Name);
 
-    private void SetConnectionProgress(ConnectionProgressChangedEventArgs args)
+    private async void SetConnectionProgress(ConnectionProgressChangedEventArgs args)
     {
-        ConnectionProgressPanel.Visibility = args.IsActive ? Visibility.Visible : Visibility.Collapsed;
-        ConnectionProgressRing.IsActive = args.IsActive;
-        if (args.Message is not null) ConnectionProgressText.Text = args.Message;
-        _serverCatalogPage.SetBusy(args.IsActive);
+        if (args.IsActive)
+        {
+            // 显示连接对话框
+            _connectionDialog = new ConnectionDialog
+            {
+                XamlRoot = Content.XamlRoot
+            };
+            if (args.Message is not null)
+            {
+                _connectionDialog.UpdateMessage(args.Message);
+            }
+
+            // 当用户点击"取消连接"时
+            _connectionDialog.CloseButtonClick += (_, _) =>
+            {
+                _shell.CancelConnection();
+            };
+
+            _serverCatalogPage.SetBusy(true);
+            _ = _connectionDialog.ShowAsync();
+        }
+        else
+        {
+            // 关闭连接对话框
+            if (_connectionDialog is not null)
+            {
+                _connectionDialog.Hide();
+                _connectionDialog = null;
+            }
+            _serverCatalogPage.SetBusy(false);
+        }
     }
 }

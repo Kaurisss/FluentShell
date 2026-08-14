@@ -31,10 +31,6 @@
                 </Grid>
             </Button>
             <ContentPresenter x:Name="SessionTabHost" Margin="65,0,300,0" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
-            <StackPanel x:Name="ConnectionProgressPanel" Margin="0,0,150,0" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Visibility="Collapsed">
-                <ProgressRing x:Name="ConnectionProgressRing" Width="18" Height="18" IsActive="False" />
-                <TextBlock x:Name="ConnectionProgressText" Text="连接中…" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" />
-            </StackPanel>
         </Grid>
 
         <NavigationView

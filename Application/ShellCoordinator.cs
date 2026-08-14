@@ -63,6 +63,7 @@ public sealed class ShellCoordinator
     private readonly Dictionary<Guid, bool> _credentialPersistenceOverrides = [];
     private AppSettings _settings = new();
     private string _lastResult = "准备就绪";
+    private CancellationTokenSource? _connectionCancellation;
 
     public ShellCoordinator(
         ILocalStore localStore,
@@ -96,6 +97,11 @@ public sealed class ShellCoordinator
     {
         _settings = await _localStore.LoadAsync();
         NotifyStateChanged();
+    }
+
+    public void CancelConnection()
+    {
+        _connectionCancellation?.Cancel();
     }
 
     public bool HasSavedCredential(ServerProfile profile) => _localStore.TryGetSecret(profile) is not null;
@@ -176,6 +182,7 @@ public sealed class ShellCoordinator
         }
         if (!_sessions.TryBeginConnection(profile.Id)) return;
 
+        _connectionCancellation = new CancellationTokenSource();
         var session = _sessionFactory(
             profile,
             () => ResolveSecretAsync(profile),
@@ -189,10 +196,16 @@ public sealed class ShellCoordinator
         {
             await session.ConnectAsync();
         }
+        catch (OperationCanceledException)
+        {
+            // Connection was cancelled by user
+        }
         finally
         {
             _sessions.EndConnection(profile.Id);
             ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
+            _connectionCancellation?.Dispose();
+            _connectionCancellation = null;
         }
 
         if (!session.IsConnected)
@@ -231,6 +244,7 @@ public sealed class ShellCoordinator
             return;
         if (!_sessions.TryBeginConnection(session.Profile.Id)) return;
 
+        _connectionCancellation = new CancellationTokenSource();
         ConnectionProgressChanged?.Invoke(
             this,
             new ConnectionProgressChangedEventArgs(true, $"正在重新连接 {session.Profile.Name}…"));
@@ -238,10 +252,16 @@ public sealed class ShellCoordinator
         {
             await session.ConnectAsync();
         }
+        catch (OperationCanceledException)
+        {
+            // Connection was cancelled by user
+        }
         finally
         {
             _sessions.EndConnection(session.Profile.Id);
             ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
+            _connectionCancellation?.Dispose();
+            _connectionCancellation = null;
             NotifyStateChanged();
         }
     }
