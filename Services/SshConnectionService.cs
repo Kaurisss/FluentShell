@@ -1,6 +1,7 @@
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using FluentShell.Models;
+using Org.BouncyCastle.Crypto;
 
 namespace FluentShell.Services;
 
@@ -11,15 +12,21 @@ public sealed class HostFingerprintRequiredEventArgs : EventArgs
     public bool Accepted { get; set; }
 }
 
-public sealed class SshConnectionService : IAsyncDisposable
+public sealed class SshConnectionService : ISshConnection
 {
+    private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(12);
     private readonly ServerProfile _profile;
     private readonly string _secret;
     private SshClient? _sshClient;
     private ShellStream? _shell;
     private SftpClient? _sftpClient;
+    private SftpClient? _transferSftpClient;
+    private ISftpClient? _remoteFileClient;
+    private ISftpClient? _transferFileClient;
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
+    private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
+    private readonly LinuxCpuUsageCalculator _cpuUsageCalculator = new();
 
     public SshConnectionService(ServerProfile profile, string secret)
     {
@@ -32,28 +39,127 @@ public sealed class SshConnectionService : IAsyncDisposable
     public event EventHandler? Disconnected;
 
     public bool IsConnected => _sshClient?.IsConnected == true;
-    public SftpClient? SftpClient => _sftpClient;
+    public ISftpClient? SftpClient => _remoteFileClient;
+    public ISftpClient? TransferSftpClient => _transferFileClient;
     public string? LastFingerprint { get; private set; }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Run(() => ConnectCore(cancellationToken), cancellationToken);
+        SshClient? sshClient = null;
+        SftpClient? sftpClient = null;
+        SftpClient? transferSftpClient = null;
+        try
+        {
+            sshClient = new SshClient(CreateConnectionInfo());
+            sshClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(sshClient, cancellationToken).ConfigureAwait(false);
+
+            var shell = await AwaitOperationAsync(
+                Task.Run(
+                    () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
+                    cancellationToken),
+                cancellationToken).ConfigureAwait(false);
+
+            sftpClient = new SftpClient(CreateConnectionInfo());
+            sftpClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(sftpClient, cancellationToken).ConfigureAwait(false);
+
+            // 传输走独立连接：SSH.NET 客户端不保证并发安全，
+            // 浏览目录不该排在大文件传输后面。
+            transferSftpClient = new SftpClient(CreateConnectionInfo());
+            transferSftpClient.HostKeyReceived += OnHostKeyReceived;
+            await ConnectClientAsync(transferSftpClient, cancellationToken).ConfigureAwait(false);
+
+            _sshClient = sshClient;
+            _shell = shell;
+            _sftpClient = sftpClient;
+            _transferSftpClient = transferSftpClient;
+            _remoteFileClient = new SshNetSftpClient(sftpClient);
+            _transferFileClient = new SshNetSftpClient(transferSftpClient);
+            _readCts = new CancellationTokenSource();
+            _ = ReadOutputLoopAsync(_readCts.Token);
+        }
+        catch
+        {
+            _sshClient = null;
+            _shell = null;
+            _sftpClient = null;
+            _transferSftpClient = null;
+            _remoteFileClient = null;
+            _transferFileClient = null;
+            ScheduleDispose(transferSftpClient);
+            ScheduleDispose(sftpClient);
+            ScheduleDispose(sshClient);
+            throw;
+        }
     }
 
-    private void ConnectCore(CancellationToken cancellationToken)
+    private static async Task ConnectClientAsync(BaseClient client, CancellationToken cancellationToken)
     {
-        var sshConnectionInfo = CreateConnectionInfo();
-        _sshClient = new SshClient(sshConnectionInfo);
-        _sshClient.HostKeyReceived += OnHostKeyReceived;
-        _sshClient.Connect();
-        cancellationToken.ThrowIfCancellationRequested();
+        await AwaitOperationAsync(client.ConnectAsync(cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
 
-        _shell = _sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096);
-        _sftpClient = new SftpClient(CreateConnectionInfo());
-        _sftpClient.HostKeyReceived += OnHostKeyReceived;
-        _sftpClient.Connect();
-        _readCts = new CancellationTokenSource();
-        _ = ReadOutputLoopAsync(_readCts.Token);
+    private static async Task AwaitOperationAsync(
+        Task operation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await operation.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ObserveFault(operation);
+            throw;
+        }
+    }
+
+    private static async Task<T> AwaitOperationAsync<T>(
+        Task<T> operation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await operation.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ObserveFault(operation);
+            throw;
+        }
+    }
+
+    private static void ObserveFault(Task task) =>
+        _ = task.ContinueWith(
+            static completedTask => { _ = completedTask.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    private static void ScheduleDispose(BaseClient? client)
+    {
+        if (client is null) return;
+        _ = Task.Run(() =>
+        {
+            try { client.Dispose(); } catch { }
+        });
+    }
+
+    internal static bool RequiresPrivateKeyPassphrase(string privateKeyPath)
+    {
+        try
+        {
+            _ = new PrivateKeyFile(privateKeyPath, null);
+            return false;
+        }
+        catch (SshPassPhraseNullOrEmptyException)
+        {
+            return true;
+        }
+        catch (InvalidCipherTextException)
+        {
+            return true;
+        }
     }
 
     private ConnectionInfo CreateConnectionInfo()
@@ -66,7 +172,7 @@ public sealed class SshConnectionService : IAsyncDisposable
 
         return new ConnectionInfo(_profile.Host, _profile.Port, _profile.Username, auth)
         {
-            Timeout = TimeSpan.FromSeconds(12)
+            Timeout = ConnectionTimeout
         };
     }
 
@@ -154,17 +260,42 @@ public sealed class SshConnectionService : IAsyncDisposable
         if (!IsConnected) return null;
         try
         {
-            const string metricsCommand = "LC_ALL=C top -bn1 | awk '/Cpu\\(s\\)/ {print \"CpuUsage=\" $2+$4}'; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
-            var command = await Task.Run(() => _sshClient!.RunCommand(metricsCommand).Result, cancellationToken);
-            return ParseMetrics(command);
+            await _metricsCommandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (!IsConnected) return null;
+
+                const string metricsCommand = "head -n 1 /proc/stat; cat /proc/loadavg; awk '/MemTotal|MemAvailable|SwapTotal|SwapFree/ {gsub(\":\", \"\", $1); printf \"%s=%s\\n\", $1, $2}' /proc/meminfo; uname -sr; hostname; uptime -p";
+                using var command = _sshClient!.CreateCommand(metricsCommand);
+                // SSH.NET waits synchronously for channel-open before returning ExecuteAsync's task.
+                await Task.Run(
+                    () => command.ExecuteAsync(cancellationToken),
+                    cancellationToken).ConfigureAwait(false);
+                return ParseMetrics(command.Result);
+            }
+            finally
+            {
+                _metricsCommandGate.Release();
+            }
         }
-        catch { return null; }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
-    private static ServerMetrics ParseMetrics(string output)
+    private ServerMetrics ParseMetrics(string output)
     {
         var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-        var load = lines.FirstOrDefault(line => !line.Contains('=') && line.Count(character => character == ' ') >= 2) ?? "";
+        var cpuPercent = _cpuUsageCalculator.AddSample(lines.FirstOrDefault() ?? string.Empty);
+        var load = lines.FirstOrDefault(line =>
+            !line.StartsWith("cpu ", StringComparison.Ordinal) &&
+            !line.Contains('=') &&
+            line.Count(character => character == ' ') >= 2) ?? "";
         var values = lines.Where(line => line.Contains('='))
             .Select(line => line.Split('=', 2))
             .GroupBy(parts => parts[0])
@@ -177,7 +308,7 @@ public sealed class SshConnectionService : IAsyncDisposable
         var swap = swapTotal <= 0 ? 0 : (swapTotal - swapFree) / swapTotal * 100;
         return new ServerMetrics
         {
-            CpuPercent = Math.Clamp(values.GetValueOrDefault("CpuUsage"), 0, 100),
+            CpuPercent = cpuPercent,
             MemoryPercent = Math.Clamp(memory, 0, 100),
             SwapPercent = Math.Clamp(swap, 0, 100),
             LoadAverage = load.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "—",
@@ -195,6 +326,8 @@ public sealed class SshConnectionService : IAsyncDisposable
         {
             await Task.Run(() =>
             {
+                try { _transferSftpClient?.Disconnect(); } catch { }
+                try { _transferSftpClient?.Dispose(); } catch { }
                 try { _sftpClient?.Disconnect(); } catch { }
                 try { _sftpClient?.Dispose(); } catch { }
                 try { _sshClient?.Disconnect(); } catch { }

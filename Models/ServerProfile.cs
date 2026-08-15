@@ -19,7 +19,6 @@ public sealed class ServerProfile : INotifyPropertyChanged
     private string _privateKeyPath = string.Empty;
     private string _notes = string.Empty;
     private string _hostFingerprint = string.Empty;
-    private bool _showHiddenFiles = true;
     private DateTimeOffset? _lastConnectedAt;
 
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -32,7 +31,6 @@ public sealed class ServerProfile : INotifyPropertyChanged
     public string PrivateKeyPath { get => _privateKeyPath; set => SetField(ref _privateKeyPath, value); }
     public string Notes { get => _notes; set => SetField(ref _notes, value); }
     public string HostFingerprint { get => _hostFingerprint; set => SetField(ref _hostFingerprint, value); }
-    public bool ShowHiddenFiles { get => _showHiddenFiles; set => SetField(ref _showHiddenFiles, value); }
     public DateTimeOffset? LastConnectedAt { get => _lastConnectedAt; set => SetField(ref _lastConnectedAt, value); }
 
     public string Address => $"{Host}:{Port}";
@@ -54,16 +52,22 @@ public sealed class ServerProfile : INotifyPropertyChanged
 
 public sealed class AppSettings : INotifyPropertyChanged
 {
+    public static string DefaultDownloadDirectory { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads");
+
     private string _theme = "系统";
     private string _backdropMaterial = "Mica";
     private double _terminalFontSize = 14;
-    private string _downloadDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private string _downloadDirectory = DefaultDownloadDirectory;
+    private bool _hasCustomDownloadDirectory;
     private bool _rememberCredentials;
 
     public string Theme { get => _theme; set => SetField(ref _theme, value); }
     public string BackdropMaterial { get => _backdropMaterial; set => SetField(ref _backdropMaterial, value); }
     public double TerminalFontSize { get => _terminalFontSize; set => SetField(ref _terminalFontSize, value); }
     public string DownloadDirectory { get => _downloadDirectory; set => SetField(ref _downloadDirectory, value); }
+    public bool HasCustomDownloadDirectory { get => _hasCustomDownloadDirectory; set => SetField(ref _hasCustomDownloadDirectory, value); }
     public bool RememberCredentials { get => _rememberCredentials; set => SetField(ref _rememberCredentials, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -96,7 +100,7 @@ public sealed partial class RemoteFileItem
 
 public sealed class ServerMetrics
 {
-    public double CpuPercent { get; init; }
+    public double? CpuPercent { get; init; }
     public double MemoryPercent { get; init; }
     public double SwapPercent { get; init; }
     public string LoadAverage { get; init; } = "—";

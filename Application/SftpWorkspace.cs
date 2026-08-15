@@ -1,0 +1,215 @@
+using FluentShell.Models;
+using FluentShell.Services;
+using FluentShell.Views.Shell;
+using Microsoft.UI.Xaml.Controls;
+
+namespace FluentShell.Core;
+
+/// <summary>
+/// SFTP 工作区的提示流程：先向用户取得确认、名称或目录，再把结果作为值交给
+/// <see cref="SftpSessionController"/>，并把控制器的快照送回视图。
+/// </summary>
+/// <remarks>
+/// 每条流程都以 <c>public Task</c> 方法暴露，视图事件只是它们的转发器 —— 这样
+/// “先确认再执行”的判断可以在不启动窗口的情况下被等待和断言。
+/// </remarks>
+public sealed class SftpWorkspace : IDisposable
+{
+    private readonly SftpSessionController _controller;
+    private readonly ISftpWorkspaceView _view;
+    private readonly DownloadDestination _downloadDestination;
+    private readonly FileConflictResolver _conflictResolver = new();
+
+    public SftpWorkspace(
+        ISftpFileService fileService,
+        ISftpWorkspaceView view,
+        Func<string, bool>? localFileExists = null,
+        Func<string, Stream>? createLocalOutput = null,
+        Action<string>? createLocalDirectory = null,
+        Action<string>? deleteLocalFile = null,
+        Action<Action>? dispatchProgress = null,
+        ISftpFileService? transferFileService = null)
+    {
+        _controller = new SftpSessionController(fileService, transferFileService, dispatchProgress);
+        _view = view;
+        _downloadDestination = new DownloadDestination(
+            localFileExists ?? File.Exists,
+            createLocalOutput ?? (path => File.Create(path)),
+            createLocalDirectory ?? (path => Directory.CreateDirectory(path)),
+            deleteLocalFile ?? File.Delete);
+
+        _controller.SnapshotChanged += Controller_SnapshotChanged;
+        _view.RefreshRequested += View_RefreshRequested;
+        _view.NavigateRequested += View_NavigateRequested;
+        _view.NewFolderRequested += View_NewFolderRequested;
+        _view.UploadRequested += View_UploadRequested;
+        _view.DownloadRequested += View_DownloadRequested;
+        _view.RenameRequested += View_RenameRequested;
+        _view.DeleteRequested += View_DeleteRequested;
+        _view.CancelTransferRequested += View_CancelTransferRequested;
+        _view.Render(_controller.Snapshot);
+    }
+
+    public bool IsTransferActive => _controller.Snapshot.Transfer.IsActive;
+
+    public Task RefreshAsync() => _controller.RefreshAsync();
+
+    public Task NavigateToAsync(string path) => _controller.NavigateToAsync(path);
+
+    public void CancelTransfer() => _controller.CancelTransfer();
+
+    public async Task CreateFolderAsync()
+    {
+        var name = await _view.PromptTextAsync("新建文件夹", "文件夹名称");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        await _controller.CreateDirectoryAsync(name);
+    }
+
+    public async Task UploadAsync()
+    {
+        var files = await _view.PickUploadFilesAsync();
+        if (files.Count == 0) return;
+
+        _view.ShowTransferStatus();
+        _conflictResolver.Reset();
+
+        // 构建传输队列：收集所有文件信息并添加到队列管理器
+        await _controller.BuildUploadQueueAsync(files);
+
+        foreach (var file in files)
+        {
+            await _controller.UploadAsync(
+                file.Name,
+                file.OpenRead,
+                async name =>
+                {
+                    var resolution = await _conflictResolver.ResolveConflictAsync(
+                        name,
+                        async fileName =>
+                        {
+                            // 直接创建并显示 FileConflictDialog
+                            var view = _view as UserControl;
+                            if (view?.XamlRoot is null) return (false, false, true);
+
+                            var dialog = new FileConflictDialog
+                            {
+                                Message = $"\"{fileName}\"已存在，是否覆盖？",
+                                XamlRoot = view.XamlRoot
+                            };
+                            await dialog.ShowAsync();
+
+                            return (
+                                dialog.Resolution == FileConflictResolution.Overwrite,
+                                dialog.ApplyToAll,
+                                dialog.Resolution == FileConflictResolution.CancelAll
+                            );
+                        });
+
+                    // null 表示取消全部
+                    if (resolution is null)
+                    {
+                        _controller.CancelTransfer();
+                        return false;
+                    }
+                    return resolution.Value;
+                });
+
+            // 用户按下取消是针对整批的，不只是当前这个文件：传输轴停在 Cancelled 上，
+            // 而 Cancelled 允许下一次传输开始，所以停止的判断必须在这里做。
+            if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) return;
+        }
+    }
+
+    public async Task DownloadAsync(RemoteFileItem item)
+    {
+        var destinationDirectory = await _view.PickDownloadDirectoryAsync();
+        if (destinationDirectory is null) return;
+
+        _view.ShowTransferStatus();
+        _conflictResolver.Reset();
+
+        await _controller.DownloadAsync(
+            item,
+            destinationDirectory,
+            _downloadDestination,
+            async name =>
+            {
+                var resolution = await _conflictResolver.ResolveConflictAsync(
+                    name,
+                    async fileName =>
+                    {
+                        // 直接创建并显示 FileConflictDialog
+                        var view = _view as UserControl;
+                        if (view?.XamlRoot is null) return (false, false, true);
+
+                        var dialog = new FileConflictDialog
+                        {
+                            Message = $"\"{fileName}\"已存在，是否覆盖？",
+                            XamlRoot = view.XamlRoot
+                        };
+                        await dialog.ShowAsync();
+
+                        return (
+                            dialog.Resolution == FileConflictResolution.Overwrite,
+                            dialog.ApplyToAll,
+                            dialog.Resolution == FileConflictResolution.CancelAll
+                        );
+                    });
+
+                // null 表示取消全部
+                if (resolution is null)
+                {
+                    _controller.CancelTransfer();
+                    return false;
+                }
+                return resolution.Value;
+            });
+    }
+
+    public async Task RenameAsync(RemoteFileItem item)
+    {
+        var name = await _view.PromptTextAsync("重命名", "输入新名称", item.Name);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        await _controller.RenameAsync(item, name);
+    }
+
+    public async Task DeleteAsync(RemoteFileItem item)
+    {
+        if (!await _view.ConfirmDeleteAsync(item)) return;
+        await _controller.DeleteAsync(item);
+    }
+
+    private void Controller_SnapshotChanged(object? sender, SftpSessionSnapshot snapshot) =>
+        _view.Render(snapshot);
+
+    private async void View_RefreshRequested(object? sender, EventArgs e) => await RefreshAsync();
+
+    private async void View_NavigateRequested(object? sender, string path) => await NavigateToAsync(path);
+
+    private async void View_NewFolderRequested(object? sender, EventArgs e) => await CreateFolderAsync();
+
+    private async void View_UploadRequested(object? sender, EventArgs e) => await UploadAsync();
+
+    private async void View_DownloadRequested(object? sender, RemoteFileItem item) =>
+        await DownloadAsync(item);
+
+    private async void View_RenameRequested(object? sender, RemoteFileItem item) => await RenameAsync(item);
+
+    private async void View_DeleteRequested(object? sender, RemoteFileItem item) => await DeleteAsync(item);
+
+    private void View_CancelTransferRequested(object? sender, EventArgs e) => CancelTransfer();
+
+    public void Dispose()
+    {
+        _controller.SnapshotChanged -= Controller_SnapshotChanged;
+        _view.RefreshRequested -= View_RefreshRequested;
+        _view.NavigateRequested -= View_NavigateRequested;
+        _view.NewFolderRequested -= View_NewFolderRequested;
+        _view.UploadRequested -= View_UploadRequested;
+        _view.DownloadRequested -= View_DownloadRequested;
+        _view.RenameRequested -= View_RenameRequested;
+        _view.DeleteRequested -= View_DeleteRequested;
+        _view.CancelTransferRequested -= View_CancelTransferRequested;
+        _controller.Dispose();
+    }
+}

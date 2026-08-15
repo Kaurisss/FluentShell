@@ -1,30 +1,48 @@
 using FluentShell.Models;
-using System.Text.Json;
 
 namespace FluentShell.Services;
 
 public sealed class SettingsStore
 {
-    private readonly string _folder = AppDataPaths.Folder;
-    private string FilePath => Path.Combine(_folder, "settings.json");
-    private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
+    private readonly JsonDocumentStore<AppSettings> _store;
+
+    public SettingsStore(string? folder = null)
+    {
+        _store = new JsonDocumentStore<AppSettings>(
+            folder ?? AppDataPaths.Folder,
+            "settings.json",
+            static () => new AppSettings());
+    }
 
     public async Task<AppSettings> LoadAsync()
     {
+        var settings = await _store.LoadAsync();
         try
         {
-            if (!File.Exists(FilePath)) return new AppSettings();
-            await using var stream = File.OpenRead(FilePath);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, Options) ?? new AppSettings();
+            if (MigrateLegacyDownloadDirectory(settings)) await SaveAsync(settings);
         }
-        catch { return new AppSettings(); }
+        catch
+        {
+            // 迁移写入失败不得让载入抛出：MainWindow 的载入是即发即弃的，
+            // 异常会被静默吞掉并留下空白外壳。与迁移前行为一致，回退到默认设置。
+            return new AppSettings();
+        }
+
+        return settings;
     }
 
-    public async Task SaveAsync(AppSettings settings)
+    public Task SaveAsync(AppSettings settings) => _store.SaveAsync(settings);
+
+    private static bool MigrateLegacyDownloadDirectory(AppSettings settings)
     {
-        Directory.CreateDirectory(_folder);
-        var temp = FilePath + ".tmp";
-        await using (var stream = File.Create(temp)) await JsonSerializer.SerializeAsync(stream, settings, Options);
-        File.Move(temp, FilePath, true);
+        var userProfileDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (settings.HasCustomDownloadDirectory ||
+            !string.Equals(settings.DownloadDirectory, userProfileDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        settings.DownloadDirectory = AppSettings.DefaultDownloadDirectory;
+        return true;
     }
 }

@@ -42,6 +42,29 @@
 
             <SolidColorBrush x:Key="TerminalSurfaceBrush" Color="#101214" />
             <SolidColorBrush x:Key="TerminalTextBrush" Color="#E6EDF3" />
+            <x:Double x:Key="IconButtonSize">40</x:Double>
+            <Thickness x:Key="AppBarButtonInnerBorderMargin">2</Thickness>
+            <Thickness x:Key="AppBarButtonContentViewboxCollapsedMargin">0,12</Thickness>
+
+            <StaticResource x:Key="AppBarButtonBackground" ResourceKey="ButtonBackground" />
+            <StaticResource x:Key="AppBarButtonBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver" />
+            <StaticResource x:Key="AppBarButtonBackgroundPressed" ResourceKey="ButtonBackgroundPressed" />
+            <StaticResource x:Key="AppBarButtonBackgroundDisabled" ResourceKey="ButtonBackgroundDisabled" />
+            <StaticResource x:Key="AppBarButtonForeground" ResourceKey="ButtonForeground" />
+            <StaticResource x:Key="AppBarButtonForegroundPointerOver" ResourceKey="ButtonForegroundPointerOver" />
+            <StaticResource x:Key="AppBarButtonForegroundPressed" ResourceKey="ButtonForegroundPressed" />
+            <StaticResource x:Key="AppBarButtonForegroundDisabled" ResourceKey="ButtonForegroundDisabled" />
+            <StaticResource x:Key="AppBarButtonBorderBrush" ResourceKey="ButtonBorderBrush" />
+            <StaticResource x:Key="AppBarButtonBorderBrushPointerOver" ResourceKey="ButtonBorderBrushPointerOver" />
+            <StaticResource x:Key="AppBarButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
+            <StaticResource x:Key="AppBarButtonBorderBrushDisabled" ResourceKey="ButtonBorderBrushDisabled" />
+
+            <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
+            <Style x:Key="AppAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
 
             <Style x:Key="PageHeadingStyle" TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
@@ -96,7 +119,7 @@
                                         </VisualState>
                                     </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="TabBackground" Margin="0,4,0,4" Background="{TemplateBinding Background}" CornerRadius="6" />
+                                <Border x:Name="TabBackground" Margin="0,4,0,4" Background="{TemplateBinding Background}" CornerRadius="{ThemeResource ControlCornerRadius}" />
                                 <ContentPresenter
                                     x:Name="ContentPresenter"
                                     Padding="{TemplateBinding Padding}"
@@ -111,13 +134,16 @@
                 </Setter>
             </Style>
 
-            <Style x:Key="TitleBarSessionIconButtonStyle" TargetType="Button">
-                <Setter Property="Width" Value="40" />
-                <Setter Property="Height" Value="40" />
+            <Style x:Key="IconButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
+                <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
                 <Setter Property="Padding" Value="0" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
+                <Setter Property="BorderThickness" Value="{ThemeResource ButtonBorderThemeThickness}" />
+                <Setter Property="Foreground" Value="{ThemeResource NavigationViewItemForeground}" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="FocusVisualMargin" Value="-3" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -127,22 +153,35 @@
                                         <VisualState x:Name="Normal" />
                                         <VisualState x:Name="PointerOver">
                                             <VisualState.Setters>
-                                                <Setter Target="ButtonBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                                <Setter Target="ButtonBackground.Background" Value="{ThemeResource NavigationViewItemBackgroundPointerOver}" />
+                                                <Setter Target="ButtonBackground.BorderBrush" Value="{ThemeResource ButtonBorderBrushPointerOver}" />
+                                                <Setter Target="ButtonContent.Foreground" Value="{ThemeResource NavigationViewItemForegroundPointerOver}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
-                                                <Setter Target="ButtonBackground.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                                <Setter Target="ButtonBackground.Background" Value="{ThemeResource NavigationViewItemBackgroundPressed}" />
+                                                <Setter Target="ButtonBackground.BorderBrush" Value="{ThemeResource ButtonBorderBrushPressed}" />
+                                                <Setter Target="ButtonContent.Foreground" Value="{ThemeResource NavigationViewItemForegroundPressed}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Disabled">
                                             <VisualState.Setters>
-                                                <Setter Target="ButtonContent.Opacity" Value="0.36" />
+                                                <Setter Target="ButtonBackground.Background" Value="{ThemeResource NavigationViewItemBackgroundDisabled}" />
+                                                <Setter Target="ButtonBackground.BorderBrush" Value="{ThemeResource ButtonBorderBrushDisabled}" />
+                                                <Setter Target="ButtonContent.Foreground" Value="{ThemeResource NavigationViewItemForegroundDisabled}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="ButtonBackground" Margin="0,4,0,4" Background="{TemplateBinding Background}" CornerRadius="8" />
+                                <Border
+                                    x:Name="ButtonBackground"
+                                    Margin="0,4"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                                    Control.IsTemplateFocusTarget="True" />
                                 <ContentPresenter
                                     x:Name="ButtonContent"
                                     HorizontalContentAlignment="Center"
@@ -154,6 +193,62 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Style>
+
+            <Style x:Key="CommandBarIconButtonStyle" TargetType="AppBarButton" BasedOn="{StaticResource DefaultAppBarButtonStyle}">
+                <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
+                <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
+                <Setter Property="BorderThickness" Value="{ThemeResource ButtonBorderThemeThickness}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
+
+            <Style x:Key="WorkspaceSplitterStyle" TargetType="Thumb">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Stretch" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Thumb">
+                            <!-- 整块是命中区域，中间那条线才是视觉上的拆分条 -->
+                            <Grid Background="Transparent">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="SplitterLine.Height" Value="3" />
+                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="SplitterLine.Height" Value="3" />
+                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled" />
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Border
+                                    x:Name="SplitterLine"
+                                    Height="1"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource SubtleStrokeBrush}"
+                                    CornerRadius="1" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="TitleBarSessionIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

@@ -28,11 +28,13 @@ public sealed class CredentialService
         _vault.Add(new PasswordCredential(ResourceFor(profile), profile.Username, secret));
     }
 
-    public void Remove(ServerProfile profile)
+    public void Remove(ServerProfile profile) => Remove(profile.Id, profile.Username);
+
+    public void Remove(Guid profileId, string username)
     {
         try
         {
-            var existing = _vault.Retrieve(ResourceFor(profile), profile.Username);
+            var existing = _vault.Retrieve($"{ResourcePrefix}/{profileId:N}", username);
             _vault.Remove(existing);
         }
         catch { }

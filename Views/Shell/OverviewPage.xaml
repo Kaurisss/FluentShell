@@ -1,0 +1,113 @@
+<UserControl
+    x:Class="FluentShell.Views.Shell.OverviewPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="24" MaxWidth="980" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button
+                    x:Name="ConnectServerButton"
+                    Content="连接服务器"
+                    Click="ConnectServerButton_Click" />
+                <Button
+                    Content="添加服务器"
+                    Click="AddServerButton_Click" />
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+                <TextBlock x:Name="ConnectionSectionTitle" Style="{StaticResource SectionHeadingStyle}" />
+                <TextBlock
+                    x:Name="ConnectionSectionDescription"
+                    FontSize="13"
+                    Foreground="{ThemeResource MutedTextBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <ItemsRepeater x:Name="ConnectionCards">
+                <ItemsRepeater.Layout>
+                    <UniformGridLayout
+                        MinItemWidth="300"
+                        MinItemHeight="164"
+                        MinColumnSpacing="16"
+                        MinRowSpacing="16" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate>
+                        <Border
+                            MinHeight="164"
+                            Padding="18"
+                            Background="{ThemeResource PanelSurfaceBrush}"
+                            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource ControlCornerRadius}">
+                            <Grid RowSpacing="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock
+                                    Text="{Binding Name}"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Text="{Binding Address}"
+                                    FontSize="13"
+                                    Foreground="{ThemeResource MutedTextBrush}"
+                                    TextTrimming="CharacterEllipsis"
+                                    ToolTipService.ToolTip="{Binding Address}" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    VerticalAlignment="Bottom"
+                                    Text="{Binding LastConnectedLabel}"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource MutedTextBrush}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <Button
+                                    Grid.Row="3"
+                                    MinHeight="40"
+                                    Padding="16,0"
+                                    HorizontalAlignment="Left"
+                                    Content="连接"
+                                    Tag="{Binding}"
+                                    Click="ConnectButton_Click"
+                                    AutomationProperties.Name="连接服务器"
+                                    AutomationProperties.HelpText="{Binding Name}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+
+            <Border
+                x:Name="EmptyState"
+                Padding="24"
+                Background="{ThemeResource PanelSurfaceBrush}"
+                BorderBrush="{ThemeResource SubtleStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="{ThemeResource ControlCornerRadius}"
+                Visibility="Collapsed">
+                <StackPanel Spacing="8" MaxWidth="420">
+                    <TextBlock Text="还没有已保存的服务器" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock
+                        Text="添加第一台服务器后，即可从这里发起 SSH 连接。"
+                        FontSize="13"
+                        Foreground="{ThemeResource MutedTextBrush}"
+                        TextWrapping="Wrap" />
+                    <Button
+                        MinHeight="40"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Left"
+                        Content="添加服务器"
+                        Style="{StaticResource AppAccentButtonStyle}"
+                        Click="AddServerButton_Click"
+                        AutomationProperties.Name="添加服务器" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
