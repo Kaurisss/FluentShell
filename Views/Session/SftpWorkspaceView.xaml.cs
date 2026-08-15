@@ -109,8 +109,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         UpdateTransferStatusButton();
     }
 
-    private void TransferTip_ActionButtonClick(TeachingTip sender, object args) =>
+    private void TransferTip_ActionButtonClick(TeachingTip sender, object args)
+    {
         CancelTransferRequested?.Invoke(this, EventArgs.Empty);
+        // 用户点击取消后立即关闭面板，避免转圈等待造成的混淆
+        TransferTip.IsOpen = false;
+    }
 
     private void TransferTip_Closed(TeachingTip sender, TeachingTipClosedEventArgs args) =>
         UpdateTransferStatusButton();
@@ -164,11 +168,16 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     private void UpdateTransferStatusButton()
     {
         var transfer = _snapshot.Transfer;
-        TransferStatusButton.Visibility = transfer.IsActive || TransferTip.IsOpen
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        TransferStatusButtonRing.IsActive = transfer.IsActive;
-        TransferStatusButtonRing.Visibility = transfer.IsActive ? Visibility.Visible : Visibility.Collapsed;
+        // 取消或失败后应立即隐藏按钮，即使面板还在关闭动画中
+        var shouldShow = transfer.State switch
+        {
+            SftpTransferState.Cancelled => false,
+            SftpTransferState.Failed => false,
+            _ => transfer.IsActive || TransferTip.IsOpen
+        };
+        TransferStatusButton.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+        TransferStatusButtonRing.IsActive = transfer.IsActive && transfer.State == SftpTransferState.Transferring;
+        TransferStatusButtonRing.Visibility = TransferStatusButtonRing.IsActive ? Visibility.Visible : Visibility.Collapsed;
         TransferStatusButtonLabel.Text = transfer.State switch
         {
             SftpTransferState.Transferring =>
