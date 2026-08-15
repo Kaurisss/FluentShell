@@ -26,27 +26,27 @@
 
 ## 特性
 
-### 🖥️ 终端模拟
+### 终端模拟
 - **基于 xterm.js** - 完整的 ANSI/VT 序列支持
 - **会话管理** - 多标签页同时连接多个服务器
 - **实时指标** - 服务器 CPU、内存、负载监控
 - **响应式布局** - 适配不同窗口尺寸和 DPI
 
-### 📁 SFTP 文件管理
+### SFTP 文件管理
 - **双通道架构** - 文件浏览和传输互不阻塞
 - **可视化传输队列** - 实时查看文件传输状态、速度、剩余时间
 - **批量操作** - 多文件上传/下载，智能冲突解决
 - **路径验证** - 服务端路径安全检查
 - **Syncfusion DataGrid** - 高性能文件列表，支持排序和筛选
 
-### 🔐 安全认证
+### 安全认证
 - **密码认证** - 支持保存到 Windows 凭据管理器
 - **私钥认证** - 支持 OpenSSH 格式私钥（RSA, ECDSA, Ed25519）
 - **实时验证** - 私钥文件格式即时检查，口令要求自动识别
 - **重复检测** - 创建配置时警告重复的服务器
 - **主机指纹** - 首次连接时验证，防止中间人攻击
 
-### 🎨 用户体验
+### 用户体验
 - **原生 WinUI 3** - 流畅的 Windows 11 风格界面
 - **主题支持** - 浅色、深色、跟随系统
 - **Mica/亚克力背景** - 现代材质效果
@@ -102,8 +102,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/fluentshell.git
-cd fluentshell/SSHUI
+git clone https://github.com/Kaurisss/FluentShell.git
+cd FluentShell
 
 # 还原依赖
 dotnet restore
@@ -207,7 +207,7 @@ FluentShell/
 我们欢迎各种形式的贡献！
 
 ### 报告问题
-- 使用 [Issues](https://github.com/your-org/fluentshell/issues) 报告 Bug
+- 使用 [Issues](https://github.com/Kaurisss/FluentShell/issues) 报告 Bug
 - 提供详细的复现步骤
 - 附上系统信息和日志
 
@@ -287,8 +287,7 @@ dotnet test --collect:"XPlat Code Coverage"
 
 ## 联系方式
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-org/fluentshell/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-org/fluentshell/discussions)
+- **问题反馈**: [GitHub Issues](https://github.com/Kaurisss/FluentShell/issues)
 
 ---
 
