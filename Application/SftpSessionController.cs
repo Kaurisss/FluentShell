@@ -63,6 +63,9 @@ public sealed record SftpSessionSnapshot(
     /// <summary>传输轴。与浏览轴并行，浏览状态不受传输影响。</summary>
     public SftpTransferSnapshot Transfer { get; init; } = SftpTransferSnapshot.None;
 
+    /// <summary>传输队列。展示批量传输中每个文件的状态和进度。</summary>
+    public TransferQueue Queue { get; init; } = TransferQueue.Empty;
+
     public string CurrentPath => DirectoryListing.Path;
 }
 
@@ -91,6 +94,7 @@ public sealed class SftpSessionController : IDisposable
     private readonly ISftpFileService _transferService;
     private readonly Action<Action> _dispatchProgress;
     private readonly SemaphoreSlim _transferGate = new(1, 1);
+    private readonly TransferQueueManager _queueManager;
     private SftpDirectoryListing _directoryListing = SftpDirectoryListing.Empty("/");
     private CancellationTokenSource? _transferCts;
     private SftpSessionState _state = SftpSessionState.Idle;
@@ -115,6 +119,7 @@ public sealed class SftpSessionController : IDisposable
         _fileService = fileService;
         _transferService = transferFileService ?? fileService;
         _dispatchProgress = dispatchProgress ?? (work => work());
+        _queueManager = new TransferQueueManager(dispatchProgress);
     }
 
     public SftpSessionSnapshot Snapshot => CreateSnapshot();
@@ -223,6 +228,31 @@ public sealed class SftpSessionController : IDisposable
         }
     }
 
+    /// <summary>构建上传队列：在批量上传开始前收集所有文件信息。</summary>
+    public async Task BuildUploadQueueAsync(IReadOnlyList<SftpUploadFile> files)
+    {
+        _queueManager.Clear();
+        var items = new List<(string FileName, string RelativePath, long SizeBytes)>();
+
+        foreach (var file in files)
+        {
+            try
+            {
+                using var stream = await file.OpenRead();
+                var size = stream.CanSeek ? stream.Length : 0;
+                items.Add((file.Name, file.Name, size));
+            }
+            catch
+            {
+                // 无法获取文件大小时使用 0，队列仍然显示该文件
+                items.Add((file.Name, file.Name, 0));
+            }
+        }
+
+        _queueManager.AddPendingItems(items);
+        SnapshotChanged?.Invoke(this, CreateSnapshot());
+    }
+
     public Task UploadAsync(
         string localFileName,
         Func<Task<Stream>> openInput,
@@ -230,14 +260,36 @@ public sealed class SftpSessionController : IDisposable
         RunTransferAsync("上传", async cancellationToken =>
         {
             if (!SftpPathValidator.TryValidateRemoteName(localFileName, out var error))
+            {
+                _queueManager.FailTransfer(localFileName, error);
                 return OperationOutcome.Failure(error);
+            }
 
             var remotePath = RemotePath.Combine(_directoryListing.Path, localFileName);
+
+            _queueManager.StartTransfer(localFileName);
+            SnapshotChanged?.Invoke(this, CreateSnapshot());
+
             if (await _transferService.ExistsAsync(remotePath) && !await confirmOverwrite(localFileName))
+            {
+                _queueManager.SkipTransfer(localFileName);
+                SnapshotChanged?.Invoke(this, CreateSnapshot());
                 return OperationOutcome.Failure("已跳过现有文件。");
+            }
 
             using var input = await openInput();
-            await _transferService.UploadAsync(input, remotePath, cancellationToken);
+            var reporter = new TransferProgressReporter(this, input.CanSeek ? input.Length : 0);
+            using var countingStream = new ByteCountingStream(input, bytesRead =>
+            {
+                reporter.OnCurrentFileBytes(bytesRead);
+                _queueManager.UpdateProgress(localFileName, bytesRead, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
+            });
+
+            await _transferService.UploadAsync(countingStream, remotePath, cancellationToken);
+
+            _queueManager.CompleteTransfer(localFileName);
+            SnapshotChanged?.Invoke(this, CreateSnapshot());
+
             return OperationOutcome.Success($"已上传 {localFileName}。");
         }, refreshDirectory: true);
 
@@ -300,10 +352,16 @@ public sealed class SftpSessionController : IDisposable
             foreach (var file in plan)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                _queueManager.StartTransfer(file.RelativePath);
+                SnapshotChanged?.Invoke(this, CreateSnapshot());
+
                 if (destination.FileExists(file.LocalPath) && !await confirmOverwrite(file.RelativePath))
                 {
                     skipped++;
                     directoryReporter.RemoveFromTotal(file.SizeBytes);
+                    _queueManager.SkipTransfer(file.RelativePath);
+                    SnapshotChanged?.Invoke(this, CreateSnapshot());
                     continue;
                 }
 
@@ -312,20 +370,31 @@ public sealed class SftpSessionController : IDisposable
                 {
                     using var output = new ByteCountingStream(
                         destination.CreateOutput(file.LocalPath),
-                        directoryReporter.OnCurrentFileBytes);
+                        bytesWritten =>
+                        {
+                            directoryReporter.OnCurrentFileBytes(bytesWritten);
+                            _queueManager.UpdateProgress(file.RelativePath, bytesWritten, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
+                        });
                     await _transferService.DownloadAsync(file.RemotePath, output, cancellationToken);
+
+                    _queueManager.CompleteTransfer(file.RelativePath);
+                    SnapshotChanged?.Invoke(this, CreateSnapshot());
                 }
                 catch (OperationCanceledException)
                 {
                     TryDeletePartialFile(destination, file.LocalPath);
+                    _queueManager.FailTransfer(file.RelativePath, "已取消");
                     throw;
                 }
                 catch (Exception exception)
                 {
                     // 单个条目失败（符号链接、特殊文件、权限）不拖垮整批，记下继续。
                     TryDeletePartialFile(destination, file.LocalPath);
-                    failures.Add($"{file.RelativePath}（{DescribeError(exception)}）");
+                    var errorMsg = DescribeError(exception);
+                    failures.Add($"{file.RelativePath}（{errorMsg}）");
                     directoryReporter.RemoveFromTotal(file.SizeBytes);
+                    _queueManager.FailTransfer(file.RelativePath, errorMsg);
+                    SnapshotChanged?.Invoke(this, CreateSnapshot());
                     continue;
                 }
 
@@ -394,11 +463,15 @@ public sealed class SftpSessionController : IDisposable
                 continue;
             }
 
-            plan.Add(new PlannedDownload(
+            var plannedDownload = new PlannedDownload(
                 entry.FullPath,
                 entryLocalPath,
                 entryRelativePath,
-                Math.Max(0, entry.SizeBytes)));
+                Math.Max(0, entry.SizeBytes));
+            plan.Add(plannedDownload);
+
+            // 同步添加到队列管理器
+            _queueManager.AddPendingItem(entry.Name, entryRelativePath, Math.Max(0, entry.SizeBytes));
         }
 
         return null;
@@ -562,7 +635,8 @@ public sealed class SftpSessionController : IDisposable
             _errorMessage,
             _failureKind)
         {
-            Transfer = _transfer
+            Transfer = _transfer,
+            Queue = _queueManager.CreateSnapshot()
         };
 
     public void Dispose()

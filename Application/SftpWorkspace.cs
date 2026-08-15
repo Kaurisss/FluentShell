@@ -73,6 +73,9 @@ public sealed class SftpWorkspace : IDisposable
         _view.ShowTransferStatus();
         _conflictResolver.Reset();
 
+        // 构建传输队列：收集所有文件信息并添加到队列管理器
+        await _controller.BuildUploadQueueAsync(files);
+
         foreach (var file in files)
         {
             await _controller.UploadAsync(

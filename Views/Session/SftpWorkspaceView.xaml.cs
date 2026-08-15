@@ -159,6 +159,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
 
             TransferTipBytes.Text = string.Join("  •  ", parts);
         }
+
+        // 更新传输队列列表
+        TransferQueueList.ItemsSource = snapshot.Queue.Items;
+        TransferQueueList.Visibility = snapshot.Queue.HasItems ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
