@@ -1,5 +1,7 @@
 using FluentShell.Models;
 using FluentShell.Services;
+using FluentShell.Views.Shell;
+using Microsoft.UI.Xaml.Controls;
 
 namespace FluentShell.Core;
 
@@ -16,6 +18,7 @@ public sealed class SftpWorkspace : IDisposable
     private readonly SftpSessionController _controller;
     private readonly ISftpWorkspaceView _view;
     private readonly DownloadDestination _downloadDestination;
+    private readonly FileConflictResolver _conflictResolver = new();
 
     public SftpWorkspace(
         ISftpFileService fileService,
@@ -65,10 +68,49 @@ public sealed class SftpWorkspace : IDisposable
     public async Task UploadAsync()
     {
         var files = await _view.PickUploadFilesAsync();
-        if (files.Count > 0) _view.ShowTransferStatus();
+        if (files.Count == 0) return;
+
+        _view.ShowTransferStatus();
+        _conflictResolver.Reset();
+
         foreach (var file in files)
         {
-            await _controller.UploadAsync(file.Name, file.OpenRead, _view.ConfirmOverwriteAsync);
+            await _controller.UploadAsync(
+                file.Name,
+                file.OpenRead,
+                async name =>
+                {
+                    var resolution = await _conflictResolver.ResolveConflictAsync(
+                        name,
+                        async fileName =>
+                        {
+                            // 直接创建并显示 FileConflictDialog
+                            var view = _view as UserControl;
+                            if (view?.XamlRoot is null) return (false, false, true);
+
+                            var dialog = new FileConflictDialog
+                            {
+                                Message = $"\"{fileName}\"已存在，是否覆盖？",
+                                XamlRoot = view.XamlRoot
+                            };
+                            await dialog.ShowAsync();
+
+                            return (
+                                dialog.Resolution == FileConflictResolution.Overwrite,
+                                dialog.ApplyToAll,
+                                dialog.Resolution == FileConflictResolution.CancelAll
+                            );
+                        });
+
+                    // null 表示取消全部
+                    if (resolution is null)
+                    {
+                        _controller.CancelTransfer();
+                        return false;
+                    }
+                    return resolution.Value;
+                });
+
             // 用户按下取消是针对整批的，不只是当前这个文件：传输轴停在 Cancelled 上，
             // 而 Cancelled 允许下一次传输开始，所以停止的判断必须在这里做。
             if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) return;
@@ -81,11 +123,44 @@ public sealed class SftpWorkspace : IDisposable
         if (destinationDirectory is null) return;
 
         _view.ShowTransferStatus();
+        _conflictResolver.Reset();
+
         await _controller.DownloadAsync(
             item,
             destinationDirectory,
             _downloadDestination,
-            _view.ConfirmOverwriteAsync);
+            async name =>
+            {
+                var resolution = await _conflictResolver.ResolveConflictAsync(
+                    name,
+                    async fileName =>
+                    {
+                        // 直接创建并显示 FileConflictDialog
+                        var view = _view as UserControl;
+                        if (view?.XamlRoot is null) return (false, false, true);
+
+                        var dialog = new FileConflictDialog
+                        {
+                            Message = $"\"{fileName}\"已存在，是否覆盖？",
+                            XamlRoot = view.XamlRoot
+                        };
+                        await dialog.ShowAsync();
+
+                        return (
+                            dialog.Resolution == FileConflictResolution.Overwrite,
+                            dialog.ApplyToAll,
+                            dialog.Resolution == FileConflictResolution.CancelAll
+                        );
+                    });
+
+                // null 表示取消全部
+                if (resolution is null)
+                {
+                    _controller.CancelTransfer();
+                    return false;
+                }
+                return resolution.Value;
+            });
     }
 
     public async Task RenameAsync(RemoteFileItem item)
