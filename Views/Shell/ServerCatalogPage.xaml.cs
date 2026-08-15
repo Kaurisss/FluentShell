@@ -145,7 +145,8 @@ public sealed partial class ServerCatalogPage : UserControl
             WindowHandle = _windowHandle,
             MutedTextBrush = (Brush)Application.Current.Resources["MutedTextBrush"],
             HasSavedCredential = editing is not null && _hasSavedCredential(editing),
-            RememberCredentialsByDefault = _rememberCredentialsByDefault()
+            RememberCredentialsByDefault = _rememberCredentialsByDefault(),
+            ExistingProfiles = _profiles
         });
         if (result is null) return;
 

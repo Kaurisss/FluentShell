@@ -23,6 +23,7 @@ public sealed class SshConnectionService : ISshConnection
     private SftpClient? _transferSftpClient;
     private ISftpClient? _remoteFileClient;
     private ISftpClient? _transferFileClient;
+    private List<PrivateKeyFile>? _privateKeyFiles;
     private CancellationTokenSource? _readCts;
     private readonly SemaphoreSlim _shellWriteGate = new(1, 1);
     private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
@@ -48,9 +49,10 @@ public sealed class SshConnectionService : ISshConnection
         SshClient? sshClient = null;
         SftpClient? sftpClient = null;
         SftpClient? transferSftpClient = null;
+        var privateKeyFiles = new List<PrivateKeyFile>();
         try
         {
-            sshClient = new SshClient(CreateConnectionInfo());
+            sshClient = new SshClient(CreateConnectionInfo(privateKeyFiles));
             sshClient.HostKeyReceived += OnHostKeyReceived;
             await ConnectClientAsync(sshClient, cancellationToken).ConfigureAwait(false);
 
@@ -60,13 +62,13 @@ public sealed class SshConnectionService : ISshConnection
                     cancellationToken),
                 cancellationToken).ConfigureAwait(false);
 
-            sftpClient = new SftpClient(CreateConnectionInfo());
+            sftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
             sftpClient.HostKeyReceived += OnHostKeyReceived;
             await ConnectClientAsync(sftpClient, cancellationToken).ConfigureAwait(false);
 
             // 传输走独立连接：SSH.NET 客户端不保证并发安全，
             // 浏览目录不该排在大文件传输后面。
-            transferSftpClient = new SftpClient(CreateConnectionInfo());
+            transferSftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
             transferSftpClient.HostKeyReceived += OnHostKeyReceived;
             await ConnectClientAsync(transferSftpClient, cancellationToken).ConfigureAwait(false);
 
@@ -76,6 +78,7 @@ public sealed class SshConnectionService : ISshConnection
             _transferSftpClient = transferSftpClient;
             _remoteFileClient = new SshNetSftpClient(sftpClient);
             _transferFileClient = new SshNetSftpClient(transferSftpClient);
+            _privateKeyFiles = privateKeyFiles;
             _readCts = new CancellationTokenSource();
             _ = ReadOutputLoopAsync(_readCts.Token);
         }
@@ -87,9 +90,11 @@ public sealed class SshConnectionService : ISshConnection
             _transferSftpClient = null;
             _remoteFileClient = null;
             _transferFileClient = null;
-            ScheduleDispose(transferSftpClient);
-            ScheduleDispose(sftpClient);
-            ScheduleDispose(sshClient);
+            ScheduleFailedConnectionCleanup(
+                transferSftpClient,
+                sftpClient,
+                sshClient,
+                privateKeyFiles);
             throw;
         }
     }
@@ -136,20 +141,56 @@ public sealed class SshConnectionService : ISshConnection
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-    private static void ScheduleDispose(BaseClient? client)
+    private static void ScheduleFailedConnectionCleanup(
+        BaseClient? transferSftpClient,
+        BaseClient? sftpClient,
+        BaseClient? sshClient,
+        IReadOnlyCollection<PrivateKeyFile> privateKeyFiles)
     {
-        if (client is null) return;
         _ = Task.Run(() =>
         {
-            try { client.Dispose(); } catch { }
+            DisposeClient(transferSftpClient);
+            DisposeClient(sftpClient);
+            DisposeClient(sshClient);
+            DisposePrivateKeyFiles(privateKeyFiles);
         });
+    }
+
+    private static void DisposeClient(BaseClient? client)
+    {
+        if (client is null) return;
+
+        try { client.Dispose(); } catch { }
+    }
+
+    private static void DisposePrivateKeyFiles(IEnumerable<PrivateKeyFile> privateKeyFiles)
+    {
+        foreach (var privateKeyFile in privateKeyFiles)
+        {
+            try { privateKeyFile.Dispose(); } catch { }
+        }
     }
 
     internal static bool RequiresPrivateKeyPassphrase(string privateKeyPath)
     {
+        using var privateKeyStream = new FileStream(
+            privateKeyPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            FileOptions.SequentialScan);
+        return RequiresPrivateKeyPassphrase(privateKeyStream);
+    }
+
+    internal static bool RequiresPrivateKeyPassphrase(Stream privateKeyStream)
+    {
+        if (!PrivateKeyValidator.HasSupportedPrivateKeyHeader(privateKeyStream))
+            throw new SshException(PrivateKeyValidator.InvalidFormatMessage);
+
         try
         {
-            _ = new PrivateKeyFile(privateKeyPath, null);
+            using var privateKeyFile = new PrivateKeyFile(privateKeyStream, null);
             return false;
         }
         catch (SshPassPhraseNullOrEmptyException)
@@ -162,11 +203,12 @@ public sealed class SshConnectionService : ISshConnection
         }
     }
 
-    private ConnectionInfo CreateConnectionInfo()
+    private ConnectionInfo CreateConnectionInfo(ICollection<PrivateKeyFile> privateKeyFiles)
     {
         Renci.SshNet.AuthenticationMethod auth = _profile.Authentication switch
         {
-            FluentShell.Models.AuthenticationMethod.PrivateKey => new PrivateKeyAuthenticationMethod(_profile.Username, new PrivateKeyFile(_profile.PrivateKeyPath, string.IsNullOrWhiteSpace(_secret) ? null : _secret)),
+            FluentShell.Models.AuthenticationMethod.PrivateKey =>
+                CreatePrivateKeyAuthenticationMethod(privateKeyFiles),
             _ => new PasswordAuthenticationMethod(_profile.Username, _secret)
         };
 
@@ -174,6 +216,42 @@ public sealed class SshConnectionService : ISshConnection
         {
             Timeout = ConnectionTimeout
         };
+    }
+
+    private PrivateKeyAuthenticationMethod CreatePrivateKeyAuthenticationMethod(
+        ICollection<PrivateKeyFile> privateKeyFiles)
+    {
+        var privateKeyFile = CreatePrivateKeyFile();
+        try
+        {
+            var authenticationMethod = new PrivateKeyAuthenticationMethod(_profile.Username, privateKeyFile);
+            privateKeyFiles.Add(privateKeyFile);
+            return authenticationMethod;
+        }
+        catch
+        {
+            privateKeyFile.Dispose();
+            throw;
+        }
+    }
+
+    private PrivateKeyFile CreatePrivateKeyFile()
+    {
+        // SSH.NET 在构造期间同步解析私钥，不保留输入流；因此可以立即释放文件句柄。
+        // 返回的对象由连接服务在对应客户端停止使用后释放。
+        using var privateKeyStream = new FileStream(
+            _profile.PrivateKeyPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            FileOptions.SequentialScan);
+        if (!PrivateKeyValidator.HasSupportedPrivateKeyHeader(privateKeyStream))
+            throw new SshException(PrivateKeyValidator.InvalidFormatMessage);
+
+        return new PrivateKeyFile(
+            privateKeyStream,
+            string.IsNullOrWhiteSpace(_secret) ? null : _secret);
     }
 
     private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
@@ -321,17 +399,21 @@ public sealed class SshConnectionService : ISshConnection
     public async ValueTask DisposeAsync()
     {
         _readCts?.Cancel();
+        var privateKeyFiles = _privateKeyFiles;
+        _privateKeyFiles = null;
         await _shellWriteGate.WaitAsync();
         try
         {
             await Task.Run(() =>
             {
                 try { _transferSftpClient?.Disconnect(); } catch { }
-                try { _transferSftpClient?.Dispose(); } catch { }
+                DisposeClient(_transferSftpClient);
                 try { _sftpClient?.Disconnect(); } catch { }
-                try { _sftpClient?.Dispose(); } catch { }
+                DisposeClient(_sftpClient);
                 try { _sshClient?.Disconnect(); } catch { }
-                try { _sshClient?.Dispose(); } catch { }
+                DisposeClient(_sshClient);
+                if (privateKeyFiles is not null)
+                    DisposePrivateKeyFiles(privateKeyFiles);
             });
             _readCts?.Dispose();
         }
