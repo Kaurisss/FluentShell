@@ -67,7 +67,11 @@ public sealed record SftpSessionSnapshot(
 }
 
 /// <summary>一次传输的确定进度。总量未知时快照里就没有进度，视图退回不确定指示。</summary>
-public sealed record SftpTransferProgress(long BytesTransferred, long TotalBytes)
+public sealed record SftpTransferProgress(
+    long BytesTransferred,
+    long TotalBytes,
+    double BytesPerSecond,
+    double? EstimatedSecondsRemaining)
 {
     public double Percent => TotalBytes <= 0 ? 0 : Math.Min(100d, BytesTransferred * 100d / TotalBytes);
 }
@@ -588,6 +592,9 @@ public sealed class SftpSessionController : IDisposable
     private sealed class TransferProgressReporter
     {
         private readonly SftpSessionController _owner;
+        private readonly DateTime _startTime;
+        private readonly Queue<(DateTime Time, long Bytes)> _speedSamples;
+        private const int SpeedWindowSeconds = 5;
         private long _totalBytes;
         private long _completedBytes;
         private int _lastPercent = -1;
@@ -596,6 +603,8 @@ public sealed class SftpSessionController : IDisposable
         {
             _owner = owner;
             _totalBytes = totalBytes;
+            _startTime = DateTime.UtcNow;
+            _speedSamples = new Queue<(DateTime, long)>();
         }
 
         public void OnCurrentFileBytes(long currentFileBytes) =>
@@ -622,8 +631,55 @@ public sealed class SftpSessionController : IDisposable
             var percent = (int)Math.Min(100, transferred * 100 / total);
             if (Interlocked.Exchange(ref _lastPercent, percent) == percent) return;
 
-            var progress = new SftpTransferProgress(transferred, total);
+            var now = DateTime.UtcNow;
+            var (bytesPerSecond, estimatedSecondsRemaining) = CalculateSpeedAndTimeRemaining(
+                now, transferred, total);
+
+            var progress = new SftpTransferProgress(
+                transferred,
+                total,
+                bytesPerSecond,
+                estimatedSecondsRemaining);
             _owner._dispatchProgress(() => _owner.PublishTransferProgress(progress));
+        }
+
+        private (double BytesPerSecond, double? EstimatedSeconds) CalculateSpeedAndTimeRemaining(
+            DateTime now, long transferred, long total)
+        {
+            // 添加当前样本到窗口
+            _speedSamples.Enqueue((now, transferred));
+
+            // 移除超出窗口的旧样本（保留最近 5 秒）
+            while (_speedSamples.Count > 0)
+            {
+                var oldest = _speedSamples.Peek();
+                if ((now - oldest.Time).TotalSeconds <= SpeedWindowSeconds)
+                    break;
+                _speedSamples.Dequeue();
+            }
+
+            // 需要至少 2 个样本才能计算速度
+            if (_speedSamples.Count < 2)
+                return (0, null);
+
+            var earliest = _speedSamples.Peek();
+            var elapsedSeconds = (now - earliest.Time).TotalSeconds;
+
+            // 时间跨度太短（< 0.5 秒），样本不足以计算可靠速度
+            if (elapsedSeconds < 0.5)
+                return (0, null);
+
+            var bytesDelta = transferred - earliest.Bytes;
+            var bytesPerSecond = bytesDelta / elapsedSeconds;
+
+            // 速度过低（< 1 B/s）视为停滞，不估算剩余时间
+            if (bytesPerSecond < 1)
+                return (bytesPerSecond, null);
+
+            var remaining = total - transferred;
+            var estimatedSeconds = remaining / bytesPerSecond;
+
+            return (bytesPerSecond, estimatedSeconds);
         }
     }
 }

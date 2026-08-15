@@ -134,9 +134,27 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         TransferTipBar.Visibility = transfer.IsActive ? Visibility.Visible : Visibility.Collapsed;
         TransferTipBar.IsIndeterminate = progress is null;
         if (progress is not null) TransferTipBar.Value = progress.Percent;
-        TransferTipBytes.Text = progress is null
-            ? string.Empty
-            : $"{FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes)}";
+
+        // 更新字节数、速度和剩余时间显示
+        if (progress is null)
+        {
+            TransferTipBytes.Text = string.Empty;
+        }
+        else
+        {
+            var parts = new List<string>
+            {
+                $"{FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes)}"
+            };
+
+            if (progress.BytesPerSecond > 0)
+                parts.Add(FormatBytesPerSecond(progress.BytesPerSecond));
+
+            if (progress.EstimatedSecondsRemaining is not null)
+                parts.Add($"剩余 {FormatTimeRemaining(progress.EstimatedSecondsRemaining)}");
+
+            TransferTipBytes.Text = string.Join("  •  ", parts);
+        }
     }
 
     /// <summary>
@@ -167,6 +185,45 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         < 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024d:0.0} MB",
         _ => $"{bytes / 1024d / 1024d / 1024d:0.0} GB"
     };
+
+    private static string FormatBytesPerSecond(double bytesPerSecond)
+    {
+        if (bytesPerSecond < 0) return "—";
+
+        return bytesPerSecond switch
+        {
+            < 1024 => $"{bytesPerSecond:0.0} B/s",
+            < 1024 * 1024 => $"{bytesPerSecond / 1024:0.0} KB/s",
+            < 1024L * 1024 * 1024 => $"{bytesPerSecond / 1024 / 1024:0.0} MB/s",
+            _ => $"{bytesPerSecond / 1024 / 1024 / 1024:0.0} GB/s"
+        };
+    }
+
+    private static string FormatTimeRemaining(double? seconds)
+    {
+        if (seconds is not double sec || sec < 0 || double.IsInfinity(sec) || double.IsNaN(sec))
+            return "—";
+
+        var totalSeconds = (int)Math.Ceiling(sec);
+
+        if (totalSeconds < 60)
+            return $"{totalSeconds} 秒";
+
+        if (totalSeconds < 3600)
+        {
+            var minutes = totalSeconds / 60;
+            var remainingSeconds = totalSeconds % 60;
+            return remainingSeconds > 0
+                ? $"{minutes} 分 {remainingSeconds} 秒"
+                : $"{minutes} 分";
+        }
+
+        var hours = totalSeconds / 3600;
+        var remainingMinutes = (totalSeconds % 3600) / 60;
+        return remainingMinutes > 0
+            ? $"{hours} 小时 {remainingMinutes} 分"
+            : $"{hours} 小时";
+    }
 
     private void RenderDirectoryListing(SftpDirectoryListing listing)
     {
