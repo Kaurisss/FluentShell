@@ -25,6 +25,7 @@ internal sealed class FakeShellSession : IShellSession
     public SessionConnectionState ConnectionState { get; private set; } = SessionConnectionState.Disconnected;
     public bool IsTransferActive => false;
     public int MetricsPollingStarts { get; private set; }
+    public CancellationToken LastConnectionCancellationToken { get; private set; }
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated
     {
@@ -40,7 +41,11 @@ internal sealed class FakeShellSession : IShellSession
 
     public event EventHandler<string>? ConnectionFailed;
 
-    public Task ConnectAsync() => _connect(this);
+    public Task ConnectAsync(CancellationToken cancellationToken = default)
+    {
+        LastConnectionCancellationToken = cancellationToken;
+        return _connect(this);
+    }
 
     public void ReportConnectionFailure(string message) => ConnectionFailed?.Invoke(this, message);
 

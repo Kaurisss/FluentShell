@@ -28,7 +28,7 @@ public interface IShellSession : IAsyncDisposable
     event EventHandler<string> StatusChanged;
     event EventHandler<string> ConnectionFailed;
 
-    Task ConnectAsync();
+    Task ConnectAsync(CancellationToken cancellationToken = default);
     void SetActive(bool active);
     void SetTerminalFontSize(double value);
 }
@@ -182,7 +182,8 @@ public sealed class ShellCoordinator
         }
         if (!_sessions.TryBeginConnection(profile.Id)) return;
 
-        _connectionCancellation = new CancellationTokenSource();
+        using var connectionCancellation = new CancellationTokenSource();
+        _connectionCancellation = connectionCancellation;
         var session = _sessionFactory(
             profile,
             () => ResolveSecretAsync(profile),
@@ -194,7 +195,7 @@ public sealed class ShellCoordinator
             new ConnectionProgressChangedEventArgs(true, $"正在连接 {profile.Name}…"));
         try
         {
-            await session.ConnectAsync();
+            await session.ConnectAsync(connectionCancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -204,8 +205,8 @@ public sealed class ShellCoordinator
         {
             _sessions.EndConnection(profile.Id);
             ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
-            _connectionCancellation?.Dispose();
-            _connectionCancellation = null;
+            if (ReferenceEquals(_connectionCancellation, connectionCancellation))
+                _connectionCancellation = null;
         }
 
         if (!session.IsConnected)
@@ -244,13 +245,14 @@ public sealed class ShellCoordinator
             return;
         if (!_sessions.TryBeginConnection(session.Profile.Id)) return;
 
-        _connectionCancellation = new CancellationTokenSource();
+        using var connectionCancellation = new CancellationTokenSource();
+        _connectionCancellation = connectionCancellation;
         ConnectionProgressChanged?.Invoke(
             this,
             new ConnectionProgressChangedEventArgs(true, $"正在重新连接 {session.Profile.Name}…"));
         try
         {
-            await session.ConnectAsync();
+            await session.ConnectAsync(connectionCancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -260,8 +262,8 @@ public sealed class ShellCoordinator
         {
             _sessions.EndConnection(session.Profile.Id);
             ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
-            _connectionCancellation?.Dispose();
-            _connectionCancellation = null;
+            if (ReferenceEquals(_connectionCancellation, connectionCancellation))
+                _connectionCancellation = null;
             NotifyStateChanged();
         }
     }

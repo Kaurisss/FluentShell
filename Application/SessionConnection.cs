@@ -69,21 +69,29 @@ public sealed class SessionConnection : IAsyncDisposable
     /// <summary>连接建立后触发一次，供调用方做首次远程目录读取一类的后续工作。</summary>
     public event EventHandler? Connected;
 
-    public async Task ConnectAsync()
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         if (_state == SessionConnectionState.Connecting || IsConnected) return;
         _state = SessionConnectionState.Connecting;
         StatusChanged?.Invoke(this, "连接中");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var secret = await _secretProvider();
+            cancellationToken.ThrowIfCancellationRequested();
             if (secret is null)
             {
                 _state = SessionConnectionState.Disconnected;
                 StatusChanged?.Invoke(this, "连接已取消");
                 return;
             }
-            await ConnectWithSecretAsync(secret);
+            await ConnectWithSecretAsync(secret, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _state = SessionConnectionState.Disconnected;
+            StatusChanged?.Invoke(this, "连接已取消");
+            throw;
         }
         catch (Exception exception)
         {
@@ -135,7 +143,7 @@ public sealed class SessionConnection : IAsyncDisposable
         }
     }
 
-    private async Task ConnectWithSecretAsync(string secret)
+    private async Task ConnectWithSecretAsync(string secret, CancellationToken cancellationToken)
     {
         await ReleaseActiveConnectionAsync();
 
@@ -144,7 +152,8 @@ public sealed class SessionConnection : IAsyncDisposable
         Subscribe(connection);
         try
         {
-            await connection.ConnectAsync();
+            await connection.ConnectAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch
         {

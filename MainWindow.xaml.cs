@@ -28,7 +28,6 @@ public sealed partial class MainWindow : Window
     private readonly ShellLayoutMode _layout = new();
     private bool _loaded;
     private bool _isSessionLayout;
-    private ConnectionDialog? _connectionDialog;
 
     public MainWindow()
     {
@@ -341,38 +340,29 @@ public sealed partial class MainWindow : Window
     private Task<bool> ConfirmCloseSessionAsync(IShellSession session) =>
         ShellDialogService.ConfirmCloseSessionAsync(Content.XamlRoot, session.Profile.Name);
 
-    private async void SetConnectionProgress(ConnectionProgressChangedEventArgs args)
+    private void SetConnectionProgress(ConnectionProgressChangedEventArgs args)
     {
+        if (!_dispatcherQueue.HasThreadAccess)
+        {
+            _dispatcherQueue.TryEnqueue(() => SetConnectionProgress(args));
+            return;
+        }
+
         if (args.IsActive)
         {
-            // 显示连接对话框
-            _connectionDialog = new ConnectionDialog
-            {
-                XamlRoot = Content.XamlRoot
-            };
             if (args.Message is not null)
-            {
-                _connectionDialog.UpdateMessage(args.Message);
-            }
-
-            // 当用户点击"取消连接"时
-            _connectionDialog.CloseButtonClick += (_, _) =>
-            {
-                _shell.CancelConnection();
-            };
-
-            _serverCatalogPage.SetBusy(true);
-            _ = _connectionDialog.ShowAsync();
+                ConnectionDialogOverlay.UpdateMessage(args.Message);
+            ConnectionDialogOverlay.Visibility = Visibility.Visible;
+            ConnectionDialogOverlay.FocusCancelButton();
         }
         else
         {
-            // 关闭连接对话框
-            if (_connectionDialog is not null)
-            {
-                _connectionDialog.Hide();
-                _connectionDialog = null;
-            }
-            _serverCatalogPage.SetBusy(false);
+            ConnectionDialogOverlay.Visibility = Visibility.Collapsed;
         }
+
+        _serverCatalogPage.SetBusy(args.IsActive);
     }
+
+    private void ConnectionDialogOverlay_CancelRequested(object? sender, EventArgs e) =>
+        _shell.CancelConnection();
 }

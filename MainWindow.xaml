@@ -71,5 +71,12 @@
                 </Grid>
             </Grid>
         </NavigationView>
+
+        <shell:ConnectionDialog
+            x:Name="ConnectionDialogOverlay"
+            Grid.RowSpan="2"
+            Canvas.ZIndex="100"
+            Visibility="Collapsed"
+            CancelRequested="ConnectionDialogOverlay_CancelRequested" />
     </Grid>
 </Window>

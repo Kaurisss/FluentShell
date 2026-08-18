@@ -124,6 +124,34 @@ public sealed class ShellCoordinatorTests
     }
 
     [TestMethod]
+    public async Task CancelConnection_cancels_the_active_connection_token()
+    {
+        var connectionStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseConnection = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeShellSession? session = null;
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            session = new FakeShellSession(profile, async _ =>
+            {
+                connectionStarted.SetResult();
+                await releaseConnection.Task;
+            });
+            return session;
+        });
+        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
+
+        var connecting = coordinator.ConnectAsync(profile);
+        await connectionStarted.Task;
+        coordinator.CancelConnection();
+
+        Assert.IsTrue(
+            session!.LastConnectionCancellationToken.IsCancellationRequested,
+            "取消连接必须把取消信号传递到会话层。");
+        releaseConnection.SetResult();
+        await connecting;
+    }
+
+    [TestMethod]
     public async Task Reconnect_selected_session_reuses_existing_session()
     {
         var factoryCalls = 0;

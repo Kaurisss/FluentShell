@@ -1,23 +1,54 @@
-<ContentDialog
+<UserControl
     x:Class="FluentShell.Views.Shell.ConnectionDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="连接服务器"
-    CloseButtonText="取消连接"
-    DefaultButton="Close"
-    CornerRadius="8">
-    <StackPanel Spacing="16" MinWidth="320">
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <ProgressRing
-                x:Name="ConnectionProgressRing"
-                Width="24"
-                Height="24"
-                IsActive="True" />
-            <TextBlock
-                x:Name="ConnectionMessageText"
-                Text="正在连接..."
-                VerticalAlignment="Center"
-                TextWrapping="Wrap" />
-        </StackPanel>
-    </StackPanel>
-</ContentDialog>
+    HorizontalContentAlignment="Stretch"
+    VerticalContentAlignment="Stretch"
+    AutomationProperties.Name="正在连接服务器"
+    AutomationProperties.AutomationId="ConnectionProgressOverlay">
+    <!--
+        这里故意使用 UserControl，而不是 ContentDialog。
+        连接过程中可能还需要弹出密码或主机指纹确认对话框，
+        WinUI 同一时间只允许一个 ContentDialog。
+    -->
+    <Grid
+        Background="{ThemeResource PageSurfaceBrush}"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch">
+        <Border
+            MinWidth="320"
+            MaxWidth="420"
+            Margin="24"
+            Padding="24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Background="{ThemeResource PanelSurfaceBrush}"
+            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="{ThemeResource OverlayCornerRadius}">
+            <StackPanel Spacing="16">
+                <TextBlock
+                    Text="连接服务器"
+                    Style="{StaticResource SectionHeadingStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <ProgressRing
+                        Width="24"
+                        Height="24"
+                        IsActive="True"
+                        AutomationProperties.AutomationId="ConnectionProgressRing" />
+                    <TextBlock
+                        x:Name="ConnectionMessageText"
+                        Text="正在连接..."
+                        VerticalAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+                <Button
+                    x:Name="CancelButton"
+                    HorizontalAlignment="Right"
+                    AutomationProperties.AutomationId="CancelConnectionButton"
+                    Content="取消连接"
+                    Click="CancelButton_Click" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

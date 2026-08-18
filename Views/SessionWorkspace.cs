@@ -98,7 +98,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? ConnectionFailed;
 
-    public Task ConnectAsync() => _connection.ConnectAsync();
+    public Task ConnectAsync(CancellationToken cancellationToken = default) =>
+        _connection.ConnectAsync(cancellationToken);
 
     public void SetActive(bool active) => _connection.SetActive(active);
 
