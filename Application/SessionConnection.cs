@@ -230,6 +230,7 @@ public sealed class SessionConnection : IAsyncDisposable
             try
             {
                 e.Accepted = await _confirmFingerprint(e);
+                if (e.Accepted) _profile.HostFingerprint = e.Fingerprint;
             }
             finally
             {
@@ -237,7 +238,6 @@ public sealed class SessionConnection : IAsyncDisposable
             }
         });
         signal.Wait(FingerprintConfirmationTimeout);
-        if (e.Accepted) _profile.HostFingerprint = e.Fingerprint;
     }
 
     private void Connection_Disconnected(object? sender, EventArgs e) => _post(() =>

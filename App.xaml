@@ -176,7 +176,7 @@
                                 </VisualStateManager.VisualStateGroups>
                                 <Border
                                     x:Name="ButtonBackground"
-                                    Margin="0,4"
+                                    Margin="0,8,0,8"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
