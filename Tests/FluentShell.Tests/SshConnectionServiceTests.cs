@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using FluentShell.Models;
 using FluentShell.Services;
+using Renci.SshNet;
 
 namespace FluentShell.Tests;
 
@@ -117,5 +118,72 @@ public sealed class SshConnectionServiceTests
                 throw new InvalidOperationException("客户端在发送 SSH 标识前断开连接。");
         }
         while (buffer[0] != '\n');
+    }
+
+    [TestMethod]
+    public async Task CleanupFailedConnectionAsync_waits_for_shell_task_before_completing()
+    {
+        var shellTcs = new TaskCompletionSource<ShellStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cleanupTask = SshConnectionService.CleanupFailedConnectionAsync(
+            transferSftpConnectTask: null,
+            transferSftpClient: null,
+            sftpConnectTask: null,
+            sftpClient: null,
+            shellTask: shellTcs.Task,
+            shell: null,
+            sshConnectTask: null,
+            sshClient: null,
+            privateKeyFiles: Array.Empty<Renci.SshNet.PrivateKeyFile>());
+
+        Assert.IsFalse(cleanupTask.IsCompleted, "清理逻辑必须等待正在执行的 shellTask 完成。");
+
+        shellTcs.SetCanceled();
+        await cleanupTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsTrue(cleanupTask.IsCompletedSuccessfully, "shellTask 结束后清理应成功结束。");
+    }
+
+    [TestMethod]
+    public async Task CleanupFailedConnectionAsync_handles_faulted_shell_task_without_throwing()
+    {
+        var shellTcs = new TaskCompletionSource<ShellStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cleanupTask = SshConnectionService.CleanupFailedConnectionAsync(
+            transferSftpConnectTask: null,
+            transferSftpClient: null,
+            sftpConnectTask: null,
+            sftpClient: null,
+            shellTask: shellTcs.Task,
+            shell: null,
+            sshConnectTask: null,
+            sshClient: null,
+            privateKeyFiles: Array.Empty<Renci.SshNet.PrivateKeyFile>());
+
+        shellTcs.SetException(new Renci.SshNet.Common.SshConnectionException("Client not connected."));
+        await cleanupTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsTrue(cleanupTask.IsCompletedSuccessfully, "清理逻辑应当吞掉底层任务异常并安全完成。");
+    }
+
+    [TestMethod]
+    public async Task CleanupFailedConnectionAsync_waits_for_connect_tasks_before_completing()
+    {
+        var sftpConnectTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sshConnectTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var cleanupTask = SshConnectionService.CleanupFailedConnectionAsync(
+            transferSftpConnectTask: null,
+            transferSftpClient: null,
+            sftpConnectTask: sftpConnectTcs.Task,
+            sftpClient: null,
+            shellTask: null,
+            shell: null,
+            sshConnectTask: sshConnectTcs.Task,
+            sshClient: null,
+            privateKeyFiles: Array.Empty<Renci.SshNet.PrivateKeyFile>());
+
+        Assert.IsFalse(cleanupTask.IsCompleted, "清理逻辑必须等待正在执行的连接任务完成。");
+
+        sftpConnectTcs.SetResult();
+        sshConnectTcs.SetResult();
+        await cleanupTask.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsTrue(cleanupTask.IsCompletedSuccessfully);
     }
 }

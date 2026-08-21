@@ -225,6 +225,7 @@ public sealed class SessionConnection : IAsyncDisposable
     {
         // SSH.NET 在协议线程上同步等待这个答复，所以这里必须阻塞到对话框返回。
         var signal = new ManualResetEventSlim(false);
+        Exception? capturedException = null;
         _post(async () =>
         {
             try
@@ -232,12 +233,21 @@ public sealed class SessionConnection : IAsyncDisposable
                 e.Accepted = await _confirmFingerprint(e);
                 if (e.Accepted) _profile.HostFingerprint = e.Fingerprint;
             }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+                e.Accepted = false;
+            }
             finally
             {
                 signal.Set();
             }
         });
         signal.Wait(FingerprintConfirmationTimeout);
+        if (capturedException is not null)
+        {
+            Output?.Invoke(this, $"\r\n[指纹确认失败] {capturedException.Message}\r\n");
+        }
     }
 
     private void Connection_Disconnected(object? sender, EventArgs e) => _post(() =>

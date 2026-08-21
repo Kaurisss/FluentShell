@@ -47,30 +47,42 @@ public sealed class SshConnectionService : ISshConnection
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         SshClient? sshClient = null;
+        Task? sshConnectTask = null;
+        Task<ShellStream>? shellTask = null;
+        ShellStream? shell = null;
         SftpClient? sftpClient = null;
+        Task? sftpConnectTask = null;
         SftpClient? transferSftpClient = null;
+        Task? transferSftpConnectTask = null;
         var privateKeyFiles = new List<PrivateKeyFile>();
         try
         {
             sshClient = new SshClient(CreateConnectionInfo(privateKeyFiles));
             sshClient.HostKeyReceived += OnHostKeyReceived;
-            await ConnectClientAsync(sshClient, cancellationToken).ConfigureAwait(false);
+            sshConnectTask = sshClient.ConnectAsync(cancellationToken);
+            await AwaitOperationAsync(sshConnectTask, cancellationToken).ConfigureAwait(false);
 
-            var shell = await AwaitOperationAsync(
-                Task.Run(
-                    () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
-                    cancellationToken),
-                cancellationToken).ConfigureAwait(false);
+            if (!sshClient.IsConnected)
+            {
+                throw new SshConnectionException("SSH 客户端报告已连接，但连接状态检查失败。");
+            }
+
+            shellTask = Task.Run(
+                () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
+                cancellationToken);
+            shell = await AwaitOperationAsync(shellTask, cancellationToken).ConfigureAwait(false);
 
             sftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
             sftpClient.HostKeyReceived += OnHostKeyReceived;
-            await ConnectClientAsync(sftpClient, cancellationToken).ConfigureAwait(false);
+            sftpConnectTask = sftpClient.ConnectAsync(cancellationToken);
+            await AwaitOperationAsync(sftpConnectTask, cancellationToken).ConfigureAwait(false);
 
             // 传输走独立连接：SSH.NET 客户端不保证并发安全，
             // 浏览目录不该排在大文件传输后面。
             transferSftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
             transferSftpClient.HostKeyReceived += OnHostKeyReceived;
-            await ConnectClientAsync(transferSftpClient, cancellationToken).ConfigureAwait(false);
+            transferSftpConnectTask = transferSftpClient.ConnectAsync(cancellationToken);
+            await AwaitOperationAsync(transferSftpConnectTask, cancellationToken).ConfigureAwait(false);
 
             _sshClient = sshClient;
             _shell = shell;
@@ -91,17 +103,17 @@ public sealed class SshConnectionService : ISshConnection
             _remoteFileClient = null;
             _transferFileClient = null;
             ScheduleFailedConnectionCleanup(
+                transferSftpConnectTask,
                 transferSftpClient,
+                sftpConnectTask,
                 sftpClient,
+                shellTask,
+                shell,
+                sshConnectTask,
                 sshClient,
                 privateKeyFiles);
             throw;
         }
-    }
-
-    private static async Task ConnectClientAsync(BaseClient client, CancellationToken cancellationToken)
-    {
-        await AwaitOperationAsync(client.ConnectAsync(cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task AwaitOperationAsync(
@@ -142,18 +154,93 @@ public sealed class SshConnectionService : ISshConnection
             TaskScheduler.Default);
 
     private static void ScheduleFailedConnectionCleanup(
+        Task? transferSftpConnectTask,
         BaseClient? transferSftpClient,
+        Task? sftpConnectTask,
         BaseClient? sftpClient,
+        Task<ShellStream>? shellTask,
+        ShellStream? shell,
+        Task? sshConnectTask,
         BaseClient? sshClient,
         IReadOnlyCollection<PrivateKeyFile> privateKeyFiles)
     {
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
-            DisposeClient(transferSftpClient);
-            DisposeClient(sftpClient);
-            DisposeClient(sshClient);
-            DisposePrivateKeyFiles(privateKeyFiles);
+            await CleanupFailedConnectionAsync(
+                transferSftpConnectTask,
+                transferSftpClient,
+                sftpConnectTask,
+                sftpClient,
+                shellTask,
+                shell,
+                sshConnectTask,
+                sshClient,
+                privateKeyFiles).ConfigureAwait(false);
         });
+    }
+
+    internal static async Task CleanupFailedConnectionAsync(
+        Task? transferSftpConnectTask,
+        BaseClient? transferSftpClient,
+        Task? sftpConnectTask,
+        BaseClient? sftpClient,
+        Task<ShellStream>? shellTask,
+        ShellStream? shell,
+        Task? sshConnectTask,
+        BaseClient? sshClient,
+        IReadOnlyCollection<PrivateKeyFile> privateKeyFiles)
+    {
+        if (transferSftpConnectTask is not null)
+        {
+            await AwaitTaskCompletionSafelyAsync(transferSftpConnectTask).ConfigureAwait(false);
+        }
+        DisposeClient(transferSftpClient);
+
+        if (sftpConnectTask is not null)
+        {
+            await AwaitTaskCompletionSafelyAsync(sftpConnectTask).ConfigureAwait(false);
+        }
+        DisposeClient(sftpClient);
+
+        if (shellTask is not null)
+        {
+            await AwaitTaskCompletionSafelyAsync(shellTask).ConfigureAwait(false);
+            if (shellTask.Status == TaskStatus.RanToCompletion)
+            {
+                DisposeShell(shellTask.Result);
+            }
+        }
+        else if (shell is not null)
+        {
+            DisposeShell(shell);
+        }
+
+        if (sshConnectTask is not null)
+        {
+            await AwaitTaskCompletionSafelyAsync(sshConnectTask).ConfigureAwait(false);
+        }
+        DisposeClient(sshClient);
+
+        DisposePrivateKeyFiles(privateKeyFiles);
+    }
+
+    private static async Task AwaitTaskCompletionSafelyAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch
+        {
+            // 忽略操作在取消或网络断开时抛出的异常，确保清理继续执行。
+        }
+    }
+
+    private static void DisposeShell(ShellStream? shell)
+    {
+        if (shell is null) return;
+
+        try { shell.Dispose(); } catch { }
     }
 
     private static void DisposeClient(BaseClient? client)
@@ -258,22 +345,23 @@ public sealed class SshConnectionService : ISshConnection
     {
         var fingerprint = Convert.ToHexString(e.FingerPrint);
         LastFingerprint = fingerprint;
+        var storedFingerprint = _profile.HostFingerprint;
         var args = new HostFingerprintRequiredEventArgs
         {
             Fingerprint = fingerprint,
             KeyType = e.HostKeyName,
-            Accepted = !string.IsNullOrWhiteSpace(_profile.HostFingerprint) && string.Equals(_profile.HostFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)
+            Accepted = !string.IsNullOrWhiteSpace(storedFingerprint) && string.Equals(storedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)
         };
 
-        if (string.IsNullOrWhiteSpace(_profile.HostFingerprint))
+        if (string.IsNullOrWhiteSpace(storedFingerprint))
         {
             HostFingerprintRequired?.Invoke(this, args);
         }
 
         e.CanTrust = args.Accepted;
-        if (!string.IsNullOrWhiteSpace(_profile.HostFingerprint) && !args.Accepted)
+        if (!string.IsNullOrWhiteSpace(storedFingerprint) && !args.Accepted)
         {
-            throw new SshConnectionException("服务器指纹已变化，连接被拒绝。");
+            throw new SshConnectionException($"服务器指纹已变化，连接被拒绝。\n存储: {storedFingerprint}\n当前: {fingerprint}");
         }
     }
 
@@ -401,17 +489,29 @@ public sealed class SshConnectionService : ISshConnection
         _readCts?.Cancel();
         var privateKeyFiles = _privateKeyFiles;
         _privateKeyFiles = null;
+        var shell = _shell;
+        _shell = null;
+        var transferSftpClient = _transferSftpClient;
+        _transferSftpClient = null;
+        var sftpClient = _sftpClient;
+        _sftpClient = null;
+        var sshClient = _sshClient;
+        _sshClient = null;
+        _remoteFileClient = null;
+        _transferFileClient = null;
+
         await _shellWriteGate.WaitAsync();
         try
         {
             await Task.Run(() =>
             {
-                try { _transferSftpClient?.Disconnect(); } catch { }
-                DisposeClient(_transferSftpClient);
-                try { _sftpClient?.Disconnect(); } catch { }
-                DisposeClient(_sftpClient);
-                try { _sshClient?.Disconnect(); } catch { }
-                DisposeClient(_sshClient);
+                try { transferSftpClient?.Disconnect(); } catch { }
+                DisposeClient(transferSftpClient);
+                try { sftpClient?.Disconnect(); } catch { }
+                DisposeClient(sftpClient);
+                DisposeShell(shell);
+                try { sshClient?.Disconnect(); } catch { }
+                DisposeClient(sshClient);
                 if (privateKeyFiles is not null)
                     DisposePrivateKeyFiles(privateKeyFiles);
             });

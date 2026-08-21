@@ -50,6 +50,9 @@
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <PackageReference Include="Syncfusion.Grid.WinUI" Version="34.1.30" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluentShell.Tests" />
+  </ItemGroup>
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
