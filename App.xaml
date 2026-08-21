@@ -80,13 +80,14 @@
 
             <Style x:Key="TitleBarSessionTabStyle" TargetType="ToggleButton">
                 <Setter Property="Height" Value="40" />
-                <Setter Property="MinWidth" Value="92" />
-                <Setter Property="Padding" Value="12,0,8,0" />
+                <Setter Property="MinWidth" Value="132" />
+                <Setter Property="Padding" Value="12,0,40,0" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ToggleButton">
@@ -114,12 +115,20 @@
                                         <VisualState x:Name="Unchecked" />
                                         <VisualState x:Name="Checked">
                                             <VisualState.Setters>
-                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+                                                <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource SubtleStrokeBrush}" />
+                                                <Setter Target="TabBackground.BorderThickness" Value="1" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
-                                <Border x:Name="TabBackground" Margin="0,4,0,4" Background="{TemplateBinding Background}" CornerRadius="{ThemeResource ControlCornerRadius}" />
+                                <Border
+                                    x:Name="TabBackground"
+                                    Margin="0,3,3,3"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="8" />
                                 <ContentPresenter
                                     x:Name="ContentPresenter"
                                     Padding="{TemplateBinding Padding}"

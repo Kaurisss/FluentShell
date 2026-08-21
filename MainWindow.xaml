@@ -11,7 +11,6 @@
             <RowDefinition Height="40" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
         <Grid x:Name="AppTitleBar" Height="40" Background="Transparent">
             <Button
                 x:Name="PaneToggleButton"

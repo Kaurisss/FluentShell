@@ -26,7 +26,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
         var container = new Grid
         {
             Height = 40,
-            MinWidth = 128,
+            MinWidth = 132,
             MaxWidth = 240
         };
         var tabButton = new ToggleButton
@@ -54,11 +54,14 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
         var closeButton = new Button
         {
             Tag = session,
-            Content = new FontIcon { Glyph = "\uE711", FontSize = 16 },
+            Content = new FontIcon { Glyph = "\uE711", FontSize = 14 },
             Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"],
+            Width = 32,
+            Height = 32,
+            MinWidth = 32,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0)
+            Margin = new Thickness(0, 0, 8, 0)
         };
         ToolTipService.SetToolTip(closeButton, presentation.CloseToolTip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
@@ -69,7 +72,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
 
         _tabButtons[session] = tabButton;
         _tabContainers[session] = container;
-        TabPanel.Children.Insert(Math.Max(0, TabPanel.Children.Count - 1), container);
+        TabPanel.Children.Add(container);
     }
 
     public void Select(IShellSession session)

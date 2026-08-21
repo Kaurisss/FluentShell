@@ -66,6 +66,11 @@ public sealed partial class MainWindow : Window
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "FluentShell.ico");
         if (File.Exists(iconPath)) _appWindow.SetIcon(iconPath);
         _appWindow.Resize(new SizeInt32(1440, 900));
+        if (_appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = 1000;
+            presenter.PreferredMinimumHeight = 700;
+        }
         ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
@@ -203,7 +208,11 @@ public sealed partial class MainWindow : Window
 
         var isNarrow = layout.IsNarrow;
         ApplyContentSpacing();
-        SessionTabHost.Margin = isNarrow ? new Thickness(56, 0, 180, 0) : new Thickness(65, 0, 300, 0);
+        SessionTabHost.Margin = new Thickness(
+            RootNavigationView.CompactPaneLength,
+            0,
+            isNarrow ? 180 : 300,
+            0);
         _serverCatalogPage.UpdateResponsiveLayout(isNarrow);
     }
 
