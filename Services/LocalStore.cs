@@ -56,7 +56,6 @@ public sealed class LocalStore : ILocalStore
     public void SaveSecret(ServerProfile profile, string secret) => _credentials.Save(profile, secret);
     public void RemoveSecret(ServerProfile profile) => _credentials.Remove(profile);
     public void RemoveSecret(Guid profileId, string username) => _credentials.Remove(profileId, username);
-    public void ClearSecrets() => _credentials.ClearAll();
 
     public void ClearAll()
     {

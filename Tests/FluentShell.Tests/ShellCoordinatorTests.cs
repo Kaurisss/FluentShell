@@ -44,20 +44,6 @@ public sealed class ShellCoordinatorTests
     }
 
     [TestMethod]
-    public async Task Disabling_remember_credentials_clears_saved_secrets()
-    {
-        var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
-        var store = new InMemoryLocalStore([profile]);
-        store.SaveSecret(profile, "秘密");
-        var coordinator = CreateCoordinator((current, _, _) => new FakeShellSession(current), store: store);
-        await coordinator.LoadAsync();
-
-        await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(RememberCredentials: false));
-
-        Assert.IsNull(store.TryGetSecret(profile));
-    }
-
-    [TestMethod]
     public async Task Connecting_records_last_connected_at_through_the_store()
     {
         var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };

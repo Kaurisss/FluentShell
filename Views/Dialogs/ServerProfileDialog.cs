@@ -12,7 +12,6 @@ public sealed class ServerProfileDialogContext
     public required IntPtr WindowHandle { get; init; }
     public required Brush MutedTextBrush { get; init; }
     public required bool HasSavedCredential { get; init; }
-    public required bool RememberCredentialsByDefault { get; init; }
     public required IReadOnlyList<ServerProfile> ExistingProfiles { get; init; }
 }
 
@@ -84,7 +83,7 @@ public static class ServerProfileDialog
         var rememberCredential = new CheckBox
         {
             Content = "保存凭据到 Windows 凭据管理器",
-            IsChecked = context.HasSavedCredential || context.RememberCredentialsByDefault
+            IsChecked = true
         };
         var credentialInfo = new TextBlock
         {

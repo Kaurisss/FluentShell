@@ -33,7 +33,6 @@ public sealed partial class SettingsPage : UserControl
         BackdropMaterialComboBox.SelectedIndex = settings.BackdropMaterial == "亚克力" ? 1 : 0;
         TerminalFontSizeBox.Value = settings.TerminalFontSize;
         DownloadDirectoryBox.Text = settings.DownloadDirectory;
-        RememberCredentialsToggle.IsOn = settings.RememberCredentials;
         DataLocationText.Text = dataFolder;
         _loading = false;
     }
@@ -62,11 +61,6 @@ public sealed partial class SettingsPage : UserControl
         SettingsChanged?.Invoke(this, new AppSettingsUpdate(TerminalFontSize: sender.Value));
     }
 
-    private void RememberCredentialsToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        SettingsChanged?.Invoke(this, new AppSettingsUpdate(RememberCredentials: RememberCredentialsToggle.IsOn));
-    }
 
     private async void ChooseDownloadDirectoryButton_Click(object sender, RoutedEventArgs e)
     {

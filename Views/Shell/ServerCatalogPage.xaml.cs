@@ -11,18 +11,15 @@ public sealed partial class ServerCatalogPage : UserControl
 {
     private readonly IntPtr _windowHandle;
     private readonly Func<ServerProfile, bool> _hasSavedCredential;
-    private readonly Func<bool> _rememberCredentialsByDefault;
     private IReadOnlyList<ServerProfile> _profiles = [];
     private bool _initialized;
 
     public ServerCatalogPage(
         IntPtr windowHandle,
-        Func<ServerProfile, bool> hasSavedCredential,
-        Func<bool> rememberCredentialsByDefault)
+        Func<ServerProfile, bool> hasSavedCredential)
     {
         _windowHandle = windowHandle;
         _hasSavedCredential = hasSavedCredential;
-        _rememberCredentialsByDefault = rememberCredentialsByDefault;
         InitializeComponent();
         _initialized = true;
     }
@@ -145,7 +142,6 @@ public sealed partial class ServerCatalogPage : UserControl
             WindowHandle = _windowHandle,
             MutedTextBrush = (Brush)Application.Current.Resources["MutedTextBrush"],
             HasSavedCredential = editing is not null && _hasSavedCredential(editing),
-            RememberCredentialsByDefault = _rememberCredentialsByDefault(),
             ExistingProfiles = _profiles
         });
         if (result is null) return;

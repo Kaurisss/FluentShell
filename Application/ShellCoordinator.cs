@@ -45,9 +45,7 @@ public sealed record AppSettingsUpdate(
     string? Theme = null,
     string? BackdropMaterial = null,
     double? TerminalFontSize = null,
-    string? DownloadDirectory = null,
-    bool? RememberCredentials = null);
-
+    string? DownloadDirectory = null);
 public sealed class ShellCoordinator
 {
     private readonly ILocalStore _localStore;
@@ -163,11 +161,6 @@ public sealed class ShellCoordinator
             _settings.DownloadDirectory = update.DownloadDirectory;
             _settings.HasCustomDownloadDirectory = true;
         }
-        if (update.RememberCredentials is not null)
-        {
-            _settings.RememberCredentials = update.RememberCredentials.Value;
-            if (!update.RememberCredentials.Value) _localStore.ClearSecrets();
-        }
 
         await _localStore.SaveSettingsAsync(_settings);
         NotifyStateChanged();
@@ -226,7 +219,7 @@ public sealed class ShellCoordinator
             profile.Id,
             out var persistenceOverride)
             ? persistenceOverride
-            : _settings.RememberCredentials;
+            : true;
         if (shouldPersistCredential && _sessionSecrets.TryGetValue(profile.Id, out var secret))
             _localStore.SaveSecret(profile, secret);
         else if (!shouldPersistCredential)

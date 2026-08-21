@@ -40,7 +40,6 @@
                     <Button Grid.Column="1" Content="选择目录" Click="ChooseDownloadDirectoryButton_Click" />
                 </Grid>
             </StackPanel>
-            <ToggleSwitch x:Name="RememberCredentialsToggle" Header="记住成功登录凭据" OnContent="开启" OffContent="关闭" Toggled="RememberCredentialsToggle_Toggled" />
             <Border Padding="18" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="8">
                 <StackPanel Spacing="10">
                     <TextBlock Text="本地数据" FontWeight="SemiBold" />

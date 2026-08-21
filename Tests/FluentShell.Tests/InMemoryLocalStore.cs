@@ -81,8 +81,6 @@ public sealed class InMemoryLocalStore : ILocalStore
 
     public void RemoveSecret(Guid profileId, string username) => _secrets.Remove((profileId, username));
 
-    public void ClearSecrets() => _secrets.Clear();
-
     public void ClearAll()
     {
         // 与生产适配器一致：删除数据目录会同时清空已保存服务器与设置文件。

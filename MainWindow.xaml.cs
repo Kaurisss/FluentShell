@@ -51,8 +51,7 @@ public sealed partial class MainWindow : Window
             fingerprint => ShellDialogService.ConfirmFingerprintAsync(Content.XamlRoot, fingerprint));
         _serverCatalogPage = new ServerCatalogPage(
             _windowHandle,
-            _shell.HasSavedCredential,
-            () => _shell.Settings.RememberCredentials);
+            _shell.HasSavedCredential);
         _settingsPage = new SettingsPage(_windowHandle);
 
         WireModules();

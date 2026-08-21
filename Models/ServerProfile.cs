@@ -61,14 +61,12 @@ public sealed class AppSettings : INotifyPropertyChanged
     private double _terminalFontSize = 14;
     private string _downloadDirectory = DefaultDownloadDirectory;
     private bool _hasCustomDownloadDirectory;
-    private bool _rememberCredentials;
 
     public string Theme { get => _theme; set => SetField(ref _theme, value); }
     public string BackdropMaterial { get => _backdropMaterial; set => SetField(ref _backdropMaterial, value); }
     public double TerminalFontSize { get => _terminalFontSize; set => SetField(ref _terminalFontSize, value); }
     public string DownloadDirectory { get => _downloadDirectory; set => SetField(ref _downloadDirectory, value); }
     public bool HasCustomDownloadDirectory { get => _hasCustomDownloadDirectory; set => SetField(ref _hasCustomDownloadDirectory, value); }
-    public bool RememberCredentials { get => _rememberCredentials; set => SetField(ref _rememberCredentials, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

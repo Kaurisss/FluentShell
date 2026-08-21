@@ -35,7 +35,6 @@ public interface ILocalStore
     void SaveSecret(ServerProfile profile, string secret);
     void RemoveSecret(ServerProfile profile);
     void RemoveSecret(Guid profileId, string username);
-    void ClearSecrets();
 
     /// <summary>清空本机全部数据：已保存服务器、设置文件与凭据。</summary>
     void ClearAll();
