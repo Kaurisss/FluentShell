@@ -11,7 +11,7 @@
             VerticalScrollMode="Disabled"
             ZoomMode="Disabled">
             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                <StackPanel x:Name="TabPanel" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" />
+                <StackPanel x:Name="TabPanel" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" />
                 <Button
                     x:Name="NewSessionButton"
                     Width="32"

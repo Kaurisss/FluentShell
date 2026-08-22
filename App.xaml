@@ -124,7 +124,7 @@
                                 </VisualStateManager.VisualStateGroups>
                                 <Border
                                     x:Name="TabBackground"
-                                    Margin="0,3,3,3"
+                                    Margin="0,3,0,3"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
