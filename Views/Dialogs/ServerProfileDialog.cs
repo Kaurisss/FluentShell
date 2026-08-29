@@ -30,6 +30,8 @@ public static class ServerProfileDialog
     private static readonly PrivateKeyValidator PrivateKeyValidator = new();
     private static readonly ServerProfileValidator ServerProfileValidator = new();
 
+    internal static bool HasPrivateKeyPath(string? privateKeyPath) => !string.IsNullOrWhiteSpace(privateKeyPath);
+
     public static async Task<ServerProfileDialogResult?> ShowAsync(
         ServerProfile? editing,
         ServerProfileDialogContext context)
@@ -231,8 +233,14 @@ public static class ServerProfileDialog
 
         void ScheduleKeyPathValidation()
         {
-            if (UsesPrivateKey())
-                validationState.Schedule(keyPath.Text.Trim());
+            if (!UsesPrivateKey())
+                return;
+
+            var privateKeyPath = keyPath.Text.Trim();
+            if (HasPrivateKeyPath(privateKeyPath))
+                validationState.Schedule(privateKeyPath);
+            else
+                validationState.Reset();
         }
 
         string? ValidateFields()
@@ -337,8 +345,14 @@ public static class ServerProfileDialog
         authentication.SelectionChanged += (_, _) =>
         {
             UpdateAuthenticationFields();
-            if (UsesPrivateKey())
-                _ = validationState.ValidateAsync(keyPath.Text.Trim(), force: true);
+            if (!UsesPrivateKey())
+                return;
+
+            var privateKeyPath = keyPath.Text.Trim();
+            if (HasPrivateKeyPath(privateKeyPath))
+                _ = validationState.ValidateAsync(privateKeyPath, force: true);
+            else
+                validationState.Reset();
         };
         user.TextChanged += (_, _) =>
         {
@@ -401,13 +415,14 @@ public static class ServerProfileDialog
         var chooseKeyButton = new Button
         {
             Content = "选择文件",
-            MinHeight = 40,
+            Height = 32,
+            MinHeight = 32,
             VerticalAlignment = VerticalAlignment.Bottom
         };
         ToolTipService.SetToolTip(chooseKeyButton, "选择 OpenSSH 格式私钥文件");
         chooseKeyButton.Click += async (_, _) =>
         {
-            var selectedPath = PrivateKeyFilePicker.Pick(windowHandle);
+            var selectedPath = await PrivateKeyFilePicker.PickAsync(windowHandle);
             if (selectedPath is null) return;
 
             keyPath.Text = selectedPath;
