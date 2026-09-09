@@ -9,6 +9,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -26,8 +27,11 @@ public sealed partial class MainWindow : Window
     private readonly ServerCatalogPage _serverCatalogPage;
     private readonly SettingsPage _settingsPage;
     private readonly ShellLayoutMode _layout = new();
+    private Storyboard? _pageEntranceStoryboard;
     private bool _loaded;
     private bool _isSessionLayout;
+    private bool _hasDisplayedPage;
+    private string? _currentPage;
 
     public MainWindow()
     {
@@ -228,11 +232,18 @@ public sealed partial class MainWindow : Window
             isNarrow ? 16 : 24,
             spacing.Horizontal,
             isNarrow ? 12 : 18);
-        ContentHost.Padding = new Thickness(spacing.Horizontal, 0, spacing.Horizontal, spacing.Bottom);
+        ContentHost.Padding = new Thickness(
+            spacing.Horizontal,
+            0,
+            spacing.Horizontal,
+            _isSessionLayout ? spacing.Bottom : 0);
+        _overviewPage.UpdateResponsiveLayout(spacing.Horizontal);
     }
 
     private void NavigateTo(string page)
     {
+        var shouldAnimate = _hasDisplayedPage && !string.Equals(_currentPage, page, StringComparison.Ordinal);
+
         PageContentPresenter.Content = page switch
         {
             "servers" => _serverCatalogPage,
@@ -251,6 +262,43 @@ public sealed partial class MainWindow : Window
             "settings" => "连接安全与界面偏好。",
             _ => "从最近或已保存的服务器开始 SSH 会话。"
         };
+
+        _currentPage = page;
+        _hasDisplayedPage = true;
+        if (shouldAnimate)
+            PlayPageEntranceAnimation();
+    }
+
+    private void PlayPageEntranceAnimation()
+    {
+        _pageEntranceStoryboard?.Stop();
+
+        PageContentTransform.Y = 28;
+        PageContentPresenter.Opacity = 0;
+
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var offsetAnimation = new DoubleAnimation
+        {
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(260)),
+            EasingFunction = easing
+        };
+        var opacityAnimation = new DoubleAnimation
+        {
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            EasingFunction = easing
+        };
+
+        Storyboard.SetTarget(offsetAnimation, PageContentTransform);
+        Storyboard.SetTargetProperty(offsetAnimation, "Y");
+        Storyboard.SetTarget(opacityAnimation, PageContentPresenter);
+        Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
+
+        _pageEntranceStoryboard = new Storyboard();
+        _pageEntranceStoryboard.Children.Add(offsetAnimation);
+        _pageEntranceStoryboard.Children.Add(opacityAnimation);
+        _pageEntranceStoryboard.Begin();
     }
 
     private void ShowConnectedLayout()

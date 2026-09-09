@@ -16,6 +16,11 @@ public sealed partial class OverviewPage : UserControl
     public event EventHandler? AddServerRequested;
     public event EventHandler<ServerProfile>? ConnectRequested;
 
+    public void UpdateResponsiveLayout(double contentHorizontalSpacing)
+    {
+        RootScrollViewer.Margin = new Thickness(0, 0, -contentHorizontalSpacing, 0);
+    }
+
     public void SetOverview(IReadOnlyList<ServerProfile> profiles)
     {
         var state = OverviewConnectionQuery.Apply(profiles);

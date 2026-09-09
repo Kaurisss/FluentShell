@@ -65,7 +65,11 @@
                     </StackPanel>
                 </Grid>
                 <Grid Grid.Row="1" x:Name="ContentHost" Padding="30,0,30,28">
-                    <ContentPresenter x:Name="PageContentPresenter" />
+                    <ContentPresenter x:Name="PageContentPresenter">
+                        <ContentPresenter.RenderTransform>
+                            <TranslateTransform x:Name="PageContentTransform" />
+                        </ContentPresenter.RenderTransform>
+                    </ContentPresenter>
                     <ContentPresenter x:Name="SessionContentPresenter" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
                 </Grid>
             </Grid>

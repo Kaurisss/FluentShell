@@ -131,7 +131,12 @@ public static class ServerProfileDialog
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap
         };
-        var form = new StackPanel { Spacing = 12, MaxWidth = 560 };
+        var form = new StackPanel
+        {
+            Spacing = 12,
+            MaxWidth = 560,
+            Margin = new Thickness(0, 0, 28, 0)
+        };
         var validationError = new TextBlock
         {
             Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
@@ -327,10 +332,17 @@ public static class ServerProfileDialog
             form.Children.Add(child);
         }
 
+        var formScrollViewer = new ScrollViewer
+        {
+            Content = form,
+            MaxHeight = 620,
+            Margin = new Thickness(0, 0, -28, 0)
+        };
+
         dialog = new ContentDialog
         {
             Title = editing is null ? "添加服务器" : "编辑服务器",
-            Content = new ScrollViewer { Content = form, MaxHeight = 620 },
+            Content = formScrollViewer,
             PrimaryButtonText = editing is null ? "保存" : "保存修改",
             SecondaryButtonText = "保存并连接",
             CloseButtonText = "取消",
