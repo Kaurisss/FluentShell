@@ -9,7 +9,7 @@
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto"
         SizeChanged="RootScrollViewer_SizeChanged">
-        <StackPanel x:Name="RootContent" Spacing="28" MaxWidth="1080" HorizontalAlignment="Left">
+        <StackPanel x:Name="RootContent" Spacing="28" MaxWidth="1080" HorizontalAlignment="Left" Padding="0,0,0,28">
             <Grid ColumnSpacing="20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
