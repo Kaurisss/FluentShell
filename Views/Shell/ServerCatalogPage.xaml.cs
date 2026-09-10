@@ -45,44 +45,6 @@ public sealed partial class ServerCatalogPage : UserControl
         AddButton.IsEnabled = !isBusy;
     }
 
-    public void UpdateResponsiveLayout(bool isNarrow)
-    {
-        ListHeader.Visibility = isNarrow ? Visibility.Collapsed : Visibility.Visible;
-        Toolbar.RowSpacing = isNarrow ? 10 : 0;
-        Toolbar.RowDefinitions.Clear();
-        if (isNarrow)
-        {
-            Toolbar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Toolbar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Toolbar.ColumnDefinitions[0].Width = new GridLength(136);
-            Toolbar.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
-            Grid.SetRow(SearchBox, 0);
-            Grid.SetColumn(SearchBox, 0);
-            Grid.SetColumnSpan(SearchBox, 4);
-            Grid.SetRow(SortComboBox, 1);
-            Grid.SetColumn(SortComboBox, 0);
-            Grid.SetRow(RefreshButton, 1);
-            Grid.SetColumn(RefreshButton, 2);
-            Grid.SetRow(AddButton, 1);
-            Grid.SetColumn(AddButton, 3);
-            AddButton.Content = "添加";
-        }
-        else
-        {
-            Toolbar.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
-            Toolbar.ColumnDefinitions[1].Width = new GridLength(150);
-            Grid.SetRow(SearchBox, 0);
-            Grid.SetColumn(SearchBox, 0);
-            Grid.SetColumnSpan(SearchBox, 1);
-            Grid.SetRow(SortComboBox, 0);
-            Grid.SetColumn(SortComboBox, 1);
-            Grid.SetRow(RefreshButton, 0);
-            Grid.SetColumn(RefreshButton, 2);
-            Grid.SetRow(AddButton, 0);
-            Grid.SetColumn(AddButton, 3);
-            AddButton.Content = "添加服务器";
-        }
-    }
 
     public Task ShowAddDialogAsync(XamlRoot xamlRoot) => ShowProfileDialogAsync(null, xamlRoot);
 
@@ -165,6 +127,17 @@ public sealed partial class ServerCatalogPage : UserControl
         var sortOrder = SortComboBox.SelectedIndex == 1
             ? ServerSortOrder.RecentConnection
             : ServerSortOrder.Name;
-        ProfilesList.ItemsSource = ServerProfileQuery.Apply(_profiles, SearchBox.Text, sortOrder);
+        var filteredProfiles = ServerProfileQuery.Apply(_profiles, SearchBox.Text, sortOrder);
+        ProfilesList.ItemsSource = filteredProfiles;
+        ProfileCountText.Text = filteredProfiles.Count == _profiles.Count
+            ? $"{_profiles.Count} 台"
+            : $"显示 {filteredProfiles.Count} / {_profiles.Count} 台";
+        var isEmpty = filteredProfiles.Count == 0;
+        ProfilesList.Visibility = isEmpty ? Visibility.Collapsed : Visibility.Visible;
+        EmptyState.Visibility = isEmpty ? Visibility.Visible : Visibility.Collapsed;
+        EmptyStateTitle.Text = _profiles.Count == 0 ? "还没有服务器配置" : "没有匹配的服务器";
+        EmptyStateDescription.Text = _profiles.Count == 0
+            ? "添加服务器后，可以在这里集中管理连接信息。"
+            : "尝试搜索其他名称、主机地址或用户名。";
     }
 }

@@ -71,8 +71,8 @@ public sealed partial class MainWindow : Window
         _appWindow.Resize(new SizeInt32(1440, 900));
         if (_appWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.PreferredMinimumWidth = 1000;
-            presenter.PreferredMinimumHeight = 700;
+            presenter.PreferredMinimumWidth = 1700;
+            presenter.PreferredMinimumHeight = 960;
         }
         ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -216,7 +216,7 @@ public sealed partial class MainWindow : Window
             0,
             isNarrow ? 180 : 300,
             0);
-        _serverCatalogPage.UpdateResponsiveLayout(isNarrow);
+
     }
 
     /// <summary>

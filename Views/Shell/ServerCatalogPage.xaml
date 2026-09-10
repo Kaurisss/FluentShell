@@ -3,13 +3,46 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="WideProfileTemplate">
+            <Border Margin="0,0,0,8" Padding="14,12" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.5*" MinWidth="160" />
+                        <ColumnDefinition Width="1.5*" MinWidth="160" />
+                        <ColumnDefinition Width="1*" MinWidth="100" />
+                        <ColumnDefinition Width="0.8*" MinWidth="80" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Notes}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding LastConnectedLabel}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding Address}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Address}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Username}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="3" Text="{Binding AuthenticationLabel}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource IconButtonStyle}" Content="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Tag="{Binding}" Click="ConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" />
+                        <Button Style="{StaticResource IconButtonStyle}" Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="CopyButton_Click" ToolTipService.ToolTip="复制" AutomationProperties.Name="复制" />
+                        <Button Style="{StaticResource IconButtonStyle}" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="EditButton_Click" ToolTipService.ToolTip="编辑" AutomationProperties.Name="编辑" />
+                        <Button Style="{StaticResource IconButtonStyle}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="DeleteButton_Click" ToolTipService.ToolTip="删除" AutomationProperties.Name="删除" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Grid x:Name="Toolbar" ColumnSpacing="10" Margin="0,0,0,14">
+
+        <Grid x:Name="Toolbar" ColumnSpacing="10" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="150" />
@@ -24,42 +57,38 @@
             <Button x:Name="RefreshButton" Grid.Column="2" Content="刷新" Click="RefreshButton_Click" />
             <Button x:Name="AddButton" Grid.Column="3" Content="添加服务器" Style="{StaticResource AppAccentButtonStyle}" Click="AddButton_Click" />
         </Grid>
-        <Grid x:Name="ListHeader" Grid.Row="1" Padding="14,8" ColumnSpacing="14">
+
+        <Grid Grid.Row="1" Margin="0,0,0,16">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="服务器目录" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="ProfileCountText" VerticalAlignment="Center" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid x:Name="ListHeader" Grid.Row="2" Padding="16,0,16,8" ColumnSpacing="14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="170" />
-                <ColumnDefinition Width="110" />
-                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="1.5*" MinWidth="160" />
+                <ColumnDefinition Width="1.5*" MinWidth="160" />
+                <ColumnDefinition Width="1*" MinWidth="100" />
+                <ColumnDefinition Width="0.8*" MinWidth="80" />
+                <ColumnDefinition Width="176" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="服务器" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
             <TextBlock Grid.Column="1" Text="地址" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
             <TextBlock Grid.Column="2" Text="用户" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+            <TextBlock Grid.Column="3" Text="认证" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+            <TextBlock Grid.Column="4" Text="操作" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
         </Grid>
-        <ListView Grid.Row="2" x:Name="ProfilesList" IsItemClickEnabled="True" ItemClick="ProfilesList_ItemClick" SelectionMode="None">
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid Padding="10" ColumnSpacing="14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="170" />
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding Notes}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                        <TextBlock Grid.Column="1" Text="{Binding Address}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="2" Text="{Binding Username}" VerticalAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
-                            <Button Style="{StaticResource IconButtonStyle}" Content="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="16" Tag="{Binding}" Click="ConnectButton_Click" ToolTipService.ToolTip="连接" AutomationProperties.Name="连接" />
-                            <Button Style="{StaticResource IconButtonStyle}" Content="&#xE8C8;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="CopyButton_Click" ToolTipService.ToolTip="复制" />
-                            <Button Style="{StaticResource IconButtonStyle}" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="EditButton_Click" ToolTipService.ToolTip="编辑" />
-                            <Button Style="{StaticResource IconButtonStyle}" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" Tag="{Binding}" Click="DeleteButton_Click" ToolTipService.ToolTip="删除" />
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+
+        <Grid Grid.Row="3">
+            <ListView x:Name="ProfilesList" IsItemClickEnabled="False" SelectionMode="None" Padding="0" ItemTemplate="{StaticResource WideProfileTemplate}" />
+            <Border x:Name="EmptyState" Padding="26" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}" Visibility="Collapsed">
+                <StackPanel Spacing="7" MaxWidth="520">
+                    <TextBlock x:Name="EmptyStateTitle" Text="还没有服务器配置" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock x:Name="EmptyStateDescription" Text="添加服务器后，可以在这里集中管理连接信息。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
+                    <Button MinHeight="38" Margin="0,4,0,0" HorizontalAlignment="Left" Content="添加服务器" Click="AddButton_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

@@ -135,7 +135,7 @@ public static class ServerProfileDialog
         {
             Spacing = 12,
             MaxWidth = 560,
-            Margin = new Thickness(0, 0, 28, 0)
+            Margin = new Thickness(0, 0, 16, 0)
         };
         var validationError = new TextBlock
         {
@@ -336,7 +336,7 @@ public static class ServerProfileDialog
         {
             Content = form,
             MaxHeight = 620,
-            Margin = new Thickness(0, 0, -28, 0)
+            Margin = new Thickness(0, 0, -24, 0)
         };
 
         dialog = new ContentDialog
