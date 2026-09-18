@@ -54,7 +54,8 @@ public sealed class SessionConnection : IAsyncDisposable
     }
 
     public SessionConnectionState State => _state;
-    public bool IsConnected => _active?.IsConnected == true;
+    public bool IsConnected => _state == SessionConnectionState.Connected &&
+        _active is { IsConnected: true, SftpClient.IsConnected: true, TransferSftpClient.IsConnected: true };
     public ISftpFileService RemoteFiles => _remoteFiles;
 
     /// <summary>传输专用通道上的远程文件 I/O，浏览与传输互不排队。</summary>
@@ -145,6 +146,11 @@ public sealed class SessionConnection : IAsyncDisposable
 
     private async Task ConnectWithSecretAsync(string secret, CancellationToken cancellationToken)
     {
+        if (_active is not null)
+        {
+            _metricsCts?.Cancel();
+            _cancelTransfers();
+        }
         await ReleaseActiveConnectionAsync();
 
         var connection = _connectionFactory(secret);
@@ -154,6 +160,9 @@ public sealed class SessionConnection : IAsyncDisposable
         {
             await connection.ConnectAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (!connection.IsConnected || connection.SftpClient?.IsConnected != true ||
+                connection.TransferSftpClient?.IsConnected != true)
+                throw new IOException("连接已断开，请重新连接。");
         }
         catch
         {
@@ -252,7 +261,11 @@ public sealed class SessionConnection : IAsyncDisposable
 
     private void Connection_Disconnected(object? sender, EventArgs e) => _post(() =>
     {
+        if (!ReferenceEquals(sender, _active) || _state != SessionConnectionState.Connected) return;
+
         _state = SessionConnectionState.Disconnected;
+        _metricsCts?.Cancel();
+        _cancelTransfers();
         StatusChanged?.Invoke(this, "连接已断开");
         Output?.Invoke(this, "\r\n[连接已断开]\r\n");
     });

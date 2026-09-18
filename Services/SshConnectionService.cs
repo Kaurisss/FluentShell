@@ -39,7 +39,10 @@ public sealed class SshConnectionService : ISshConnection
     public event EventHandler<HostFingerprintRequiredEventArgs>? HostFingerprintRequired;
     public event EventHandler? Disconnected;
 
-    public bool IsConnected => _sshClient?.IsConnected == true;
+    public bool IsConnected => _sshClient?.IsConnected == true &&
+        _shell?.CanWrite == true &&
+        _sftpClient?.IsConnected == true &&
+        _transferSftpClient?.IsConnected == true;
     public ISftpClient? SftpClient => _remoteFileClient;
     public ISftpClient? TransferSftpClient => _transferFileClient;
     public string? LastFingerprint { get; private set; }
@@ -367,13 +370,15 @@ public sealed class SshConnectionService : ISshConnection
 
     private async Task ReadOutputLoopAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && _shell is not null && IsConnected)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                if (_shell.DataAvailable)
+                var shell = _shell;
+                if (shell is null || !IsConnected) break;
+                if (shell.DataAvailable)
                 {
-                    var output = _shell.Read();
+                    var output = shell.Read();
                     if (!string.IsNullOrEmpty(output)) OutputReceived?.Invoke(this, output);
                 }
                 await Task.Delay(60, cancellationToken);

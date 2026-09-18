@@ -59,6 +59,116 @@ public sealed class SessionConnectionTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Reconnecting_recovers_a_failed_sftp_channel_while_ssh_is_connected(bool transferChannel)
+    {
+        var first = new FakeSshConnection();
+        var second = new FakeSshConnection();
+        var connections = new Queue<FakeSshConnection>([first, second]);
+        await using var session = CreateSession(() => connections.Dequeue());
+        var browse = session.RemoteFiles;
+        var transfer = session.TransferRemoteFiles;
+        await session.ConnectAsync();
+        (transferChannel ? first.TransferFileClient : first.RemoteFileClient).IsConnected = false;
+
+        Assert.IsFalse(session.IsConnected, "A broken SFTP channel must not block reconnect.");
+        await session.ConnectAsync();
+
+        Assert.AreEqual(1, first.DisposeCount);
+        Assert.AreEqual(1, second.ConnectCount);
+        Assert.IsTrue(session.IsConnected);
+        Assert.IsTrue(browse.IsConnected);
+        Assert.IsTrue(transfer.IsConnected);
+        Assert.AreSame(browse, session.RemoteFiles);
+        Assert.AreSame(transfer, session.TransferRemoteFiles);
+    }
+
+    [TestMethod]
+    public async Task Disconnect_notification_allows_reconnect_even_if_transport_still_reports_connected()
+    {
+        var first = new FakeSshConnection();
+        var second = new FakeSshConnection();
+        var connections = new Queue<FakeSshConnection>([first, second]);
+        var cancelled = 0;
+        await using var session = CreateSession(() => connections.Dequeue(), cancelTransfers: () => cancelled++);
+        await session.ConnectAsync();
+        session.SetActive(true);
+        first.RaiseDisconnected();
+
+        Assert.IsFalse(session.IsConnected);
+        Assert.IsTrue(first.LastMetricsToken.IsCancellationRequested);
+        Assert.AreEqual(1, cancelled);
+        await session.ConnectAsync();
+
+        Assert.AreEqual(1, second.ConnectCount);
+        Assert.AreEqual(SessionConnectionState.Connected, session.State);
+    }
+
+    [TestMethod]
+    public async Task Queued_disconnect_from_replaced_connection_does_not_disconnect_new_session()
+    {
+        var first = new FakeSshConnection();
+        var second = new FakeSshConnection();
+        var connections = new Queue<FakeSshConnection>([first, second]);
+        var posted = new Queue<Action>();
+        await using var session = CreateSession(() => connections.Dequeue(), post: posted.Enqueue);
+        await session.ConnectAsync();
+        first.IsConnected = false;
+        first.RaiseDisconnected();
+        await session.ConnectAsync();
+
+        posted.Dequeue()();
+
+        Assert.AreEqual(SessionConnectionState.Connected, session.State);
+        Assert.IsTrue(session.IsConnected);
+    }
+
+    [TestMethod]
+    public async Task Old_disconnect_while_prompting_does_not_clear_reconnecting_state()
+    {
+        var first = new FakeSshConnection();
+        var second = new FakeSshConnection();
+        var connections = new Queue<FakeSshConnection>([first, second]);
+        var secret = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompts = 0;
+        await using var session = CreateSession(() => connections.Dequeue(),
+            secretProvider: () => ++prompts == 1 ? Task.FromResult<string?>("secret") : secret.Task);
+        await session.ConnectAsync();
+        first.IsConnected = false;
+        var reconnect = session.ConnectAsync();
+        try
+        {
+            first.RaiseDisconnected();
+            Assert.AreEqual(SessionConnectionState.Connecting, session.State);
+            await session.ConnectAsync();
+            Assert.AreEqual(2, prompts);
+        }
+        finally
+        {
+            secret.TrySetResult("secret");
+            await reconnect;
+        }
+        Assert.AreEqual(1, second.ConnectCount);
+        Assert.IsTrue(session.IsConnected);
+    }
+
+    [TestMethod]
+    public async Task Connection_that_is_already_broken_after_connect_is_not_reported_as_successful()
+    {
+        var connection = new FakeSshConnection { DisconnectOnConnect = true };
+        await using var session = CreateSession(connection);
+        var connectedEvents = 0;
+        session.Connected += (_, _) => connectedEvents++;
+
+        await session.ConnectAsync();
+
+        Assert.AreEqual(SessionConnectionState.Disconnected, session.State);
+        Assert.AreEqual(0, connectedEvents);
+        Assert.AreEqual(1, connection.DisposeCount);
+    }
+
+    [TestMethod]
     public async Task Already_connected_session_does_not_reconnect()
     {
         var connection = new FakeSshConnection();
@@ -204,22 +314,25 @@ public sealed class SessionConnectionTests
         ServerProfile? profile = null,
         Func<Task<string?>>? secretProvider = null,
         Func<HostFingerprintRequiredEventArgs, Task<bool>>? confirmFingerprint = null,
-        Action? cancelTransfers = null) =>
+        Action? cancelTransfers = null,
+        Action<Action>? post = null) =>
         new(
             profile ?? new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" },
             _ => connectionFactory(),
             secretProvider ?? (() => Task.FromResult<string?>("secret")),
             confirmFingerprint ?? (_ => Task.FromResult(false)),
-            work => work(),
+            post ?? (work => work()),
             cancelTransfers ?? (() => { }));
 
     private sealed class FakeSshConnection : ISshConnection
     {
         public bool IsConnected { get; set; }
         public ISftpClient? SftpClient => IsConnected ? RemoteFileClient : null;
-        public ISftpClient? TransferSftpClient => IsConnected ? RemoteFileClient : null;
+        public ISftpClient? TransferSftpClient => IsConnected ? TransferFileClient : null;
         public FakeSftpClient RemoteFileClient { get; } = new();
+        public FakeSftpClient TransferFileClient { get; } = new();
         public Exception? ConnectFailure { get; init; }
+        public bool DisconnectOnConnect { get; init; }
         public int ConnectCount { get; private set; }
         public int DisposeCount { get; private set; }
         public CancellationToken LastMetricsToken { get; private set; }
@@ -239,7 +352,7 @@ public sealed class SessionConnectionTests
         {
             ConnectCount++;
             if (ConnectFailure is not null) return Task.FromException(ConnectFailure);
-            IsConnected = true;
+            IsConnected = !DisconnectOnConnect;
             return Task.CompletedTask;
         }
 

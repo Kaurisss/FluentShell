@@ -149,6 +149,34 @@ public sealed class SftpSessionControllerTests
     }
 
     [TestMethod]
+    public async Task Upload_reads_archive_bytes_and_reports_progress()
+    {
+        using var archive = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(
+            archive, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using var entry = zip.CreateEntry("data.bin").Open();
+            entry.Write(new byte[] { 0, 1, 127, 128, 255 });
+        }
+        var bytes = archive.ToArray();
+        var fileService = new FakeSftpFileService();
+        using var controller = new SftpSessionController(fileService);
+        var snapshots = CaptureSnapshots(controller);
+        var files = new[] { new SftpUploadFile("archive.zip",
+            () => Task.FromResult<Stream>(new MemoryStream(bytes, writable: false))) };
+        await controller.BuildUploadQueueAsync(files);
+
+        await controller.UploadAsync(files[0].Name, files[0].OpenRead, _ => Task.FromResult(true));
+
+        Assert.AreEqual(SftpTransferState.Completed, controller.Snapshot.Transfer.State,
+            controller.Snapshot.Transfer.Message);
+        CollectionAssert.AreEqual(bytes, fileService.UploadedBytes);
+        var progress = snapshots.Last(s => s.Transfer.Progress is not null).Transfer.Progress!;
+        Assert.AreEqual((long)bytes.Length, progress.BytesTransferred);
+        Assert.AreEqual((long)bytes.Length, progress.TotalBytes);
+    }
+
+    [TestMethod]
     public async Task Cancelled_transfer_returns_cancelled_and_releases_actions()
     {
         var uploadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -512,12 +540,20 @@ public sealed class SftpSessionControllerTests
 
         public Task<bool> ExistsAsync(string path) => Task.FromResult(false);
 
-        public Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken)
-        {
-            if (UploadHandler is not null) return UploadHandler(cancellationToken);
+        public byte[]? UploadedBytes { get; private set; }
 
+        public async Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken)
+        {
+            if (UploadHandler is not null)
+            {
+                await UploadHandler(cancellationToken);
+                return;
+            }
+
+            using var uploaded = new MemoryStream();
+            await input.CopyToAsync(uploaded, cancellationToken);
+            UploadedBytes = uploaded.ToArray();
             DirectoryItems.Add(CreateItem(remotePath, isDirectory: false));
-            return Task.CompletedTask;
         }
 
         public Dictionary<string, int> DownloadSizesByPath { get; } = [];

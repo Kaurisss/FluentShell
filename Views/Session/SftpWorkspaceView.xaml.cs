@@ -405,6 +405,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RemoteTable.SelectionChanged += RemoteTable_SelectionChanged;
         RemoteTable.GridContextFlyoutOpening += RemoteTable_GridContextFlyoutOpening;
         RemoteTable.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(RemoteTable_KeyDown), true);
+        // Observe releases even when a cell or scroll viewer handles the routed event.
+        RemoteTable.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(RemoteTable_PointerReleased), true);
         RemoteTable.RecordContextFlyout = BuildRemoteRowMenu();
         // 行上的右键由 RecordContextFlyout 接管；这里兜住落在空白区的右键，
         // 否则空目录（连 ".." 行都没有时）就没有新建文件夹的入口了。
@@ -572,6 +574,16 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     {
         if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: RemoteFileItem item })
             RemoteTable.SelectedItem = item;
+    }
+
+    private void RemoteTable_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.GetCurrentPoint(RemoteTable).Properties.PointerUpdateKind !=
+            Microsoft.UI.Input.PointerUpdateKind.XButton1Released) return;
+
+        e.Handled = true;
+        if (_snapshot.CanNavigate && _snapshot.DirectoryListing.Path != "/")
+            NavigateRequested?.Invoke(this, "..");
     }
 
     private void RemoteTable_KeyDown(object sender, KeyRoutedEventArgs e)

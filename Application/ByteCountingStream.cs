@@ -1,23 +1,22 @@
 namespace FluentShell.Core;
 
 /// <summary>
-/// 只写计数流：包住下载的输出流，把累计写入字节数回调出去。
-/// 这是把传输进度从 <c>ISftpFileService.DownloadAsync</c> 里引出来的最小接缝——
-/// 不需要给服务接口加进度参数。
+/// 顺序传输计数流：上传统计读取字节，下载统计写入字节。
+/// 保留底层流的读写能力，不支持寻址，避免重复统计。
 /// </summary>
 internal sealed class ByteCountingStream : Stream
 {
     private readonly Stream _inner;
-    private readonly Action<long> _onBytesWritten;
-    private long _totalWritten;
+    private readonly Action<long> _onBytesTransferred;
+    private long _totalTransferred;
 
-    public ByteCountingStream(Stream inner, Action<long> onBytesWritten)
+    public ByteCountingStream(Stream inner, Action<long> onBytesTransferred)
     {
         _inner = inner;
-        _onBytesWritten = onBytesWritten;
+        _onBytesTransferred = onBytesTransferred;
     }
 
-    public override bool CanRead => false;
+    public override bool CanRead => _inner.CanRead;
     public override bool CanSeek => false;
     public override bool CanWrite => _inner.CanWrite;
     public override long Length => throw new NotSupportedException();
@@ -62,7 +61,40 @@ internal sealed class ByteCountingStream : Stream
 
     public override Task FlushAsync(CancellationToken cancellationToken) => _inner.FlushAsync(cancellationToken);
 
-    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        var read = _inner.Read(buffer, offset, count);
+        Report(read);
+        return read;
+    }
+
+    public override int Read(Span<byte> buffer)
+    {
+        var read = _inner.Read(buffer);
+        Report(read);
+        return read;
+    }
+
+    public override int ReadByte()
+    {
+        var value = _inner.ReadByte();
+        if (value >= 0) Report(1);
+        return value;
+    }
+
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    {
+        var read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
+        Report(read);
+        return read;
+    }
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        var read = await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+        Report(read);
+        return read;
+    }
 
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
@@ -74,9 +106,10 @@ internal sealed class ByteCountingStream : Stream
         base.Dispose(disposing);
     }
 
-    private void Report(int written)
+    private void Report(int count)
     {
-        _totalWritten += written;
-        _onBytesWritten(_totalWritten);
+        if (count <= 0) return;
+        _totalTransferred += count;
+        _onBytesTransferred(_totalTransferred);
     }
 }
