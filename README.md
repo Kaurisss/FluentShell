@@ -96,7 +96,7 @@
 ### 开发环境
 - **IDE**: Visual Studio 2022 17.8+ 或 Rider
 - **SDK**: .NET 8 SDK
-- **工具链**: Windows App SDK 1.5+
+- 具体 SDK 和 NuGet 版本以 [FluentShell.csproj](FluentShell.csproj) 为准
 
 ### 构建步骤
 
@@ -112,10 +112,9 @@ dotnet restore
 dotnet build -a x64 -c Release
 
 # 运行测试
-dotnet test
+dotnet test Tests/FluentShell.Tests/FluentShell.Tests.csproj -a x64
 
-# 运行应用
-dotnet run -a x64
+# 启动应用：按当前项目的 MSIX 配置在 Visual Studio 中部署并启动
 ```
 
 ### 常见问题
@@ -220,20 +219,20 @@ FluentShell/
 
 ### 开发规范
 - 遵循现有代码风格
-- 为新功能添加测试
+- 为影响行为的新功能或缺陷修复补充有效测试；文档与简单样式调整按影响范围验证
 - 更新相关文档
 - 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/)
 
 ### 测试
 ```bash
-# 运行所有测试
-dotnet test
+# 运行所有测试（显式指定测试项目及架构）
+dotnet test Tests/FluentShell.Tests/FluentShell.Tests.csproj -a x64
 
 # 运行特定测试
-dotnet test --filter "FullyQualifiedName~PrivateKeyValidator"
+dotnet test Tests/FluentShell.Tests/FluentShell.Tests.csproj -a x64 --filter "FullyQualifiedName~PrivateKeyValidatorTests"
 
-# 生成覆盖率报告
-dotnet test --collect:"XPlat Code Coverage"
+# 生成 TRX 测试报告
+dotnet test Tests/FluentShell.Tests/FluentShell.Tests.csproj -a x64 --logger trx
 ```
 
 ---
