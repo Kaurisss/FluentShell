@@ -54,12 +54,6 @@ public sealed partial class ServerCatalogPage : UserControl
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => NotifyFilterChanged();
     private void SortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => NotifyFilterChanged();
 
-    private void ProfilesList_ItemClick(object sender, ItemClickEventArgs e)
-    {
-        if (e.ClickedItem is ServerProfile profile)
-            ConnectRequested?.Invoke(this, profile);
-    }
-
     private void ConnectButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is ServerProfile profile)

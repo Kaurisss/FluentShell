@@ -60,7 +60,6 @@ public sealed class ShellCoordinator
     private readonly Dictionary<Guid, string> _sessionSecrets = [];
     private readonly Dictionary<Guid, bool> _credentialPersistenceOverrides = [];
     private AppSettings _settings = new();
-    private string _lastResult = "准备就绪";
     private CancellationTokenSource? _connectionCancellation;
 
     public ShellCoordinator(
@@ -78,7 +77,6 @@ public sealed class ShellCoordinator
     public IReadOnlyList<ServerProfile> Profiles => _localStore.Profiles;
     public string DataFolder => _localStore.DataFolder;
     public AppSettings Settings => _settings;
-    public string LastResult => _lastResult;
     public int SessionCount => _sessions.Count;
     public IShellSession? SelectedSession => _sessions.Selected;
     public IReadOnlyCollection<IShellSession> Sessions => _sessions.Sessions;
@@ -351,7 +349,6 @@ public sealed class ShellCoordinator
 
     private void Session_StatusChanged(object? sender, string status)
     {
-        _lastResult = status;
         NotifyStateChanged();
     }
 

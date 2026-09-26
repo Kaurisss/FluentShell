@@ -39,7 +39,5 @@ public sealed record TransferQueue(
 {
     public static readonly TransferQueue Empty = new([], 0, 0, 0, 0);
 
-    public int PendingCount => TotalCount - CompletedCount - SkippedCount - FailedCount;
     public bool HasItems => TotalCount > 0;
-    public bool IsCompleted => TotalCount > 0 && PendingCount == 0 && !Items.Any(i => i.State == TransferItemState.Transferring);
 }

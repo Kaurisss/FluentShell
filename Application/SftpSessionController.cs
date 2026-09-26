@@ -65,8 +65,6 @@ public sealed record SftpSessionSnapshot(
 
     /// <summary>传输队列。展示批量传输中每个文件的状态和进度。</summary>
     public TransferQueue Queue { get; init; } = TransferQueue.Empty;
-
-    public string CurrentPath => DirectoryListing.Path;
 }
 
 /// <summary>一次传输的确定进度。总量未知时快照里就没有进度，视图退回不确定指示。</summary>
@@ -150,11 +148,6 @@ public sealed class SftpSessionController : IDisposable
         var targetPath = RemotePath.Normalize(_directoryListing.Path, path);
         await RefreshDirectoryAsync(targetPath);
     }
-
-    public Task NavigateUpAsync() =>
-        _directoryListing.Path == "/"
-            ? RefreshAsync()
-            : NavigateToAsync(RemotePath.Parent(_directoryListing.Path));
 
     public async Task CreateDirectoryAsync(string name)
     {

@@ -32,43 +32,6 @@ public class TransferQueueTests
     }
 
     [TestMethod]
-    public void TransferQueue_CalculatesStatistics()
-    {
-        var items = new List<TransferQueueItem>
-        {
-            new("file1.txt", "file1.txt", 100, TransferItemState.Completed),
-            new("file2.txt", "file2.txt", 200, TransferItemState.Completed),
-            new("file3.txt", "file3.txt", 300, TransferItemState.Skipped),
-            new("file4.txt", "file4.txt", 400, TransferItemState.Failed),
-            new("file5.txt", "file5.txt", 500, TransferItemState.Pending)
-        };
-
-        var queue = new TransferQueue(items, 5, 2, 1, 1);
-
-        Assert.AreEqual(5, queue.TotalCount);
-        Assert.AreEqual(2, queue.CompletedCount);
-        Assert.AreEqual(1, queue.SkippedCount);
-        Assert.AreEqual(1, queue.FailedCount);
-        Assert.AreEqual(1, queue.PendingCount);
-        Assert.IsTrue(queue.HasItems);
-        Assert.IsFalse(queue.IsCompleted);
-    }
-
-    [TestMethod]
-    public void TransferQueue_IsCompleted_WhenAllItemsProcessed()
-    {
-        var items = new List<TransferQueueItem>
-        {
-            new("file1.txt", "file1.txt", 100, TransferItemState.Completed),
-            new("file2.txt", "file2.txt", 200, TransferItemState.Skipped)
-        };
-
-        var queue = new TransferQueue(items, 2, 1, 1, 0);
-
-        Assert.IsTrue(queue.IsCompleted);
-    }
-
-    [TestMethod]
     public void TransferQueueManager_AddPendingItem_AddsToQueue()
     {
         var manager = new TransferQueueManager();
@@ -180,27 +143,32 @@ public class TransferQueueTests
 
         var snapshot = manager.CreateSnapshot();
         Assert.AreEqual(3, snapshot.TotalCount);
-        Assert.AreEqual(3, snapshot.PendingCount);
+        Assert.IsTrue(snapshot.Items.All(item => item.State == TransferItemState.Pending));
     }
 
     [TestMethod]
-    public void TransferQueueManager_GetStatistics_ReturnsCorrectCounts()
+    public void TransferQueueManager_CreateSnapshot_CalculatesStatistics()
     {
         var manager = new TransferQueueManager();
         manager.AddPendingItem("file1.txt", "file1.txt", 100);
         manager.AddPendingItem("file2.txt", "file2.txt", 200);
         manager.AddPendingItem("file3.txt", "file3.txt", 300);
+        manager.AddPendingItem("file4.txt", "file4.txt", 400);
+        manager.AddPendingItem("file5.txt", "file5.txt", 500);
+        manager.StartTransfer("file4.txt");
 
         manager.CompleteTransfer("file1.txt");
         manager.SkipTransfer("file2.txt");
         manager.FailTransfer("file3.txt", "Error");
 
-        var (total, completed, skipped, failed) = manager.GetStatistics();
+        var snapshot = manager.CreateSnapshot();
 
-        Assert.AreEqual(3, total);
-        Assert.AreEqual(1, completed);
-        Assert.AreEqual(1, skipped);
-        Assert.AreEqual(1, failed);
+        Assert.AreEqual(5, snapshot.TotalCount);
+        Assert.HasCount(5, snapshot.Items);
+        Assert.AreEqual(1, snapshot.CompletedCount);
+        Assert.AreEqual(1, snapshot.SkippedCount);
+        Assert.AreEqual(1, snapshot.FailedCount);
+        Assert.IsTrue(snapshot.HasItems);
     }
 
     [TestMethod]

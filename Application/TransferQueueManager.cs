@@ -99,16 +99,4 @@ public sealed class TransferQueueManager
             _items[relativePath] = item.WithState(TransferItemState.Failed, errorMessage);
         }
     }
-
-    /// <summary>获取队列中的统计信息（用于生成汇总消息）。</summary>
-    public (int Total, int Completed, int Skipped, int Failed) GetStatistics()
-    {
-        var items = _items.Values;
-        return (
-            items.Count,
-            items.Count(i => i.State == TransferItemState.Completed),
-            items.Count(i => i.State == TransferItemState.Skipped),
-            items.Count(i => i.State == TransferItemState.Failed)
-        );
-    }
 }

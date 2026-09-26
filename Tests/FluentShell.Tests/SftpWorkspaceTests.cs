@@ -177,7 +177,7 @@ public sealed class SftpWorkspaceTests
         view.RaiseDeleteRequested(item);
         view.RaiseCancelTransferRequested();
 
-        Assert.AreEqual("/日志", view.LastSnapshot.CurrentPath);
+        Assert.AreEqual("/日志", view.LastSnapshot.DirectoryListing.Path);
         Assert.AreEqual(1, fileService.CreateDirectoryCallCount);
         Assert.AreEqual(1, fileService.UploadCallCount);
         Assert.AreEqual(1, fileService.DownloadCallCount);
