@@ -23,7 +23,7 @@ public sealed class SessionConnection : IAsyncDisposable
     private static readonly TimeSpan FingerprintConfirmationTimeout = TimeSpan.FromMinutes(2);
 
     private readonly ServerProfile _profile;
-    private readonly Func<string, ISshConnection> _connectionFactory;
+    private readonly Func<string, CancellationToken, Task<ISshConnection?>> _connectionFactory;
     private readonly Func<Task<string?>> _secretProvider;
     private readonly Func<HostFingerprintRequiredEventArgs, Task<bool>> _confirmFingerprint;
     private readonly Action<Action> _post;
@@ -38,6 +38,19 @@ public sealed class SessionConnection : IAsyncDisposable
     public SessionConnection(
         ServerProfile profile,
         Func<string, ISshConnection> connectionFactory,
+        Func<Task<string?>> secretProvider,
+        Func<HostFingerprintRequiredEventArgs, Task<bool>> confirmFingerprint,
+        Action<Action> post,
+        Action cancelTransfers)
+        : this(profile,
+            (secret, _) => Task.FromResult<ISshConnection?>(connectionFactory(secret)),
+            secretProvider, confirmFingerprint, post, cancelTransfers)
+    {
+    }
+
+    public SessionConnection(
+        ServerProfile profile,
+        Func<string, CancellationToken, Task<ISshConnection?>> connectionFactory,
         Func<Task<string?>> secretProvider,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> confirmFingerprint,
         Action<Action> post,
@@ -153,7 +166,18 @@ public sealed class SessionConnection : IAsyncDisposable
         }
         await ReleaseActiveConnectionAsync();
 
-        var connection = _connectionFactory(secret);
+        var connection = await _connectionFactory(secret, cancellationToken);
+        if (connection is null)
+        {
+            _state = SessionConnectionState.Disconnected;
+            StatusChanged?.Invoke(this, "连接已取消");
+            return;
+        }
+        if (cancellationToken.IsCancellationRequested)
+        {
+            await connection.DisposeAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
         _active = connection;
         Subscribe(connection);
         try
@@ -240,7 +264,7 @@ public sealed class SessionConnection : IAsyncDisposable
             try
             {
                 e.Accepted = await _confirmFingerprint(e);
-                if (e.Accepted) _profile.HostFingerprint = e.Fingerprint;
+                if (e.Accepted) (e.Profile ?? _profile).HostFingerprint = e.Fingerprint;
             }
             catch (Exception ex)
             {

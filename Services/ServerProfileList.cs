@@ -36,7 +36,8 @@ public sealed class ServerProfileList
             Authentication = source.Authentication,
             PrivateKeyPath = source.PrivateKeyPath,
             Notes = source.Notes,
-            HostFingerprint = source.HostFingerprint
+            HostFingerprint = source.HostFingerprint,
+            JumpProfileId = source.JumpProfileId
         };
         _profiles.Add(copy);
         return copy;

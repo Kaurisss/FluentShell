@@ -83,10 +83,14 @@ public sealed partial class ServerCatalogPage : UserControl
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is not ServerProfile profile) return;
+        var dependentCount = _profiles.Count(candidate => candidate.JumpProfileId == profile.Id);
+        var impact = dependentCount == 0
+            ? string.Empty
+            : $"另有 {dependentCount} 台已保存服务器将失去跳板配置，需重新选择跳板后才能连接。";
         var dialog = new ContentDialog
         {
             Title = "删除服务器",
-            Content = $"确定删除“{profile.Name}”吗？不会影响远程主机。",
+            Content = $"确定删除“{profile.Name}”吗？不会影响远程主机。{impact}",
             PrimaryButtonText = "删除",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,

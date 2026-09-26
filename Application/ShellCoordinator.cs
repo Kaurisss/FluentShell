@@ -104,6 +104,22 @@ public sealed class ShellCoordinator
 
     public bool HasSavedCredential(ServerProfile profile) => _localStore.TryGetSecret(profile) is not null;
 
+    public async Task<ISshConnection?> CreateConnectionAsync(
+        ServerProfile profile,
+        string secret,
+        CancellationToken cancellationToken)
+    {
+        var jump = JumpHostResolver.Resolve(profile, Profiles);
+        if (jump is null) return new SshConnectionService(profile, secret);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var jumpSecret = await ResolveHopSecretAsync(jump);
+        cancellationToken.ThrowIfCancellationRequested();
+        return jumpSecret is null
+            ? null
+            : new JumpHostConnectionService(profile, secret, jump, jumpSecret);
+    }
+
     public async Task SaveProfileAsync(ServerProfileUpdate update)
     {
         if (update.CredentialIdentityChanged)
@@ -286,20 +302,22 @@ public sealed class ShellCoordinator
     private async Task<string?> ResolveSecretAsync(ServerProfile profile)
     {
         if (_sessionSecrets.TryGetValue(profile.Id, out var provided)) return provided;
+        var secret = await ResolveHopSecretAsync(profile);
+        if (secret is not null) _sessionSecrets[profile.Id] = secret;
+        return secret;
+    }
+
+    private async Task<string?> ResolveHopSecretAsync(ServerProfile profile)
+    {
         if (_localStore.TryGetSecret(profile) is string saved)
-        {
-            _sessionSecrets[profile.Id] = saved;
             return saved;
-        }
         if (profile.Authentication == AuthenticationMethod.PrivateKey &&
             !SshConnectionService.RequiresPrivateKeyPassphrase(profile.PrivateKeyPath))
         {
             return string.Empty;
         }
 
-        var secret = await _secretPrompt(profile);
-        if (secret is not null) _sessionSecrets[profile.Id] = secret;
-        return secret;
+        return await _secretPrompt(profile);
     }
 
     private void SelectSession(IShellSession session, bool forceActivation = false)

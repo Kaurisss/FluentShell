@@ -9,6 +9,26 @@ namespace FluentShell.Tests;
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
+    public async Task Connection_factory_uses_saved_jump_and_cancellation_of_jump_prompt()
+    {
+        var jump = new ServerProfile { Name = "跳板", Host = "jump", Username = "jump" };
+        var target = new ServerProfile
+        {
+            Name = "目标", Host = "target", Username = "user", JumpProfileId = jump.Id
+        };
+        var store = new InMemoryLocalStore([jump, target]);
+        var coordinator = CreateCoordinator(
+            (profile, _, _) => new FakeShellSession(profile),
+            _ => Task.FromResult<string?>(null), store);
+
+        Assert.IsNull(await coordinator.CreateConnectionAsync(target, "secret", CancellationToken.None));
+
+        store.SaveSecret(jump, "jump-secret");
+        await using var connection = await coordinator.CreateConnectionAsync(target, "secret", CancellationToken.None);
+        Assert.IsInstanceOfType<JumpHostConnectionService>(connection);
+    }
+
+    [TestMethod]
     public async Task Connecting_does_not_clear_saved_profiles()
     {
         var first = new ServerProfile { Name = "第一台", Host = "first", Username = "user" };

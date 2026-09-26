@@ -38,6 +38,33 @@ public sealed class SshConnectionServiceTests
     }
 
     [TestMethod]
+    public async Task Jump_connection_contacts_jump_first_and_honors_cancellation()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var cancellationSource = new CancellationTokenSource();
+        var jump = new ServerProfile
+        {
+            Name = "跳板", Host = "127.0.0.1",
+            Port = ((IPEndPoint)listener.LocalEndpoint).Port, Username = "jump"
+        };
+        var target = new ServerProfile
+        {
+            Name = "目标", Host = "internal.invalid", Username = "user", JumpProfileId = jump.Id
+        };
+        await using var service = new JumpHostConnectionService(target, "target-secret", jump, "jump-secret");
+
+        var acceptedClientTask = listener.AcceptTcpClientAsync();
+        var connectTask = service.ConnectAsync(cancellationSource.Token);
+        using var acceptedClient = await acceptedClientTask.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.IsFalse(service.IsConnected);
+    }
+
+    [TestMethod]
     public async Task ConnectAsync_honors_cancellation_when_key_exchange_stalls()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

@@ -73,6 +73,49 @@ public static class ServerProfileDialog
         userSection.Children.Add(user);
         userSection.Children.Add(duplicateWarning);
 
+        var jumpHost = new ComboBox
+        {
+            Header = "跳板服务器",
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        jumpHost.Items.Add(new ComboBoxItem { Content = "不使用（直连）" });
+        foreach (var candidate in context.ExistingProfiles.Where(candidate =>
+                     candidate.JumpProfileId is null &&
+                     (editing is null || JumpHostResolver.IsEligible(editing, candidate))))
+        {
+            jumpHost.Items.Add(new ComboBoxItem
+            {
+                Content = $"{candidate.Name}（{candidate.Address}）",
+                Tag = candidate.Id
+            });
+        }
+        jumpHost.SelectedIndex = 0;
+        if (editing?.JumpProfileId is Guid selectedJumpId)
+        {
+            var selected = jumpHost.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag is Guid id && id == selectedJumpId);
+            if (selected is null)
+            {
+                selected = new ComboBoxItem
+                {
+                    Content = "原跳板已失效，请重新选择",
+                    Tag = selectedJumpId
+                };
+                jumpHost.Items.Add(selected);
+            }
+            jumpHost.SelectedItem = selected;
+        }
+        var jumpInfo = new TextBlock
+        {
+            Text = "先连接跳板服务器，再由跳板访问此服务器。首版支持单级跳板。",
+            FontSize = 12,
+            Foreground = context.MutedTextBrush,
+            TextWrapping = TextWrapping.Wrap
+        };
+        var jumpSection = new StackPanel { Spacing = 4 };
+        jumpSection.Children.Add(jumpHost);
+        jumpSection.Children.Add(jumpInfo);
+
         var authentication = new ComboBox
         {
             Header = "认证方式",
@@ -148,6 +191,8 @@ public static class ServerProfileDialog
         ContentDialog? dialog = null;
 
         bool UsesPrivateKey() => authentication.SelectedIndex == 1;
+
+        Guid? SelectedJumpId() => (jumpHost.SelectedItem as ComboBoxItem)?.Tag is Guid id ? id : null;
 
         int SelectedPort() => port.Value is double value && !double.IsNaN(value)
             ? (int)value
@@ -258,6 +303,17 @@ public static class ServerProfileDialog
             }
             if (UsesPrivateKey() && string.IsNullOrWhiteSpace(keyPath.Text))
                 return "私钥认证需要选择或输入一个本机私钥文件。";
+            if (editing is not null && SelectedJumpId() is not null &&
+                context.ExistingProfiles.Any(profile => profile.JumpProfileId == editing.Id))
+                return "这台服务器正被用作跳板，请先修改引用它的服务器配置。";
+            if (SelectedJumpId() is Guid jumpId)
+            {
+                var candidate = context.ExistingProfiles.FirstOrDefault(profile => profile.Id == jumpId);
+                if (candidate is null ||
+                    (editing is not null && !JumpHostResolver.IsEligible(editing, candidate)) ||
+                    candidate.JumpProfileId is not null)
+                    return "请选择另一台直连的已保存服务器作为跳板。";
+            }
             return null;
         }
 
@@ -320,6 +376,7 @@ public static class ServerProfileDialog
             host,
             port,
             userSection,
+            jumpSection,
             authentication,
             keyPickerSection,
             secret,
@@ -401,6 +458,7 @@ public static class ServerProfileDialog
         profile.Host = host.Text.Trim();
         profile.Port = SelectedPort();
         profile.Username = newUsername;
+        profile.JumpProfileId = SelectedJumpId();
         profile.Authentication = selectedAuthentication;
         profile.PrivateKeyPath = keyPath.Text.Trim();
         profile.Notes = notes.Text.Trim();

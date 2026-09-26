@@ -19,6 +19,7 @@ public sealed class ServerProfile : INotifyPropertyChanged
     private string _privateKeyPath = string.Empty;
     private string _notes = string.Empty;
     private string _hostFingerprint = string.Empty;
+    private Guid? _jumpProfileId;
     private DateTimeOffset? _lastConnectedAt;
 
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -31,6 +32,7 @@ public sealed class ServerProfile : INotifyPropertyChanged
     public string PrivateKeyPath { get => _privateKeyPath; set => SetField(ref _privateKeyPath, value); }
     public string Notes { get => _notes; set => SetField(ref _notes, value); }
     public string HostFingerprint { get => _hostFingerprint; set => SetField(ref _hostFingerprint, value); }
+    public Guid? JumpProfileId { get => _jumpProfileId; set => SetField(ref _jumpProfileId, value); }
     public DateTimeOffset? LastConnectedAt { get => _lastConnectedAt; set => SetField(ref _lastConnectedAt, value); }
 
     public string Address => $"{Host}:{Port}";

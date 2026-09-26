@@ -78,6 +78,17 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
+            <Style x:Key="TitleBarSessionTabInactiveTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="TitleBarSessionTabActiveTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+
             <Style x:Key="TitleBarSessionTabStyle" TargetType="ToggleButton">
                 <Setter Property="Height" Value="40" />
                 <Setter Property="MinWidth" Value="132" />
@@ -97,12 +108,12 @@
                                         <VisualState x:Name="Normal" />
                                         <VisualState x:Name="PointerOver">
                                             <VisualState.Setters>
-                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
-                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Disabled">
@@ -222,33 +233,7 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Thumb">
-                            <!-- 整块是命中区域，中间那条线才是视觉上的拆分条 -->
-                            <Grid Background="Transparent">
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="SplitterLine.Height" Value="3" />
-                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="SplitterLine.Height" Value="3" />
-                                                <Setter Target="SplitterLine.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled" />
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border
-                                    x:Name="SplitterLine"
-                                    Height="1"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource SubtleStrokeBrush}"
-                                    CornerRadius="1" />
-                            </Grid>
+                            <Grid Background="Transparent" />
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>

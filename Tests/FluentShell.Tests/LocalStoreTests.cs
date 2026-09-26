@@ -46,6 +46,27 @@ public sealed class LocalStoreTests
     }
 
     [TestMethod]
+    public async Task Jump_profile_reference_survives_reload_and_copy()
+    {
+        var store = new LocalStore(_folder);
+        await store.LoadAsync();
+        var jump = new ServerProfile { Name = "跳板", Host = "bastion.example", Username = "jump" };
+        var target = new ServerProfile
+        {
+            Name = "目标", Host = "internal.example", Username = "user", JumpProfileId = jump.Id
+        };
+        await store.AddOrUpdateProfileAsync(jump);
+        await store.AddOrUpdateProfileAsync(target);
+        await store.CopyProfileAsync(target);
+
+        var reloaded = new LocalStore(_folder);
+        await reloaded.LoadAsync();
+        Assert.AreEqual(jump.Id, reloaded.Profiles[1].JumpProfileId);
+        Assert.AreEqual(jump.Id, reloaded.Profiles[2].JumpProfileId);
+        Assert.AreNotEqual(target.Id, reloaded.Profiles[2].Id);
+    }
+
+    [TestMethod]
     public async Task Copying_a_profile_appends_a_suffixed_duplicate()
     {
         var store = new LocalStore(_folder);

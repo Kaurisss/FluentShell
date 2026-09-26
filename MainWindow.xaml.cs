@@ -47,7 +47,7 @@ public sealed partial class MainWindow : Window
             (profile, secretProvider, fingerprintConfirmation) => new SessionWorkspace(
                 profile,
                 _windowHandle,
-                secret => new SshConnectionService(profile, secret),
+                (secret, cancellationToken) => CreateConnectionAsync(profile, secret, cancellationToken),
                 fingerprintConfirmation,
                 secretProvider,
                 RootGrid.ActualTheme),
@@ -79,6 +79,12 @@ public sealed partial class MainWindow : Window
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         SetTitleBar(AppTitleBar);
     }
+
+    private Task<ISshConnection?> CreateConnectionAsync(
+        ServerProfile profile,
+        string secret,
+        CancellationToken cancellationToken) =>
+        _shell.CreateConnectionAsync(profile, secret, cancellationToken);
 
     private void WireModules()
     {

@@ -35,8 +35,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
             Content = new TextBlock
             {
                 Text = presentation.Title,
-                FontSize = 14,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Style = (Style)Application.Current.Resources["TitleBarSessionTabInactiveTextStyle"],
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 MaxWidth = 168
             },
@@ -79,7 +78,14 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
     {
         _updatingSelection = true;
         foreach (var (candidate, button) in _tabButtons)
-            button.IsChecked = ReferenceEquals(candidate, session);
+        {
+            var isActive = ReferenceEquals(candidate, session);
+            button.IsChecked = isActive;
+            if (button.Content is TextBlock title)
+                title.Style = (Style)Application.Current.Resources[isActive
+                    ? "TitleBarSessionTabActiveTextStyle"
+                    : "TitleBarSessionTabInactiveTextStyle"];
+        }
         _updatingSelection = false;
     }
 

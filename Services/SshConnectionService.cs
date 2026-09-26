@@ -7,6 +7,7 @@ namespace FluentShell.Services;
 
 public sealed class HostFingerprintRequiredEventArgs : EventArgs
 {
+    public ServerProfile? Profile { get; init; }
     public string Fingerprint { get; init; } = string.Empty;
     public string KeyType { get; init; } = string.Empty;
     public bool Accepted { get; set; }
@@ -17,6 +18,8 @@ public sealed class SshConnectionService : ISshConnection
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(12);
     private readonly ServerProfile _profile;
     private readonly string _secret;
+    private readonly string _connectHost;
+    private readonly int _connectPort;
     private SshClient? _sshClient;
     private ShellStream? _shell;
     private SftpClient? _sftpClient;
@@ -30,9 +33,16 @@ public sealed class SshConnectionService : ISshConnection
     private readonly LinuxCpuUsageCalculator _cpuUsageCalculator = new();
 
     public SshConnectionService(ServerProfile profile, string secret)
+        : this(profile, secret, profile.Host, profile.Port)
+    {
+    }
+
+    internal SshConnectionService(ServerProfile profile, string secret, string connectHost, int connectPort)
     {
         _profile = profile;
         _secret = secret;
+        _connectHost = connectHost;
+        _connectPort = connectPort;
     }
 
     public event EventHandler<string>? OutputReceived;
@@ -60,7 +70,7 @@ public sealed class SshConnectionService : ISshConnection
         var privateKeyFiles = new List<PrivateKeyFile>();
         try
         {
-            sshClient = new SshClient(CreateConnectionInfo(privateKeyFiles));
+            sshClient = new SshClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
             sshClient.HostKeyReceived += OnHostKeyReceived;
             sshConnectTask = sshClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(sshConnectTask, cancellationToken).ConfigureAwait(false);
@@ -75,14 +85,14 @@ public sealed class SshConnectionService : ISshConnection
                 cancellationToken);
             shell = await AwaitOperationAsync(shellTask, cancellationToken).ConfigureAwait(false);
 
-            sftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
+            sftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
             sftpClient.HostKeyReceived += OnHostKeyReceived;
             sftpConnectTask = sftpClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(sftpConnectTask, cancellationToken).ConfigureAwait(false);
 
             // 传输走独立连接：SSH.NET 客户端不保证并发安全，
             // 浏览目录不该排在大文件传输后面。
-            transferSftpClient = new SftpClient(CreateConnectionInfo(privateKeyFiles));
+            transferSftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
             transferSftpClient.HostKeyReceived += OnHostKeyReceived;
             transferSftpConnectTask = transferSftpClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(transferSftpConnectTask, cancellationToken).ConfigureAwait(false);
@@ -293,28 +303,35 @@ public sealed class SshConnectionService : ISshConnection
         }
     }
 
-    private ConnectionInfo CreateConnectionInfo(ICollection<PrivateKeyFile> privateKeyFiles)
+    internal static ConnectionInfo CreateConnectionInfo(
+        ServerProfile profile,
+        string secret,
+        ICollection<PrivateKeyFile> privateKeyFiles,
+        string connectHost,
+        int connectPort)
     {
-        Renci.SshNet.AuthenticationMethod auth = _profile.Authentication switch
+        Renci.SshNet.AuthenticationMethod auth = profile.Authentication switch
         {
             FluentShell.Models.AuthenticationMethod.PrivateKey =>
-                CreatePrivateKeyAuthenticationMethod(privateKeyFiles),
-            _ => new PasswordAuthenticationMethod(_profile.Username, _secret)
+                CreatePrivateKeyAuthenticationMethod(profile, secret, privateKeyFiles),
+            _ => new PasswordAuthenticationMethod(profile.Username, secret)
         };
 
-        return new ConnectionInfo(_profile.Host, _profile.Port, _profile.Username, auth)
+        return new ConnectionInfo(connectHost, connectPort, profile.Username, auth)
         {
             Timeout = ConnectionTimeout
         };
     }
 
-    private PrivateKeyAuthenticationMethod CreatePrivateKeyAuthenticationMethod(
+    private static PrivateKeyAuthenticationMethod CreatePrivateKeyAuthenticationMethod(
+        ServerProfile profile,
+        string secret,
         ICollection<PrivateKeyFile> privateKeyFiles)
     {
-        var privateKeyFile = CreatePrivateKeyFile();
+        var privateKeyFile = CreatePrivateKeyFile(profile, secret);
         try
         {
-            var authenticationMethod = new PrivateKeyAuthenticationMethod(_profile.Username, privateKeyFile);
+            var authenticationMethod = new PrivateKeyAuthenticationMethod(profile.Username, privateKeyFile);
             privateKeyFiles.Add(privateKeyFile);
             return authenticationMethod;
         }
@@ -325,12 +342,12 @@ public sealed class SshConnectionService : ISshConnection
         }
     }
 
-    private PrivateKeyFile CreatePrivateKeyFile()
+    private static PrivateKeyFile CreatePrivateKeyFile(ServerProfile profile, string secret)
     {
         // SSH.NET 在构造期间同步解析私钥，不保留输入流；因此可以立即释放文件句柄。
         // 返回的对象由连接服务在对应客户端停止使用后释放。
         using var privateKeyStream = new FileStream(
-            _profile.PrivateKeyPath,
+            profile.PrivateKeyPath,
             FileMode.Open,
             FileAccess.Read,
             FileShare.Read,
@@ -341,16 +358,24 @@ public sealed class SshConnectionService : ISshConnection
 
         return new PrivateKeyFile(
             privateKeyStream,
-            string.IsNullOrWhiteSpace(_secret) ? null : _secret);
+            string.IsNullOrWhiteSpace(secret) ? null : secret);
     }
 
     private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
     {
+        LastFingerprint = VerifyHostKey(_profile, e, HostFingerprintRequired);
+    }
+
+    internal static string VerifyHostKey(
+        ServerProfile profile,
+        HostKeyEventArgs e,
+        EventHandler<HostFingerprintRequiredEventArgs>? confirmationRequested)
+    {
         var fingerprint = Convert.ToHexString(e.FingerPrint);
-        LastFingerprint = fingerprint;
-        var storedFingerprint = _profile.HostFingerprint;
+        var storedFingerprint = profile.HostFingerprint;
         var args = new HostFingerprintRequiredEventArgs
         {
+            Profile = profile,
             Fingerprint = fingerprint,
             KeyType = e.HostKeyName,
             Accepted = !string.IsNullOrWhiteSpace(storedFingerprint) && string.Equals(storedFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)
@@ -358,7 +383,7 @@ public sealed class SshConnectionService : ISshConnection
 
         if (string.IsNullOrWhiteSpace(storedFingerprint))
         {
-            HostFingerprintRequired?.Invoke(this, args);
+            confirmationRequested?.Invoke(profile, args);
         }
 
         e.CanTrust = args.Accepted;
@@ -366,6 +391,7 @@ public sealed class SshConnectionService : ISshConnection
         {
             throw new SshConnectionException($"服务器指纹已变化，连接被拒绝。\n存储: {storedFingerprint}\n当前: {fingerprint}");
         }
+        return fingerprint;
     }
 
     private async Task ReadOutputLoopAsync(CancellationToken cancellationToken)

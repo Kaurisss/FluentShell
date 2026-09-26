@@ -100,7 +100,6 @@
 
 ### 跳板机、代理与隧道
 
-- Jump Host / ProxyJump。
 - 多级跳板链路。
 - SOCKS5 代理。
 - HTTP CONNECT 代理。

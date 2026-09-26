@@ -7,11 +7,11 @@ using Microsoft.UI.Xaml.Input;
 namespace FluentShell.Views.Session;
 
 /// <summary>
-/// 终端与 SFTP 面板之间的拆分条。
+/// 覆盖在终端底边的透明拖拽区域，用于调整终端与 SFTP 面板的高度。
 /// 之所以是个容器而不是直接用 <see cref="Thumb"/>：光标要靠
 /// <see cref="UIElement.ProtectedCursor"/> 换，而它是受保护成员、Thumb 又是密封类，
 /// 只能把光标设在外层容器上，由内部 Thumb 沿用。指针形状是"这里可以拖"最直接的提示。
-/// 外观由 App.xaml 的 WorkspaceSplitterStyle 提供。
+/// 命中区域由 App.xaml 的 WorkspaceSplitterStyle 提供，不绘制分割线。
 /// </summary>
 internal sealed class WorkspaceSplitter : Grid
 {

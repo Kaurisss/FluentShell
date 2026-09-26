@@ -36,7 +36,7 @@ public static class ShellDialogService
         var body = new StackPanel { Spacing = 8 };
         body.Children.Add(new TextBlock
         {
-            Text = "这是此服务器第一次连接。请确认主机指纹与你信任的来源一致。",
+            Text = $"这是“{fingerprint.Profile?.Name ?? "此服务器"}”第一次连接。请确认主机指纹与你信任的来源一致。",
             TextWrapping = TextWrapping.Wrap
         });
         body.Children.Add(new TextBlock

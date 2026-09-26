@@ -237,6 +237,29 @@ public sealed class SessionConnectionTests
     }
 
     [TestMethod]
+    public async Task Accepted_jump_fingerprint_is_remembered_on_the_jump_profile_only()
+    {
+        var target = new ServerProfile { Name = "目标", Host = "target", Username = "user" };
+        var jump = new ServerProfile { Name = "跳板", Host = "jump", Username = "user" };
+        var connection = new FakeSshConnection();
+        await using var session = CreateSession(
+            connection,
+            profile: target,
+            confirmFingerprint: _ => Task.FromResult(true));
+        await session.ConnectAsync();
+
+        connection.RaiseHostFingerprintRequired(new HostFingerprintRequiredEventArgs
+        {
+            Profile = jump,
+            Fingerprint = "AA:BB",
+            KeyType = "ssh-ed25519"
+        });
+
+        Assert.AreEqual("AA:BB", jump.HostFingerprint);
+        Assert.AreEqual(string.Empty, target.HostFingerprint);
+    }
+
+    [TestMethod]
     public async Task Rejected_host_fingerprint_is_not_remembered()
     {
         var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };

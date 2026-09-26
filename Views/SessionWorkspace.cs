@@ -11,13 +11,13 @@ using Microsoft.UI.Xaml.Markup;
 namespace FluentShell.Views;
 
 /// <summary>
-/// 一个会话标签页的可视外壳：终端与 SFTP 面板的布局、拆分条与折叠。
+/// 一个会话标签页的可视外壳：终端与 SFTP 面板的布局、底边拖拽与折叠。
 /// 连接本身归 <see cref="SessionConnection"/>；本控件只负责把它的事件编组回 UI 线程。
 /// </summary>
 public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposable
 {
-    /// <summary>拆分条所在行的高度。视觉上只有 1px，其余是留给鼠标的命中区域。</summary>
-    private const double SplitterHeight = 10;
+    /// <summary>覆盖在 xterm 底部内边距上的透明拖拽区域高度。</summary>
+    private const double TerminalBottomDragHeight = 10;
     private const double MinTerminalHeight = 180;
     private const double MinSftpHeight = 120;
 
@@ -46,7 +46,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public SessionWorkspace(
         ServerProfile profile,
         IntPtr windowHandle,
-        Func<string, ISshConnection> connectionFactory,
+        Func<string, CancellationToken, Task<ISshConnection?>> connectionFactory,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation,
         Func<Task<string?>> passwordProvider,
         ElementTheme workspaceTheme)
@@ -113,7 +113,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             Height = new GridLength(_previousTerminalHeight, GridUnitType.Star),
             MinHeight = MinTerminalHeight
         });
-        _workspaceGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(SplitterHeight) });
         _workspaceGrid.RowDefinitions.Add(new RowDefinition
         {
             Height = new GridLength(_previousSftpHeight, GridUnitType.Star),
@@ -124,15 +123,12 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         var terminalGrid = BuildTerminalGrid();
         _workspaceGrid.Children.Add(terminalGrid);
 
-        ToolTipService.SetToolTip(_splitter, "拖动调整高度，双击折叠 SFTP 文件管理器");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_splitter, "调整终端与 SFTP 文件管理器的高度");
+        ToolTipService.SetToolTip(_splitter, "拖动终端底部调整高度，双击折叠 SFTP 文件管理器");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_splitter, "拖动终端底部调整终端与 SFTP 文件管理器的高度");
         _splitter.DragStarted += Splitter_DragStarted;
         _splitter.DragDelta += Splitter_DragDelta;
         _splitter.DoubleTapped += Splitter_DoubleTapped;
-        Grid.SetRow(_splitter, 1);
-        _workspaceGrid.Children.Add(_splitter);
-
-        Grid.SetRow(_sftpView, 2);
+        Grid.SetRow(_sftpView, 1);
         _workspaceGrid.Children.Add(_sftpView);
 
         // 这一行是 Auto 高：留白挂在按钮上而不是行上，SFTP 展开时按钮隐藏，整行就真的塌成 0。
@@ -146,7 +142,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         _sftpRestoreButton.Click += SftpRestoreButton_Click;
         _sftpRestoreButton.Visibility = Visibility.Collapsed;
         restoreRow.Children.Add(_sftpRestoreButton);
-        Grid.SetRow(restoreRow, 3);
+        Grid.SetRow(restoreRow, 2);
         _workspaceGrid.Children.Add(restoreRow);
 
         return _workspaceGrid;
@@ -154,9 +150,12 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private Grid BuildTerminalGrid()
     {
-        var grid = new Grid { Padding = new Thickness(0, 0, 0, 8) };
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        var grid = new Grid();
         grid.Children.Add(_terminalPane);
+        _splitter.Height = TerminalBottomDragHeight;
+        _splitter.VerticalAlignment = VerticalAlignment.Bottom;
+        Canvas.SetZIndex(_splitter, 1);
+        grid.Children.Add(_splitter);
         return grid;
     }
 
@@ -203,7 +202,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         else
             CollapseSftp(
                 _workspaceGrid.RowDefinitions[0].ActualHeight,
-                _workspaceGrid.RowDefinitions[2].ActualHeight);
+                _workspaceGrid.RowDefinitions[1].ActualHeight);
     }
 
     /// <summary>
@@ -216,9 +215,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         _previousTerminalHeight = Math.Max(MinTerminalHeight, terminalHeight);
         _previousSftpHeight = Math.Max(MinSftpHeight, sftpHeight);
         _workspaceGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+        _workspaceGrid.RowDefinitions[1].MinHeight = 0;
         _workspaceGrid.RowDefinitions[1].Height = new GridLength(0);
-        _workspaceGrid.RowDefinitions[2].MinHeight = 0;
-        _workspaceGrid.RowDefinitions[2].Height = new GridLength(0);
         UpdateSftpVisibility();
         // 折叠后原先的焦点元素（拆分条或 SFTP 内部）都不可见了，把焦点还给终端。
         _terminalPane.FocusTerminal();
@@ -228,9 +226,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _isSftpCollapsed = false;
         _workspaceGrid.RowDefinitions[0].Height = new GridLength(_previousTerminalHeight, GridUnitType.Star);
-        _workspaceGrid.RowDefinitions[1].Height = new GridLength(SplitterHeight);
-        _workspaceGrid.RowDefinitions[2].MinHeight = MinSftpHeight;
-        _workspaceGrid.RowDefinitions[2].Height = new GridLength(_previousSftpHeight, GridUnitType.Star);
+        _workspaceGrid.RowDefinitions[1].MinHeight = MinSftpHeight;
+        _workspaceGrid.RowDefinitions[1].Height = new GridLength(_previousSftpHeight, GridUnitType.Star);
         UpdateSftpVisibility();
     }
 
@@ -246,7 +243,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _dragOffset = 0;
         _dragStartTerminalHeight = _workspaceGrid.RowDefinitions[0].ActualHeight;
-        _dragStartSftpHeight = _workspaceGrid.RowDefinitions[2].ActualHeight;
+        _dragStartSftpHeight = _workspaceGrid.RowDefinitions[1].ActualHeight;
     }
 
     private void Splitter_DragDelta(object? sender, DragDeltaEventArgs e)
@@ -274,7 +271,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
         // 用星号权重而不是绝对像素，窗口缩放时两块仍按拖出来的比例分配。
         _workspaceGrid.RowDefinitions[0].Height = new GridLength(terminalHeight, GridUnitType.Star);
-        _workspaceGrid.RowDefinitions[2].Height = new GridLength(total - terminalHeight, GridUnitType.Star);
+        _workspaceGrid.RowDefinitions[1].Height = new GridLength(total - terminalHeight, GridUnitType.Star);
     }
 
     private static PathIcon CreateFluentPathIcon(string pathData) =>
