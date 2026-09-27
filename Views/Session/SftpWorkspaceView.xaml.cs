@@ -1,4 +1,4 @@
-using FluentShell.Core;
+﻿using FluentShell.Core;
 using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -13,7 +13,7 @@ using WinRT.Interop;
 
 namespace FluentShell.Views.Session;
 
-public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
+public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView
 {
     private readonly IntPtr _windowHandle;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
@@ -36,6 +36,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RequestedTheme = workspaceTheme;
         InitializeComponent();
         ConfigureRemoteTable();
+        InitializeLocalPane();
         SizeChanged += SftpWorkspaceView_SizeChanged;
     }
 
@@ -63,7 +64,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
-        Toolbar.IsEnabled = snapshot.CanNavigate;
+        foreach (var button in Toolbar.Children.OfType<Button>()) button.IsEnabled = snapshot.CanNavigate;
         UploadButton.IsEnabled = snapshot.CanTransfer;
         UpdateSelectionState();
 
@@ -258,33 +259,25 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             MappingName = nameof(RemoteFileItem.SortName),
             CellTemplate = (DataTemplate)Resources["RemoteFileNameCellTemplate"],
             ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill,
-            MinimumWidth = 180
+            MinimumWidth = 120
         });
-        RemoteTable.Columns.Add(new GridTextColumn
+        RemoteTable.Columns.Add(new GridTemplateColumn
         {
-            HeaderText = "类型",
-            MappingName = nameof(RemoteFileItem.TypeLabel),
-            MinimumWidth = 80,
-            MaximumWidth = 160
+            HeaderText = "类型", MappingName = nameof(RemoteFileItem.TypeLabel),
+            CellTemplate = (DataTemplate)Resources["SftpTypeCellTemplate"], Width = 64
         });
-        RemoteTable.Columns.Add(new GridTextColumn
+        RemoteTable.Columns.Add(new GridTemplateColumn
         {
-            HeaderText = "大小",
-            MappingName = nameof(RemoteFileItem.SizeBytes),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.SizeLabel)),
-            MinimumWidth = 96,
-            MaximumWidth = 160,
-            TextAlignment = TextAlignment.Right
+            HeaderText = "大小", MappingName = nameof(RemoteFileItem.SizeBytes),
+            CellTemplate = (DataTemplate)Resources["SftpSizeCellTemplate"], Width = 76
         });
-        RemoteTable.Columns.Add(new GridTextColumn
+        RemoteTable.Columns.Add(new GridTemplateColumn
         {
-            HeaderText = "修改时间",
-            HeaderStyle = (Style)Resources["LastRemoteHeaderStyle"],
-            MappingName = nameof(RemoteFileItem.ModifiedAt),
-            DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
-            MinimumWidth = 150,
-            MaximumWidth = 230
+            HeaderText = "修改时间", MappingName = nameof(RemoteFileItem.ModifiedAt),
+            CellTemplate = (DataTemplate)Resources["SftpModifiedCellTemplate"], Width = 148,
+            HeaderStyle = (Style)Resources["LastRemoteHeaderStyle"]
         });
+
     }
 
     private MenuFlyout BuildRemoteRowMenu()
@@ -293,7 +286,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         var open = new MenuFlyoutItem { Text = "打开文件夹" };
         open.Click += (_, _) => OpenSelectedDirectory();
         var download = new MenuFlyoutItem { Text = "下载" };
-        download.Click += (_, _) => RequestDownload();
+        download.Click += (_, _) => RequestDownloadToLocal();
         var copyPath = new MenuFlyoutItem { Text = "复制远程路径" };
         copyPath.Click += (_, _) => CopySelectedRemotePath();
         var rename = new MenuFlyoutItem { Text = "重命名" };
@@ -319,7 +312,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         {
             var item = SelectedItem;
             open.IsEnabled = _snapshot.CanNavigate && item?.IsDirectory == true;
-            download.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
+            download.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." } && _localPath is not null;
             copyPath.IsEnabled = item is not null;
             rename.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
             delete.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";

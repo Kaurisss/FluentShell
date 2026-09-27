@@ -1,4 +1,4 @@
-using FluentShell.Models;
+﻿using FluentShell.Models;
 
 namespace FluentShell.Core;
 
@@ -35,3 +35,13 @@ public interface ISftpWorkspaceView
     /// <summary>返回 <c>null</c> 表示用户没有选择目录。</summary>
     Task<string?> PickDownloadDirectoryAsync();
 }
+
+/// <summary>双列面板直接传输入口；工具栏继续使用选择器。</summary>
+public interface ISftpPaneTransferView
+{
+    event EventHandler<IReadOnlyList<SftpUploadFile>>? UploadSelectionRequested;
+    event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
+    void RefreshLocalDirectory();
+}
+
+public sealed record SftpPaneDownload(RemoteFileItem Item, string Destination);

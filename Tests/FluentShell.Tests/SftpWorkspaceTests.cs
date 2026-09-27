@@ -1,4 +1,4 @@
-using FluentShell.Core;
+﻿using FluentShell.Core;
 using FluentShell.Models;
 using FluentShell.Services;
 
@@ -7,6 +7,32 @@ namespace FluentShell.Tests;
 [TestClass]
 public sealed class SftpWorkspaceTests
 {
+    [TestMethod]
+    public async Task Pane_upload_uses_selected_files_without_opening_picker()
+    {
+        var service = new FakeSftpFileService();
+        var view = new RecordingSftpWorkspaceView();
+        using var workspace = new SftpWorkspace(service, view);
+        await workspace.UploadAsync([CreateUploadFile("one.txt"), CreateUploadFile("two.txt")]);
+        Assert.AreEqual(2, service.UploadCallCount);
+        Assert.AreEqual(0, view.UploadPickerCalls);
+    }
+
+    [TestMethod]
+    public async Task Pane_download_uses_local_path_without_opening_picker()
+    {
+        var service = new FakeSftpFileService();
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = null };
+        string? writtenPath = null;
+        using var workspace = new SftpWorkspace(service, view,
+            localFileExists: _ => false,
+            createLocalOutput: path => { writtenPath = path; return new MemoryStream(); });
+        await workspace.DownloadAsync(new RemoteFileItem { Name = "one.txt", FullPath = "/one.txt" }, Path.GetTempPath());
+        Assert.AreEqual(1, service.DownloadCallCount);
+        Assert.AreEqual(Path.Combine(Path.GetTempPath(), "one.txt"), writtenPath);
+        Assert.AreEqual(0, view.DownloadPickerCalls);
+    }
+
     [TestMethod]
     public async Task Declining_the_overwrite_prompt_skips_the_upload()
     {
@@ -198,6 +224,8 @@ public sealed class SftpWorkspaceTests
         public IReadOnlyList<SftpUploadFile> UploadFiles { get; set; } = [];
         public string? DownloadDirectory { get; set; } = "C:\\下载";
         public int DeleteConfirmations { get; private set; }
+        public int UploadPickerCalls { get; private set; }
+        public int DownloadPickerCalls { get; private set; }
         public SftpSessionSnapshot LastSnapshot { get; private set; } = null!;
 
         public event EventHandler? RefreshRequested;
@@ -227,10 +255,9 @@ public sealed class SftpWorkspaceTests
             return Task.FromResult(DeleteAnswer);
         }
 
-        public Task<IReadOnlyList<SftpUploadFile>> PickUploadFilesAsync() =>
-            Task.FromResult(UploadFiles);
+        public Task<IReadOnlyList<SftpUploadFile>> PickUploadFilesAsync() { UploadPickerCalls++; return Task.FromResult(UploadFiles); }
 
-        public Task<string?> PickDownloadDirectoryAsync() => Task.FromResult(DownloadDirectory);
+        public Task<string?> PickDownloadDirectoryAsync() { DownloadPickerCalls++; return Task.FromResult(DownloadDirectory); }
 
         public void RaiseRefreshRequested() => RefreshRequested?.Invoke(this, EventArgs.Empty);
         public void RaiseNavigateRequested(string path) => NavigateRequested?.Invoke(this, path);

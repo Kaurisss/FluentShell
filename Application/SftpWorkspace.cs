@@ -1,4 +1,4 @@
-using FluentShell.Models;
+﻿using FluentShell.Models;
 using FluentShell.Services;
 using FluentShell.Views.Shell;
 using Microsoft.UI.Xaml.Controls;
@@ -61,6 +61,11 @@ public sealed class SftpWorkspace : IDisposable
         _view.DownloadRequested += View_DownloadRequested;
         _view.RenameRequested += View_RenameRequested;
         _view.DeleteRequested += View_DeleteRequested;
+        if (_view is ISftpPaneTransferView panes)
+        {
+            panes.UploadSelectionRequested += UploadSelectionRequested;
+            panes.DownloadToLocalRequested += DownloadToLocalRequested;
+        }
         _view.Render(_controller.Snapshot);
     }
 
@@ -79,13 +84,13 @@ public sealed class SftpWorkspace : IDisposable
         await _controller.CreateDirectoryAsync(name);
     }
 
-    public async Task UploadAsync()
+    public async Task UploadAsync(IReadOnlyList<SftpUploadFile>? selectedFiles = null)
     {
         if (_disposed || _batchRunning || _picking) return;
         _picking = true;
         try
         {
-            var files = await _view.PickUploadFilesAsync();
+            var files = selectedFiles?.ToArray() ?? await _view.PickUploadFilesAsync();
             if (files.Count == 0 || _disposed) return;
             // Capture the target once: browsing another directory must not redirect later files.
             var target = _controller.Snapshot.DirectoryListing.Path;
@@ -108,13 +113,13 @@ public sealed class SftpWorkspace : IDisposable
         finally { _picking = false; _transfers.RefreshCommands(); }
     }
 
-    public async Task DownloadAsync(RemoteFileItem item)
+    public async Task DownloadAsync(RemoteFileItem item, string? targetDirectory = null)
     {
         if (_disposed || _batchRunning || _picking) return;
         _picking = true;
         try
         {
-            var destination = await _view.PickDownloadDirectoryAsync();
+            var destination = targetDirectory ?? await _view.PickDownloadDirectoryAsync();
             if (destination is null || _disposed) return;
             TransferTask? task = null;
             async Task Run() => await RunBatchAsync(task!, () =>
@@ -162,6 +167,7 @@ public sealed class SftpWorkspace : IDisposable
             _currentTask = null;
             _batchRunning = false;
             _controller.EndBatch();
+            if (_view is ISftpPaneTransferView panes) panes.RefreshLocalDirectory();
             _transfers.RefreshCommands();
         }
     }
@@ -230,9 +236,19 @@ public sealed class SftpWorkspace : IDisposable
 
     private async void View_DeleteRequested(object? sender, RemoteFileItem item) => await DeleteAsync(item);
 
+    private async void UploadSelectionRequested(object? sender, IReadOnlyList<SftpUploadFile> files) => await UploadAsync(files);
+
+    private async void DownloadToLocalRequested(object? sender, SftpPaneDownload request) =>
+        await DownloadAsync(request.Item, request.Destination);
+
     public void Dispose()
     {
         _disposed = true;
+        if (_view is ISftpPaneTransferView panes)
+        {
+            panes.UploadSelectionRequested -= UploadSelectionRequested;
+            panes.DownloadToLocalRequested -= DownloadToLocalRequested;
+        }
         _transfers.Detach(_connectionId);
         _controller.SnapshotChanged -= Controller_SnapshotChanged;
         _view.RefreshRequested -= View_RefreshRequested;
