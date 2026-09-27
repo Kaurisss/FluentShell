@@ -288,12 +288,8 @@ public sealed partial class MainWindow : Window
             "settings" => "设置",
             _ => "概览"
         };
-        PageSubtitleText.Text = page switch
-        {
-            "servers" => "添加、编辑和连接本机保存的服务器配置。",
-            "settings" => "连接安全与界面偏好。",
-            _ => "从最近或已保存的服务器开始 SSH 会话。"
-        };
+        PageSubtitleText.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        PageSubtitleText.Text = page == "settings" ? "连接安全与界面偏好。" : string.Empty;
 
         _currentPage = page;
         _hasDisplayedPage = true;
@@ -344,6 +340,7 @@ public sealed partial class MainWindow : Window
         OverviewNavItem.Visibility = Visibility.Collapsed;
         ServersNavItem.Visibility = Visibility.Collapsed;
         SettingsNavItem.Visibility = Visibility.Collapsed;
+        TransfersNavItem.Visibility = Visibility.Visible;
         ConnectedSidebar.Visibility = Visibility.Visible;
         ConnectedSidebar.SetPaneOpen(RootNavigationView.IsPaneOpen);
     }
@@ -360,6 +357,8 @@ public sealed partial class MainWindow : Window
         OverviewNavItem.Visibility = Visibility.Visible;
         ServersNavItem.Visibility = Visibility.Visible;
         SettingsNavItem.Visibility = Visibility.Visible;
+        _transferFlyout.Hide();
+        TransfersNavItem.Visibility = Visibility.Collapsed;
         ConnectedSidebar.Visibility = Visibility.Collapsed;
         RootNavigationView.SelectedItem = page switch
         {

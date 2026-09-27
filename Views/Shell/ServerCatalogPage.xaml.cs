@@ -133,9 +133,9 @@ public sealed partial class ServerCatalogPage : UserControl
         var isEmpty = filteredProfiles.Count == 0;
         ProfilesList.Visibility = isEmpty ? Visibility.Collapsed : Visibility.Visible;
         EmptyState.Visibility = isEmpty ? Visibility.Visible : Visibility.Collapsed;
-        EmptyStateTitle.Text = _profiles.Count == 0 ? "还没有服务器配置" : "没有匹配的服务器";
+        EmptyStateTitle.Text = _profiles.Count == 0 ? "还没有已保存的服务器" : "没有匹配的服务器";
         EmptyStateDescription.Text = _profiles.Count == 0
-            ? "添加服务器后，可以在这里集中管理连接信息。"
-            : "尝试搜索其他名称、主机地址或用户名。";
+            ? "点击“添加服务器”开始。"
+            : "试试其他关键词。";
     }
 }

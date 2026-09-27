@@ -67,7 +67,7 @@
                 <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="TransfersNavItem" Content="传输任务" SelectsOnInvoked="False"
+                <NavigationViewItem x:Name="TransfersNavItem" Content="传输任务" SelectsOnInvoked="False" Visibility="Collapsed"
                                     AutomationProperties.Name="传输任务" ToolTipService.ToolTip="查看所有连接的传输任务">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Switch" /></NavigationViewItem.Icon>
                     <NavigationViewItem.InfoBadge><InfoBadge x:Name="TransfersBadge" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>

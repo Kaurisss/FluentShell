@@ -9,48 +9,20 @@
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto"
         SizeChanged="RootScrollViewer_SizeChanged">
-        <StackPanel x:Name="RootContent" Spacing="28" MaxWidth="1080" HorizontalAlignment="Left" Padding="0,0,0,28">
-            <Grid ColumnSpacing="20">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="5" VerticalAlignment="Center">
-                    <TextBlock Text="快速开始" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="从最近使用的主机继续，或添加新的服务器配置。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel x:Name="ActionButtons" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button x:Name="ConnectServerButton" MinHeight="40" Padding="18,0" Content="连接服务器" Style="{StaticResource AppAccentButtonStyle}" Click="ConnectServerButton_Click" />
-                    <Button MinHeight="40" Padding="18,0" Content="添加服务器" Click="AddServerButton_Click" />
-                </StackPanel>
-            </Grid>
-
-            <Grid x:Name="SummaryGrid" ColumnSpacing="12">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                <Border Padding="16" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
-                    <StackPanel Spacing="4"><TextBlock Text="已保存服务器" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" /><TextBlock x:Name="SavedCountText" Text="0" FontSize="24" FontWeight="SemiBold" /></StackPanel>
-                </Border>
-                <Border Grid.Column="1" Padding="16" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
-                    <StackPanel Spacing="4"><TextBlock Text="最近连接" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" /><TextBlock x:Name="RecentCountText" Text="0" FontSize="24" FontWeight="SemiBold" /></StackPanel>
-                </Border>
-                <Border Grid.Column="2" Padding="16" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
-                    <StackPanel Spacing="4"><TextBlock Text="连接状态" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" /><TextBlock x:Name="ConnectionStatusText" Text="待连接" FontSize="18" FontWeight="SemiBold" /></StackPanel>
-                </Border>
-            </Grid>
-
-            <StackPanel Spacing="6">
-                <TextBlock x:Name="ConnectionSectionTitle" Style="{StaticResource SectionHeadingStyle}" />
-                <TextBlock x:Name="ConnectionSectionDescription" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
+        <StackPanel x:Name="RootContent" Spacing="16" MaxWidth="1080" HorizontalAlignment="Left" Padding="0,0,0,28">
+            <StackPanel x:Name="ActionButtons" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="ConnectServerButton" MinHeight="36" Padding="16,0" Content="连接服务器" Style="{StaticResource AppAccentButtonStyle}" Click="ConnectServerButton_Click" />
+                <Button MinHeight="36" Padding="16,0" Content="添加服务器" Click="AddServerButton_Click" />
             </StackPanel>
-
+            <TextBlock x:Name="ConnectionSectionTitle" Style="{StaticResource SectionHeadingStyle}" />
             <ItemsRepeater x:Name="ConnectionCards">
                 <ItemsRepeater.Layout><StackLayout Spacing="10" /></ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate>
-                        <Border MinHeight="88" Padding="14,12" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
+                        <Border MinHeight="88" Padding="14,12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
                             <Grid ColumnSpacing="14">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <Border Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center" Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="20"><FontIcon Glyph="&#xE968;" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                <Border Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Center" Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="6"><FontIcon Glyph="&#xE968;" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
                                 <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Address}" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Address}" />
@@ -63,16 +35,10 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
 
-            <Border x:Name="EmptyState" Padding="24" Background="{ThemeResource PanelSurfaceBrush}" BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}" Visibility="Collapsed">
-                <Grid ColumnSpacing="16">
-                    <Border Width="44" Height="44" Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="22"><FontIcon Glyph="&#xE8D7;" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-                    <StackPanel Grid.Column="1" Spacing="7" MaxWidth="520">
-                        <TextBlock Text="还没有已保存的服务器" FontSize="16" FontWeight="SemiBold" />
-                        <TextBlock Text="添加第一台服务器配置后，就可以从概览快速发起 SSH 连接。" FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" />
-                        <Button MinHeight="38" Margin="0,3,0,0" HorizontalAlignment="Left" Content="添加服务器" Click="AddServerButton_Click" AutomationProperties.Name="添加服务器" />
-                    </StackPanel>
-                </Grid>
-            </Border>
+            <StackPanel x:Name="EmptyState" Spacing="12" Padding="0,32" Visibility="Collapsed">
+                <TextBlock Text="还没有已保存的服务器" FontSize="16" FontWeight="SemiBold" />
+                <Button Content="添加服务器" HorizontalAlignment="Left" Click="AddServerButton_Click" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

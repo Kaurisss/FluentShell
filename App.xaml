@@ -79,23 +79,21 @@
             </Style>
 
             <Style x:Key="TitleBarSessionTabInactiveTextStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontSize" Value="13" />
                 <Setter Property="FontWeight" Value="Normal" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
             <Style x:Key="TitleBarSessionTabActiveTextStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontSize" Value="13" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             </Style>
 
             <Style x:Key="TitleBarSessionTabStyle" TargetType="ToggleButton">
-                <Setter Property="Height" Value="40" />
-                <Setter Property="MinWidth" Value="132" />
-                <Setter Property="Padding" Value="12,0,40,0" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="MinWidth" Value="140" />
+                <Setter Property="Padding" Value="12,0,36,0" />
                 <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
@@ -118,28 +116,39 @@
                                         </VisualState>
                                         <VisualState x:Name="Disabled">
                                             <VisualState.Setters>
-                                                <Setter Target="ContentPresenter.Opacity" Value="0.36" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
-                                    </VisualStateGroup>
-                                    <VisualStateGroup x:Name="CheckStates">
-                                        <VisualState x:Name="Unchecked" />
                                         <VisualState x:Name="Checked">
                                             <VisualState.Setters>
                                                 <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
-                                                <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource SubtleStrokeBrush}" />
-                                                <Setter Target="TabBackground.BorderThickness" Value="1" />
+                                                <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                                <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                                <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                     </VisualStateGroup>
                                 </VisualStateManager.VisualStateGroups>
                                 <Border
                                     x:Name="TabBackground"
-                                    Margin="0,3,0,3"
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="Transparent"
-                                    BorderThickness="0"
-                                    CornerRadius="8" />
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Control.IsTemplateFocusTarget="True" />
                                 <ContentPresenter
                                     x:Name="ContentPresenter"
                                     Padding="{TemplateBinding Padding}"
