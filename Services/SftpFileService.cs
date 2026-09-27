@@ -54,13 +54,13 @@ public sealed class SftpFileService : ISftpFileService
         Stream input,
         string remotePath,
         CancellationToken cancellationToken) =>
-        GetConnectedClient().UploadAsync(input, remotePath, cancellationToken);
+        Task.Run(() => GetConnectedClient().UploadAsync(input, remotePath, cancellationToken), cancellationToken);
 
     public Task DownloadAsync(
         string remotePath,
         Stream output,
         CancellationToken cancellationToken) =>
-        GetConnectedClient().DownloadAsync(remotePath, output, cancellationToken);
+        Task.Run(() => GetConnectedClient().DownloadAsync(remotePath, output, cancellationToken), cancellationToken);
 
     public Task RenameAsync(string sourcePath, string destinationPath) =>
         GetConnectedClient().RenameAsync(sourcePath, destinationPath, CancellationToken.None);

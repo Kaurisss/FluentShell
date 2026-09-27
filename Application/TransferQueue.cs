@@ -19,6 +19,15 @@ public sealed record TransferQueueItem(
     long BytesTransferred = 0,
     string? ErrorMessage = null)
 {
+    public string StatusLabel => State switch
+    {
+        TransferItemState.Pending => "等待中",
+        TransferItemState.Transferring => $"{PercentComplete:0}%",
+        TransferItemState.Completed => "已完成",
+        TransferItemState.Skipped => "已跳过",
+        _ => "失败"
+    };
+
     /// <summary>传输进度百分比（0-100）。</summary>
     public double PercentComplete => SizeBytes <= 0 ? 0 : Math.Min(100d, BytesTransferred * 100d / SizeBytes);
 

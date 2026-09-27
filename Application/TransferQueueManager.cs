@@ -78,7 +78,7 @@ public sealed class TransferQueueManager
     {
         if (_items.TryGetValue(relativePath, out var item))
         {
-            _items[relativePath] = item.WithState(TransferItemState.Completed);
+            _items[relativePath] = item.WithState(TransferItemState.Completed) with { BytesTransferred = item.SizeBytes };
         }
     }
 
@@ -99,4 +99,11 @@ public sealed class TransferQueueManager
             _items[relativePath] = item.WithState(TransferItemState.Failed, errorMessage);
         }
     }
+    public void FailUnfinished(string message)
+    {
+        foreach (var item in _items.Values)
+            if (item.State is TransferItemState.Pending or TransferItemState.Transferring)
+                FailTransfer(item.RelativePath, message);
+    }
+
 }

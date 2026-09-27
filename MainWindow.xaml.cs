@@ -8,6 +8,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
@@ -21,6 +22,10 @@ public sealed partial class MainWindow : Window
     private readonly IntPtr _windowHandle;
     private readonly AppWindow _appWindow;
     private readonly ShellCoordinator _shell;
+    private readonly TransferCenter _transfers = new();
+    private readonly TransferCenterView _transferView = new();
+    private readonly Flyout _transferFlyout = new();
+    private bool _transferFlyoutOpen;
     private readonly SessionTabStrip _sessionTabStrip = new();
     private readonly SessionHost _sessionHost;
     private readonly OverviewPage _overviewPage = new();
@@ -50,7 +55,7 @@ public sealed partial class MainWindow : Window
                 (secret, cancellationToken) => CreateConnectionAsync(profile, secret, cancellationToken),
                 fingerprintConfirmation,
                 secretProvider,
-                RootGrid.ActualTheme),
+                RootGrid.ActualTheme, _transfers),
             profile => ShellDialogService.PromptSecretAsync(Content.XamlRoot, profile),
             fingerprint => ShellDialogService.ConfirmFingerprintAsync(Content.XamlRoot, fingerprint));
         _serverCatalogPage = new ServerCatalogPage(
@@ -58,6 +63,23 @@ public sealed partial class MainWindow : Window
             _shell.HasSavedCredential);
         _settingsPage = new SettingsPage(_windowHandle);
 
+        _transferView.SetCenter(_transfers);
+        _transferView.CloseRequested += (_, _) => _transferFlyout.Hide();
+        _transferFlyout.Content = _transferView;
+        // FlyoutPresenter defaults to a narrower viewport than our task content.
+        // Set its bounds explicitly and let only the inner task list scroll.
+        _transferFlyout.FlyoutPresenterStyle = (Style)RootGrid.Resources["TransferFlyoutPresenterStyle"];
+        _transferFlyout.Placement = FlyoutPlacementMode.RightEdgeAlignedBottom;
+        _transferFlyout.Opened += (_, _) => _transferFlyoutOpen = true;
+        _transferFlyout.Closed += (_, _) => _transferFlyoutOpen = false;
+        _transfers.Changed += (_, _) =>
+        {
+            var count = _transfers.RunningCount;
+            TransfersBadge.Value = count > 0 ? count : -1;
+            TransfersBadge.Visibility = count > 0 || _transfers.FailedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TransfersNavItem,
+                $"传输任务，{count} 项进行中，{_transfers.FailedCount} 项失败");
+        };
         WireModules();
         RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
@@ -342,6 +364,16 @@ public sealed partial class MainWindow : Window
             _ => OverviewNavItem
         };
         NavigateTo(page);
+    }
+
+    private void RootNavigationView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (!ReferenceEquals(args.InvokedItemContainer, TransfersNavItem)) return;
+        if (_transferFlyoutOpen) { _transferFlyout.Hide(); return; }
+        _transferView.Width = Math.Max(280, Math.Min(520, RootGrid.ActualWidth - 96));
+        _transferView.Height = Math.Max(240, Math.Min(560, RootGrid.ActualHeight - 96));
+        _transferView.RequestedTheme = RootGrid.ActualTheme;
+        _transferFlyout.ShowAt(TransfersNavItem);
     }
 
     private void RootNavigationView_SelectionChanged(

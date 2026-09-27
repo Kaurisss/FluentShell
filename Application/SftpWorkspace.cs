@@ -19,6 +19,14 @@ public sealed class SftpWorkspace : IDisposable
     private readonly ISftpWorkspaceView _view;
     private readonly DownloadDestination _downloadDestination;
     private readonly FileConflictResolver _conflictResolver = new();
+    private readonly TransferCenter _transfers;
+    private readonly Guid _connectionId;
+    private readonly string _connectionLabel;
+    private readonly ISftpFileService _transferService;
+    private TransferTask? _currentTask;
+    private bool _batchRunning;
+    private bool _picking;
+    private bool _disposed;
 
     public SftpWorkspace(
         ISftpFileService fileService,
@@ -28,10 +36,17 @@ public sealed class SftpWorkspace : IDisposable
         Action<string>? createLocalDirectory = null,
         Action<string>? deleteLocalFile = null,
         Action<Action>? dispatchProgress = null,
-        ISftpFileService? transferFileService = null)
+        ISftpFileService? transferFileService = null,
+        TransferCenter? transfers = null,
+        Guid? connectionId = null,
+        string connectionLabel = "当前连接")
     {
         _controller = new SftpSessionController(fileService, transferFileService, dispatchProgress);
         _view = view;
+        _transfers = transfers ?? new TransferCenter();
+        _connectionId = connectionId ?? Guid.NewGuid();
+        _connectionLabel = connectionLabel;
+        _transferService = transferFileService ?? fileService;
         _downloadDestination = new DownloadDestination(
             localFileExists ?? File.Exists,
             createLocalOutput ?? (path => File.Create(path)),
@@ -46,11 +61,10 @@ public sealed class SftpWorkspace : IDisposable
         _view.DownloadRequested += View_DownloadRequested;
         _view.RenameRequested += View_RenameRequested;
         _view.DeleteRequested += View_DeleteRequested;
-        _view.CancelTransferRequested += View_CancelTransferRequested;
         _view.Render(_controller.Snapshot);
     }
 
-    public bool IsTransferActive => _controller.Snapshot.Transfer.IsActive;
+    public bool IsTransferActive => _batchRunning || _controller.Snapshot.Transfer.IsActive;
 
     public Task RefreshAsync() => _controller.RefreshAsync();
 
@@ -67,104 +81,119 @@ public sealed class SftpWorkspace : IDisposable
 
     public async Task UploadAsync()
     {
-        var files = await _view.PickUploadFilesAsync();
-        if (files.Count == 0) return;
-
-        _view.ShowTransferStatus();
-        _conflictResolver.Reset();
-
-        // 构建传输队列：收集所有文件信息并添加到队列管理器
-        await _controller.BuildUploadQueueAsync(files);
-
-        foreach (var file in files)
+        if (_disposed || _batchRunning || _picking) return;
+        _picking = true;
+        try
         {
-            await _controller.UploadAsync(
-                file.Name,
-                file.OpenRead,
-                async name =>
+            var files = await _view.PickUploadFilesAsync();
+            if (files.Count == 0 || _disposed) return;
+            // Capture the target once: browsing another directory must not redirect later files.
+            var target = _controller.Snapshot.DirectoryListing.Path;
+            TransferTask? task = null;
+            async Task Run() => await RunBatchAsync(task!, async () =>
+            {
+                await _controller.BuildUploadQueueAsync(files);
+                foreach (var file in files)
                 {
-                    var resolution = await _conflictResolver.ResolveConflictAsync(
-                        name,
-                        async fileName =>
-                        {
-                            // 直接创建并显示 FileConflictDialog
-                            var view = _view as UserControl;
-                            if (view?.XamlRoot is null) return (false, false, true);
-
-                            var dialog = new FileConflictDialog
-                            {
-                                Message = $"\"{fileName}\"已存在，是否覆盖？",
-                                XamlRoot = view.XamlRoot
-                            };
-                            await dialog.ShowAsync();
-
-                            return (
-                                dialog.Resolution == FileConflictResolution.Overwrite,
-                                dialog.ApplyToAll,
-                                dialog.Resolution == FileConflictResolution.CancelAll
-                            );
-                        });
-
-                    // null 表示取消全部
-                    if (resolution is null)
-                    {
-                        _controller.CancelTransfer();
-                        return false;
-                    }
-                    return resolution.Value;
-                });
-
-            // 用户按下取消是针对整批的，不只是当前这个文件：传输轴停在 Cancelled 上，
-            // 而 Cancelled 允许下一次传输开始，所以停止的判断必须在这里做。
-            if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) return;
+                    await _controller.WaitForTransferAsync();
+                    await _controller.UploadAsync(file.Name, file.OpenRead, ConfirmOverwriteAsync, target);
+                    if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) break;
+                }
+            });
+            task = _transfers.Add(_connectionId, _connectionLabel, "上传",
+                files.Count == 1 ? files[0].Name : $"{files[0].Name} 等 {files.Count} 个文件",
+                target, Run, CanRetry);
+            await Run();
         }
+        finally { _picking = false; _transfers.RefreshCommands(); }
     }
 
     public async Task DownloadAsync(RemoteFileItem item)
     {
-        var destinationDirectory = await _view.PickDownloadDirectoryAsync();
-        if (destinationDirectory is null) return;
-
-        _view.ShowTransferStatus();
-        _conflictResolver.Reset();
-
-        await _controller.DownloadAsync(
-            item,
-            destinationDirectory,
-            _downloadDestination,
-            async name =>
-            {
-                var resolution = await _conflictResolver.ResolveConflictAsync(
-                    name,
-                    async fileName =>
-                    {
-                        // 直接创建并显示 FileConflictDialog
-                        var view = _view as UserControl;
-                        if (view?.XamlRoot is null) return (false, false, true);
-
-                        var dialog = new FileConflictDialog
-                        {
-                            Message = $"\"{fileName}\"已存在，是否覆盖？",
-                            XamlRoot = view.XamlRoot
-                        };
-                        await dialog.ShowAsync();
-
-                        return (
-                            dialog.Resolution == FileConflictResolution.Overwrite,
-                            dialog.ApplyToAll,
-                            dialog.Resolution == FileConflictResolution.CancelAll
-                        );
-                    });
-
-                // null 表示取消全部
-                if (resolution is null)
-                {
-                    _controller.CancelTransfer();
-                    return false;
-                }
-                return resolution.Value;
-            });
+        if (_disposed || _batchRunning || _picking) return;
+        _picking = true;
+        try
+        {
+            var destination = await _view.PickDownloadDirectoryAsync();
+            if (destination is null || _disposed) return;
+            TransferTask? task = null;
+            async Task Run() => await RunBatchAsync(task!, () =>
+                _controller.DownloadAsync(item, destination, _downloadDestination, ConfirmOverwriteAsync));
+            task = _transfers.Add(_connectionId, _connectionLabel, "下载", item.Name,
+                destination, Run, CanRetry);
+            await Run();
+        }
+        finally { _picking = false; _transfers.RefreshCommands(); }
     }
+
+    private bool CanRetry() => !_disposed && !_batchRunning && !_picking && _transferService.IsConnected;
+
+    private async Task RunBatchAsync(TransferTask task, Func<Task> operation)
+    {
+        if (_disposed || _batchRunning) return;
+        _batchRunning = true;
+        _currentTask = task;
+        using var control = new TransferControl();
+        task.Start(control);
+        _controller.BeginBatch(control);
+        _conflictResolver.Reset();
+        _transfers.RefreshCommands();
+        try
+        {
+            await operation();
+            var snapshot = _controller.Snapshot;
+            task.Update(snapshot);
+            task.Finish(snapshot.Queue.FailedCount > 0 ||
+                snapshot.Transfer.State is SftpTransferState.Failed or SftpTransferState.Cancelled,
+                snapshot.Queue.FailedCount > 0
+                    ? $"{snapshot.Queue.FailedCount} 个文件失败，请展开文件明细。重试会重新执行本批任务，并再次确认覆盖。"
+                    : snapshot.Transfer.Message);
+        }
+        catch (OperationCanceledException)
+        {
+            task.Finish(true, "传输已取消。");
+        }
+        catch (Exception exception)
+        {
+            task.Finish(true, $"传输失败：{exception.Message}");
+        }
+        finally
+        {
+            _currentTask = null;
+            _batchRunning = false;
+            _controller.EndBatch();
+            _transfers.RefreshCommands();
+        }
+    }
+
+    private async Task<bool> ConfirmOverwriteAsync(string name)
+    {
+        var resolution = await _conflictResolver.ResolveConflictAsync(name, async fileName =>
+        {
+            if (_view is not UserControl view)
+                return (await _view.ConfirmOverwriteAsync(fileName), false, false);
+            if (view.XamlRoot is null) return (false, false, true);
+            var dialog = new FileConflictDialog
+            {
+                Message = $"\"{fileName}\"已存在，是否覆盖？",
+                XamlRoot = view.XamlRoot
+            };
+            await dialog.ShowAsync();
+            return (dialog.Resolution == FileConflictResolution.Overwrite,
+                dialog.ApplyToAll, dialog.Resolution == FileConflictResolution.CancelAll);
+        });
+        if (resolution is null) _controller.CancelTransfer();
+        return resolution ?? false;
+    }
+
+    public void ConnectionLost()
+    {
+        _currentTask?.Disconnect();
+        _controller.CancelTransfer();
+        _transfers.RefreshCommands();
+    }
+
+    public void RefreshTransferCommands() => _transfers.RefreshCommands();
 
     public async Task RenameAsync(RemoteFileItem item)
     {
@@ -179,8 +208,12 @@ public sealed class SftpWorkspace : IDisposable
         await _controller.DeleteAsync(item);
     }
 
-    private void Controller_SnapshotChanged(object? sender, SftpSessionSnapshot snapshot) =>
+    private void Controller_SnapshotChanged(object? sender, SftpSessionSnapshot snapshot)
+    {
+        if (_disposed) return;
+        _currentTask?.Update(snapshot);
         _view.Render(snapshot);
+    }
 
     private async void View_RefreshRequested(object? sender, EventArgs e) => await RefreshAsync();
 
@@ -197,10 +230,10 @@ public sealed class SftpWorkspace : IDisposable
 
     private async void View_DeleteRequested(object? sender, RemoteFileItem item) => await DeleteAsync(item);
 
-    private void View_CancelTransferRequested(object? sender, EventArgs e) => CancelTransfer();
-
     public void Dispose()
     {
+        _disposed = true;
+        _transfers.Detach(_connectionId);
         _controller.SnapshotChanged -= Controller_SnapshotChanged;
         _view.RefreshRequested -= View_RefreshRequested;
         _view.NavigateRequested -= View_NavigateRequested;
@@ -209,7 +242,6 @@ public sealed class SftpWorkspace : IDisposable
         _view.DownloadRequested -= View_DownloadRequested;
         _view.RenameRequested -= View_RenameRequested;
         _view.DeleteRequested -= View_DeleteRequested;
-        _view.CancelTransferRequested -= View_CancelTransferRequested;
         _controller.Dispose();
     }
 }

@@ -7,6 +7,21 @@
     Title="FluentShell">
 
     <Grid x:Name="RootGrid">
+        <Grid.Resources>
+            <Style x:Key="TransferFlyoutPresenterStyle" TargetType="FlyoutPresenter">
+                <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="MaxWidth" Value="640" />
+                <Setter Property="MaxHeight" Value="10000" />
+                <Setter Property="ScrollViewer.HorizontalScrollMode" Value="Disabled" />
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                <Setter Property="ScrollViewer.VerticalScrollMode" Value="Disabled" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
             <RowDefinition Height="*" />
@@ -43,6 +58,7 @@
             Background="Transparent"
             SelectionFollowsFocus="Disabled"
             Loaded="RootNavigationView_Loaded"
+            ItemInvoked="RootNavigationView_ItemInvoked"
             SelectionChanged="RootNavigationView_SelectionChanged"
             PaneOpening="RootNavigationView_PaneOpening"
             PaneClosing="RootNavigationView_PaneClosing">
@@ -51,6 +67,11 @@
                 <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="TransfersNavItem" Content="传输任务" SelectsOnInvoked="False"
+                                    AutomationProperties.Name="传输任务" ToolTipService.ToolTip="查看所有连接的传输任务">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Switch" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.InfoBadge><InfoBadge x:Name="TransfersBadge" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="SettingsNavItem" Content="设置" Tag="settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.FooterMenuItems>
             <NavigationView.PaneCustomContent>

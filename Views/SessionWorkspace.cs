@@ -49,7 +49,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         Func<string, CancellationToken, Task<ISshConnection?>> connectionFactory,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation,
         Func<Task<string?>> passwordProvider,
-        ElementTheme workspaceTheme)
+        ElementTheme workspaceTheme,
+        TransferCenter? transfers = null)
     {
         _profile = profile;
         _workspaceTheme = workspaceTheme == ElementTheme.Dark
@@ -72,7 +73,9 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             _connection.RemoteFiles,
             _sftpView,
             dispatchProgress: work => _dispatcherQueue.TryEnqueue(() => work()),
-            transferFileService: _connection.TransferRemoteFiles);
+            transferFileService: _connection.TransferRemoteFiles,
+            transfers: transfers,
+            connectionLabel: $"{profile.Name} · 会话 {Guid.NewGuid().ToString("N")[..6]}");
 
         _connection.Output += Connection_Output;
         _connection.StatusChanged += Connection_StatusChanged;
@@ -173,11 +176,12 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private async void Connection_Connected(object? sender, EventArgs e)
     {
+        _sftpWorkspace.RefreshTransferCommands();
         await _sftpWorkspace.RefreshAsync();
         _terminalPane.FocusTerminal();
     }
 
-    private void CancelSftpTransfer() => _sftpWorkspace.CancelTransfer();
+    private void CancelSftpTransfer() => _sftpWorkspace.ConnectionLost();
 
     private async void TerminalPane_InputReceived(object? sender, string data) =>
         await _connection.SendAsync(data);

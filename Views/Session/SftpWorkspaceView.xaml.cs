@@ -48,12 +48,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
     public event EventHandler<RemoteFileItem>? DownloadRequested;
     public event EventHandler<RemoteFileItem>? RenameRequested;
     public event EventHandler<RemoteFileItem>? DeleteRequested;
-    public event EventHandler? CancelTransferRequested;
 
     public void Render(SftpSessionSnapshot snapshot)
     {
         var previousState = _snapshot.State;
-        var previousTransferState = _snapshot.Transfer.State;
         var previousListing = _snapshot.DirectoryListing;
         _snapshot = snapshot;
 
@@ -62,7 +60,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         else if (snapshot.State == SftpSessionState.Failed)
             PathBox.Text = snapshot.DirectoryListing.Path;
 
-        RenderTransferTip(snapshot);
         RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
@@ -79,163 +76,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
         }
 
-        // 传输失败在自己的轴上弹窗解释（部分完成的明细都在消息里）。
-        if (snapshot.Transfer.State == SftpTransferState.Failed &&
-            previousTransferState != SftpTransferState.Failed)
-        {
-            _ = ShowFailureDialogAsync(snapshot.Transfer.Message);
-        }
-    }
-
-    public void ShowTransferStatus()
-    {
-        if (!TransferTip.IsOpen)
-        {
-            // 打开时第一份传输快照可能还没到，别让面板展示上一批的旧内容。
-            if (!_snapshot.Transfer.IsActive)
-            {
-                TransferTipMessage.Text = "正在准备传输…";
-                TransferTipBar.IsIndeterminate = true;
-                TransferTipBytes.Text = string.Empty;
-            }
-            TransferTip.IsOpen = true;
-        }
-        UpdateTransferStatusButton();
-    }
-
-    private void TransferStatusButton_Click(object sender, RoutedEventArgs e)
-    {
-        TransferTip.IsOpen = !TransferTip.IsOpen;
-        UpdateTransferStatusButton();
-    }
-
-    private void TransferTip_ActionButtonClick(TeachingTip sender, object args)
-    {
-        CancelTransferRequested?.Invoke(this, EventArgs.Empty);
-        // 用户点击取消后立即关闭面板，避免转圈等待造成的混淆
-        TransferTip.IsOpen = false;
-    }
-
-    private void TransferTip_Closed(TeachingTip sender, TeachingTipClosedEventArgs args) =>
-        UpdateTransferStatusButton();
-
-    private void RenderTransferTip(SftpSessionSnapshot snapshot)
-    {
-        var transfer = snapshot.Transfer;
-        // 取消与失败由内联提示和失败弹窗接手；完成保持面板打开显示汇总。
-        if (transfer.State is SftpTransferState.Failed or SftpTransferState.Cancelled)
-        {
-            TransferTip.IsOpen = false;
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(transfer.Message))
-            TransferTipMessage.Text = transfer.Message;
-        // 只有传输中可取消；其余阶段收起动作按钮。
-        TransferTip.ActionButtonContent = transfer.IsActive ? "取消传输" : null;
-
-        var progress = transfer.Progress;
-        TransferTipBar.Visibility = transfer.IsActive ? Visibility.Visible : Visibility.Collapsed;
-        TransferTipBar.IsIndeterminate = progress is null;
-        if (progress is not null) TransferTipBar.Value = progress.Percent;
-
-        // 更新字节数、速度和剩余时间显示
-        if (progress is null)
-        {
-            TransferTipBytes.Text = string.Empty;
-        }
-        else
-        {
-            var parts = new List<string>
-            {
-                $"{FormatBytes(progress.BytesTransferred)} / {FormatBytes(progress.TotalBytes)}"
-            };
-
-            if (progress.BytesPerSecond > 0)
-                parts.Add(FormatBytesPerSecond(progress.BytesPerSecond));
-
-            if (progress.EstimatedSecondsRemaining is not null)
-                parts.Add($"剩余 {FormatTimeRemaining(progress.EstimatedSecondsRemaining)}");
-
-            TransferTipBytes.Text = string.Join("  •  ", parts);
-        }
-
-        // 更新传输队列列表
-        TransferQueueList.ItemsSource = snapshot.Queue.Items;
-        TransferQueueList.Visibility = snapshot.Queue.HasItems ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>
-    /// 传输状态按钮既是传输中的活动指示，也是面板开着时的锚点——
-    /// 面板未关就不能藏按钮，否则 TeachingTip 失去目标会飘。
-    /// </summary>
-    private void UpdateTransferStatusButton()
-    {
-        var transfer = _snapshot.Transfer;
-        // 取消或失败后应立即隐藏按钮，即使面板还在关闭动画中
-        var shouldShow = transfer.State switch
-        {
-            SftpTransferState.Cancelled => false,
-            SftpTransferState.Failed => false,
-            _ => transfer.IsActive || TransferTip.IsOpen
-        };
-        TransferStatusButton.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
-        TransferStatusButtonRing.IsActive = transfer.IsActive && transfer.State == SftpTransferState.Transferring;
-        TransferStatusButtonRing.Visibility = TransferStatusButtonRing.IsActive ? Visibility.Visible : Visibility.Collapsed;
-        TransferStatusButtonLabel.Text = transfer.State switch
-        {
-            SftpTransferState.Transferring =>
-                transfer.Progress?.Percent is double percent ? $"{(int)percent}%" : "…",
-            SftpTransferState.Completed => "完成",
-            _ => "…"
-        };
-    }
-
-    private static string FormatBytes(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024d:0.0} KB",
-        < 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024d:0.0} MB",
-        _ => $"{bytes / 1024d / 1024d / 1024d:0.0} GB"
-    };
-
-    private static string FormatBytesPerSecond(double bytesPerSecond)
-    {
-        if (bytesPerSecond < 0) return "—";
-
-        return bytesPerSecond switch
-        {
-            < 1024 => $"{bytesPerSecond:0.0} B/s",
-            < 1024 * 1024 => $"{bytesPerSecond / 1024:0.0} KB/s",
-            < 1024L * 1024 * 1024 => $"{bytesPerSecond / 1024 / 1024:0.0} MB/s",
-            _ => $"{bytesPerSecond / 1024 / 1024 / 1024:0.0} GB/s"
-        };
-    }
-
-    private static string FormatTimeRemaining(double? seconds)
-    {
-        if (seconds is not double sec || sec < 0 || double.IsInfinity(sec) || double.IsNaN(sec))
-            return "—";
-
-        var totalSeconds = (int)Math.Ceiling(sec);
-
-        if (totalSeconds < 60)
-            return $"{totalSeconds} 秒";
-
-        if (totalSeconds < 3600)
-        {
-            var minutes = totalSeconds / 60;
-            var remainingSeconds = totalSeconds % 60;
-            return remainingSeconds > 0
-                ? $"{minutes} 分 {remainingSeconds} 秒"
-                : $"{minutes} 分";
-        }
-
-        var hours = totalSeconds / 3600;
-        var remainingMinutes = (totalSeconds % 3600) / 60;
-        return remainingMinutes > 0
-            ? $"{hours} 小时 {remainingMinutes} 分"
-            : $"{hours} 小时";
+        // Transfer failures remain in the global task center instead of interrupting browsing.
     }
 
     private void RenderDirectoryListing(SftpDirectoryListing listing)
@@ -256,15 +97,13 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             CancelTransientStatusClear();
 
         WorkspaceOperationStatusPanel.Visibility =
-            presentation.ShowsInlineMessage || presentation.ShowsListingIndicator || presentation.IsTransferring
+            presentation.ShowsInlineMessage || presentation.ShowsListingIndicator
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         WorkspaceOperationProgress.IsActive = presentation.ShowsListingIndicator;
         WorkspaceOperationProgress.Visibility = presentation.ShowsListingIndicator
             ? Visibility.Visible
             : Visibility.Collapsed;
-        // 传输中内联只留一个带进度的小按钮，详情都在传输面板里。
-        UpdateTransferStatusButton();
         WorkspaceOperationStatus.Visibility = presentation.ShowsInlineMessage
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -440,6 +279,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
         RemoteTable.Columns.Add(new GridTextColumn
         {
             HeaderText = "修改时间",
+            HeaderStyle = (Style)Resources["LastRemoteHeaderStyle"],
             MappingName = nameof(RemoteFileItem.ModifiedAt),
             DisplayBinding = CreateOneWayBinding(nameof(RemoteFileItem.ModifiedLabel)),
             MinimumWidth = 150,

@@ -9,10 +9,14 @@ internal sealed class ByteCountingStream : Stream
     private readonly Stream _inner;
     private readonly Action<long> _onBytesTransferred;
     private long _totalTransferred;
+    private readonly TransferControl? _control;
+    private readonly CancellationToken _cancellationToken;
 
-    public ByteCountingStream(Stream inner, Action<long> onBytesTransferred)
+    public ByteCountingStream(Stream inner, Action<long> onBytesTransferred, TransferControl? control = null, CancellationToken cancellationToken = default)
     {
         _inner = inner;
+        _control = control;
+        _cancellationToken = cancellationToken;
         _onBytesTransferred = onBytesTransferred;
     }
 
@@ -29,30 +33,35 @@ internal sealed class ByteCountingStream : Stream
 
     public override void Write(byte[] buffer, int offset, int count)
     {
+        WaitForResume();
         _inner.Write(buffer, offset, count);
         Report(count);
     }
 
     public override void Write(ReadOnlySpan<byte> buffer)
     {
+        WaitForResume();
         _inner.Write(buffer);
         Report(buffer.Length);
     }
 
     public override void WriteByte(byte value)
     {
+        WaitForResume();
         _inner.WriteByte(value);
         Report(1);
     }
 
     public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
+        await WaitForResumeAsync(cancellationToken).ConfigureAwait(false);
         await _inner.WriteAsync(buffer.AsMemory(offset, count), cancellationToken);
         Report(count);
     }
 
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
+        await WaitForResumeAsync(cancellationToken).ConfigureAwait(false);
         await _inner.WriteAsync(buffer, cancellationToken);
         Report(buffer.Length);
     }
@@ -63,6 +72,7 @@ internal sealed class ByteCountingStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
+        WaitForResume();
         var read = _inner.Read(buffer, offset, count);
         Report(read);
         return read;
@@ -70,6 +80,7 @@ internal sealed class ByteCountingStream : Stream
 
     public override int Read(Span<byte> buffer)
     {
+        WaitForResume();
         var read = _inner.Read(buffer);
         Report(read);
         return read;
@@ -77,6 +88,7 @@ internal sealed class ByteCountingStream : Stream
 
     public override int ReadByte()
     {
+        WaitForResume();
         var value = _inner.ReadByte();
         if (value >= 0) Report(1);
         return value;
@@ -84,6 +96,7 @@ internal sealed class ByteCountingStream : Stream
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
+        await WaitForResumeAsync(cancellationToken).ConfigureAwait(false);
         var read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
         Report(read);
         return read;
@@ -91,6 +104,7 @@ internal sealed class ByteCountingStream : Stream
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
+        await WaitForResumeAsync(cancellationToken).ConfigureAwait(false);
         var read = await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
         Report(read);
         return read;
@@ -104,6 +118,20 @@ internal sealed class ByteCountingStream : Stream
     {
         if (disposing) _inner.Dispose();
         base.Dispose(disposing);
+    }
+
+    private void WaitForResume()
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        _control?.WaitAsync(_cancellationToken).GetAwaiter().GetResult();
+    }
+
+    private async Task WaitForResumeAsync(CancellationToken cancellationToken)
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_control is not null)
+            await _control.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void Report(int count)
