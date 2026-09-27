@@ -128,14 +128,14 @@
                                         </VisualState>
                                         <VisualState x:Name="CheckedPointerOver">
                                             <VisualState.Setters>
-                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
                                                 <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="CheckedPressed">
                                             <VisualState.Setters>
-                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                                <Setter Target="TabBackground.Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
                                                 <Setter Target="TabBackground.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
                                                 <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                             </VisualState.Setters>

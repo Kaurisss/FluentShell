@@ -29,7 +29,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
             MinWidth = 140,
             MaxWidth = 240
         };
-        var tabButton = new ToggleButton
+        var tabButton = new SessionTabButton
         {
             Tag = session,
             Content = new TextBlock
@@ -114,5 +114,16 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
     {
         if ((sender as FrameworkElement)?.Tag is IShellSession session)
             SessionCloseRequested?.Invoke(this, session);
+    }
+}
+
+/// <summary>点击只请求选中；取消选中由会话协调器通过 Select 控制。</summary>
+internal sealed class SessionTabButton : ToggleButton
+{
+    protected override void OnToggle()
+    {
+        // 鼠标、键盘和自动化触发均保留当前标签的选中状态。
+        if (IsChecked != true)
+            base.OnToggle();
     }
 }

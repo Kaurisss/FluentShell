@@ -1,5 +1,6 @@
 ﻿using FluentShell.Core;
 using FluentShell.Models;
+using FluentShell.Views.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -17,7 +18,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 {
     private readonly IntPtr _windowHandle;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
-    private CancellationTokenSource? _transientStatusClear;
     private bool _isFailureDialogOpen;
     private MenuFlyout? _emptyAreaMenu;
     private SftpSessionSnapshot _snapshot = new(
@@ -37,7 +37,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         InitializeComponent();
         ConfigureRemoteTable();
         InitializeLocalPane();
-        SizeChanged += SftpWorkspaceView_SizeChanged;
     }
 
     public RemoteFileItem? SelectedItem => RemoteTable.SelectedItem as RemoteFileItem;
@@ -61,20 +60,22 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         else if (snapshot.State == SftpSessionState.Failed)
             PathBox.Text = snapshot.DirectoryListing.Path;
 
-        RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.From(snapshot));
+        var isListing = snapshot.State == SftpSessionState.ListingDirectory;
+        DirectoryLoadingProgress.IsIndeterminate = isListing;
+        DirectoryLoadingOverlay.Visibility = isListing ? Visibility.Visible : Visibility.Collapsed;
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
         foreach (var button in Toolbar.Children.OfType<Button>()) button.IsEnabled = snapshot.CanNavigate;
         UploadButton.IsEnabled = snapshot.CanTransfer;
         UpdateSelectionState();
 
-        // 目录读取失败是浏览途中的常态（没权限、路径敲错），内联状态足够；
-        // 只有明确下达的文件操作失败才值得用弹窗打断。
+        // 读取目录和文件操作失败均以对话框展示完整错误；同一失败的后续快照不重复弹窗。
         if (snapshot.State == SftpSessionState.Failed &&
-            previousState != SftpSessionState.Failed &&
-            snapshot.FailureKind == SftpFailureKind.Operation)
+            previousState != SftpSessionState.Failed)
         {
-            _ = ShowFailureDialogAsync(snapshot.ErrorMessage ?? snapshot.StatusMessage);
+            _ = ShowFailureDialogAsync(
+                snapshot.ErrorMessage ?? snapshot.StatusMessage,
+                snapshot.FailureKind == SftpFailureKind.DirectoryRead ? "读取目录失败" : "SFTP 操作失败");
         }
 
         // Transfer failures remain in the global task center instead of interrupting browsing.
@@ -90,80 +91,14 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         PathBox.Text = listing.Path;
     }
 
-    private void RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation presentation)
-    {
-        if (presentation.ClearsAfterDelay)
-            ScheduleTransientStatusClear();
-        else
-            CancelTransientStatusClear();
-
-        WorkspaceOperationStatusPanel.Visibility =
-            presentation.ShowsInlineMessage && !presentation.ShowsListingIndicator
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        DirectoryLoadingProgress.IsIndeterminate = presentation.ShowsListingIndicator;
-        DirectoryLoadingOverlay.Visibility = presentation.ShowsListingIndicator
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        WorkspaceOperationStatus.Visibility = presentation.ShowsInlineMessage
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        WorkspaceOperationStatus.Text = presentation.Message;
-        ToolTipService.SetToolTip(WorkspaceOperationStatus, presentation.ToolTip ?? presentation.Message);
-    }
-
-    private void ScheduleTransientStatusClear()
-    {
-        CancelTransientStatusClear();
-        var cancellation = new CancellationTokenSource();
-        _transientStatusClear = cancellation;
-        _ = ClearTransientStatusAfterDelayAsync(cancellation);
-    }
-
-    private async Task ClearTransientStatusAfterDelayAsync(CancellationTokenSource cancellation)
-    {
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellation.Token);
-            if (!ReferenceEquals(_transientStatusClear, cancellation)) return;
-
-            _transientStatusClear = null;
-            WorkspaceOperationStatusPanel.Visibility = Visibility.Collapsed;
-            WorkspaceOperationStatus.Text = string.Empty;
-            ToolTipService.SetToolTip(WorkspaceOperationStatus, null);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            cancellation.Dispose();
-        }
-    }
-
-    private void CancelTransientStatusClear()
-    {
-        var cancellation = _transientStatusClear;
-        _transientStatusClear = null;
-        cancellation?.Cancel();
-    }
-
-    private async Task ShowFailureDialogAsync(string message)
+    private async Task ShowFailureDialogAsync(string message, string title = "SFTP 操作失败")
     {
         if (_isFailureDialogOpen || string.IsNullOrWhiteSpace(message) || XamlRoot is null) return;
 
         _isFailureDialogOpen = true;
         try
         {
-            var dialog = new ContentDialog
-            {
-                Title = "SFTP 操作失败",
-                Content = message,
-                CloseButtonText = "确定",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = XamlRoot
-            };
-            await dialog.ShowAsync();
+            await ShellDialogService.ShowMessageAsync(XamlRoot, title, message);
         }
         finally
         {
@@ -384,11 +319,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         return false;
     }
 
-    private void SftpWorkspaceView_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        WorkspaceOperationStatus.MaxWidth = e.NewSize.Width < 760 ? 112 : 220;
-    }
-
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
 
@@ -481,7 +411,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         var package = new DataPackage();
         package.SetText(item.FullPath);
         Clipboard.SetContent(package);
-        RenderWorkspaceOperationStatus(WorkspaceOperationStatusPresentation.Transient("已复制远程路径"));
     }
 
     private async Task ShowSelectedItemPropertiesAsync()
@@ -535,43 +464,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     {
         var item = SelectedItem;
         DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
-    }
-
-    private sealed record WorkspaceOperationStatusPresentation(
-        bool ShowsInlineMessage,
-        bool ShowsListingIndicator,
-        bool IsTransferring,
-        bool ClearsAfterDelay,
-        string Message,
-        string? ToolTip)
-    {
-        public static WorkspaceOperationStatusPresentation From(SftpSessionSnapshot snapshot)
-        {
-            var presentation = snapshot.State switch
-            {
-                SftpSessionState.ListingDirectory => new WorkspaceOperationStatusPresentation(
-                    ShowsInlineMessage: true,
-                    ShowsListingIndicator: true,
-                    IsTransferring: false,
-                    ClearsAfterDelay: false,
-                    snapshot.StatusMessage,
-                    snapshot.StatusMessage),
-                SftpSessionState.Failed => Persistent(snapshot.ErrorMessage ?? snapshot.StatusMessage),
-                _ when !string.IsNullOrWhiteSpace(snapshot.StatusMessage) => Transient(snapshot.StatusMessage),
-                _ => Hidden
-            };
-            // 传输在自己的轴上进行，与浏览状态叠加呈现。
-            return presentation with { IsTransferring = snapshot.Transfer.IsActive };
-        }
-
-        public static WorkspaceOperationStatusPresentation Persistent(string message) =>
-            new(true, false, false, false, message, message);
-
-        public static WorkspaceOperationStatusPresentation Transient(string message) =>
-            new(true, false, false, true, message, message);
-
-        private static WorkspaceOperationStatusPresentation Hidden =>
-            new(false, false, false, false, string.Empty, null);
     }
 
     private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()

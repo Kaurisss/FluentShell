@@ -5,6 +5,7 @@
     xmlns:converters="using:FluentShell.Views.Converters">
     <UserControl.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BoolVisibility" />
+        <converters:StringToVisibilityConverter x:Key="TextVisibility" />
         <CollectionViewSource x:Name="GroupedTasks" IsSourceGrouped="True" />
     </UserControl.Resources>
     <Grid RowSpacing="12">
@@ -13,18 +14,19 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Grid>
+        <Grid Margin="0,0,16,0">
             <TextBlock Text="传输任务" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Content="关闭" HorizontalAlignment="Right" Click="Close_Click" AutomationProperties.Name="收起传输任务" />
         </Grid>
-        <ComboBox x:Name="FilterBox" Grid.Row="1" SelectedIndex="0" SelectionChanged="Filter_Changed"
+        <ComboBox x:Name="FilterBox" Grid.Row="1" Margin="0,0,16,0" SelectedIndex="0" SelectionChanged="Filter_Changed"
                   AutomationProperties.Name="筛选传输任务" HorizontalAlignment="Stretch">
             <ComboBoxItem Content="全部任务" />
             <ComboBoxItem Content="进行中（含暂停）" />
             <ComboBoxItem Content="已结束" />
         </ComboBox>
         <Grid Grid.Row="2">
-            <ListView x:Name="TaskList" ItemsSource="{Binding Source={StaticResource GroupedTasks}}"
+            <!-- 内容保留右侧间距，滚动视口延伸至浮窗边缘。 -->
+            <ListView x:Name="TaskList" Padding="0,0,16,0" ItemsSource="{Binding Source={StaticResource GroupedTasks}}"
                       SelectionMode="None" IsItemClickEnabled="False" HorizontalContentAlignment="Stretch"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollMode="Disabled">
                 <ListView.ItemContainerStyle>
@@ -38,7 +40,7 @@
                     <GroupStyle>
                         <GroupStyle.HeaderTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,12,0,8"
+                                <TextBlock Text="{Binding Label}" FontSize="14" Foreground="{ThemeResource MutedTextBrush}" FontWeight="SemiBold" Margin="0,12,0,8"
                                            TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Label}" />
                             </DataTemplate>
                         </GroupStyle.HeaderTemplate>
@@ -46,8 +48,7 @@
                 </ListView.GroupStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate>
-                        <Grid Padding="0,12" RowSpacing="8" BorderThickness="0,0,0,1"
-                              BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                        <Grid Padding="0,12" RowSpacing="8" Margin="0,0,0,8">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
@@ -74,17 +75,31 @@
                             </Grid>
                             <TextBlock Grid.Row="4" Text="{Binding Message}" FontSize="12" TextWrapping="Wrap"
                                        MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Message}" />
-                            <Expander Grid.Row="5" Header="{Binding FileSummary}" HorizontalAlignment="Stretch"
+                            <Expander Grid.Row="5" Header="{Binding FileSummary}" HorizontalAlignment="Stretch" Padding="0"
                                       HorizontalContentAlignment="Stretch" Visibility="{Binding HasFiles, Converter={StaticResource BoolVisibility}}">
-                                <ListView ItemsSource="{Binding Files}" MaxHeight="180" SelectionMode="None" HorizontalContentAlignment="Stretch"
+                                <ListView ItemsSource="{Binding Files}" MaxHeight="180" Padding="16,8,16,8" SelectionMode="None" HorizontalContentAlignment="Stretch"
                                           ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Margin" Value="0" />
+                                            <Setter Property="MinHeight" Value="36" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
-                                            <StackPanel Spacing="4" Padding="0,4">
-                                                <TextBlock Text="{Binding RelativePath}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RelativePath}" />
-                                                <ProgressBar Value="{Binding PercentComplete}" Minimum="0" Maximum="100" />
-                                                <TextBlock Text="{Binding StatusLabel}" FontSize="12" TextWrapping="Wrap" />
-                                                <TextBlock Text="{Binding ErrorMessage}" FontSize="12" TextWrapping="Wrap" />
+                                            <StackPanel Padding="0,8">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding RelativePath}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RelativePath}" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding StatusLabel}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding ErrorMessage}" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap"
+                                                           Visibility="{Binding ErrorMessage, Converter={StaticResource TextVisibility}}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
@@ -94,7 +109,7 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-            <StackPanel x:Name="EmptyPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+            <StackPanel x:Name="EmptyPanel" Margin="0,0,16,0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                 <TextBlock Text="暂无传输任务" FontSize="16" HorizontalAlignment="Center" />
                 <TextBlock Text="各服务器的上传和下载任务会统一显示在这里。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
             </StackPanel>

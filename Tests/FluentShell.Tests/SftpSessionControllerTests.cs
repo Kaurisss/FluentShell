@@ -52,9 +52,17 @@ public sealed class SftpSessionControllerTests
         Assert.AreEqual(
             SftpFailureKind.DirectoryRead,
             controller.Snapshot.FailureKind,
-            "目录读取失败应标记为 DirectoryRead，视图据此只做内联提示、不弹窗。");
+            "目录读取失败应标记为 DirectoryRead，视图据此显示读取目录失败对话框。");
+        Assert.AreEqual("读取目录失败：连接中断", controller.Snapshot.ErrorMessage);
         Assert.HasCount(1, controller.Snapshot.DirectoryListing.Items);
         Assert.AreSame(initialItem, controller.Snapshot.DirectoryListing.Items[0]);
+
+        var retryStates = new List<SftpSessionState>();
+        controller.SnapshotChanged += (_, snapshot) => retryStates.Add(snapshot.State);
+        await controller.RefreshAsync();
+        CollectionAssert.AreEqual(
+            new[] { SftpSessionState.ListingDirectory, SftpSessionState.Failed }, retryStates,
+            "重试失败应重新进入 Failed，使视图再次显示错误对话框。");
 
         fileService.ListException = null;
         await controller.RefreshAsync();
