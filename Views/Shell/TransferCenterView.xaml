@@ -76,7 +76,7 @@
                                        MaxLines="3" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Message}" />
                             <Expander Grid.Row="5" Header="{Binding FileSummary}" HorizontalAlignment="Stretch"
                                       HorizontalContentAlignment="Stretch" Visibility="{Binding HasFiles, Converter={StaticResource BoolVisibility}}">
-                                <ListView ItemsSource="{Binding Queue.Items}" MaxHeight="180" SelectionMode="None" HorizontalContentAlignment="Stretch"
+                                <ListView ItemsSource="{Binding Files}" MaxHeight="180" SelectionMode="None" HorizontalContentAlignment="Stretch"
                                           ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListView.ItemTemplate>
                                         <DataTemplate>

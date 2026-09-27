@@ -97,11 +97,11 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView
             CancelTransientStatusClear();
 
         WorkspaceOperationStatusPanel.Visibility =
-            presentation.ShowsInlineMessage || presentation.ShowsListingIndicator
+            presentation.ShowsInlineMessage && !presentation.ShowsListingIndicator
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-        WorkspaceOperationProgress.IsActive = presentation.ShowsListingIndicator;
-        WorkspaceOperationProgress.Visibility = presentation.ShowsListingIndicator
+        DirectoryLoadingProgress.IsIndeterminate = presentation.ShowsListingIndicator;
+        DirectoryLoadingOverlay.Visibility = presentation.ShowsListingIndicator
             ? Visibility.Visible
             : Visibility.Collapsed;
         WorkspaceOperationStatus.Visibility = presentation.ShowsInlineMessage

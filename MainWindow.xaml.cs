@@ -111,7 +111,11 @@ public sealed partial class MainWindow : Window
     private void WireModules()
     {
         SessionTabHost.Content = _sessionTabStrip;
-        _sessionHost.NewSessionRequested += async (_, _) => await OpenServerPickerAsync();
+        _sessionHost.NewSessionRequested += (_, _) =>
+        {
+            _sessionHost.Select(null);
+            ShowUnconnectedLayout("overview");
+        };
         _sessionHost.SessionSelected += async (_, session) => await _shell.ConnectAsync(session.Profile);
         _sessionHost.SessionCloseRequested += async (_, session) =>
             await _shell.CloseSessionAsync(session, ConfirmCloseSessionAsync);
@@ -352,7 +356,7 @@ public sealed partial class MainWindow : Window
         PageContentPresenter.Visibility = Visibility.Visible;
         SessionContentPresenter.Visibility = Visibility.Collapsed;
         SessionContentPresenter.Content = null;
-        SessionTabHost.Visibility = Visibility.Collapsed;
+        SessionTabHost.Visibility = _shell.SessionCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         OverviewNavItem.Visibility = Visibility.Visible;
         ServersNavItem.Visibility = Visibility.Visible;
         SettingsNavItem.Visibility = Visibility.Visible;
@@ -380,7 +384,7 @@ public sealed partial class MainWindow : Window
         NavigationView sender,
         NavigationViewSelectionChangedEventArgs args)
     {
-        if (_layout.IsNavigationLockedBySessions(_shell.SessionCount) ||
+        if (_layout.IsNavigationLocked(_isSessionLayout) ||
             args.SelectedItemContainer?.Tag is not string page)
         {
             return;

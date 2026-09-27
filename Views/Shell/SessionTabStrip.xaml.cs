@@ -74,7 +74,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
         TabPanel.Children.Add(container);
     }
 
-    public void Select(IShellSession session)
+    public void Select(IShellSession? session)
     {
         _updatingSelection = true;
         foreach (var (candidate, button) in _tabButtons)

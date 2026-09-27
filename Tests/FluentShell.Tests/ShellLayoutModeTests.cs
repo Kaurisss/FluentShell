@@ -165,12 +165,12 @@ public sealed class ShellLayoutModeTests
     }
 
     [TestMethod]
-    public void Navigation_is_locked_while_any_session_exists()
+    public void Navigation_unlocks_when_returning_to_menu_with_sessions_preserved()
     {
         var layout = new ShellLayoutMode();
 
-        Assert.IsFalse(layout.IsNavigationLockedBySessions(0));
-        Assert.IsTrue(layout.IsNavigationLockedBySessions(1));
-        Assert.IsTrue(layout.IsNavigationLockedBySessions(5));
+        Assert.IsFalse(layout.IsNavigationLocked(isSessionLayout: false));
+        Assert.IsTrue(layout.IsNavigationLocked(isSessionLayout: true));
+        Assert.IsFalse(layout.IsNavigationLocked(isSessionLayout: false));
     }
 }

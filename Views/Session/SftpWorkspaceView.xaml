@@ -60,11 +60,6 @@
                 Spacing="8"
                 VerticalAlignment="Center"
                 Visibility="Collapsed">
-                <ProgressRing
-                    x:Name="WorkspaceOperationProgress"
-                    Width="16"
-                    Height="16"
-                    Visibility="Collapsed" />
                 <TextBlock
                     x:Name="WorkspaceOperationStatus"
                     MaxWidth="220"
@@ -118,6 +113,7 @@
             AutoGenerateColumns="False"
             IsReadOnly="True"
             SelectionUnit="Row"
+            CurrentCellBorderThickness="0"
             AllowSorting="True"
             AllowFiltering="True"
             AllowResizingColumns="False"
@@ -129,5 +125,18 @@
             RowHeight="40"
             FontSize="14"
             ColumnWidthMode="AutoLastColumnFill" />
+
+        <!-- Cover both the path toolbar and the file list without changing their layout. -->
+        <Grid x:Name="DirectoryLoadingOverlay" Grid.RowSpan="2"
+              Visibility="Collapsed" Background="Transparent">
+            <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Opacity="0.8" />
+            <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                        MaxWidth="280" Margin="24" Spacing="12">
+                <TextBlock Text="正在读取文件夹…" HorizontalAlignment="Center"
+                           AutomationProperties.LiveSetting="Polite" />
+                <ProgressBar x:Name="DirectoryLoadingProgress" IsIndeterminate="False"
+                             AutomationProperties.Name="正在读取文件夹" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

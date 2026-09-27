@@ -46,8 +46,8 @@ public sealed class ShellLayoutMode
     /// <summary>侧栏是否被用户收起，决定连接侧栏是否继续渲染指标。</summary>
     public bool IsSidebarCollapsed { get; private set; }
 
-    /// <summary>存在任何会话时导航被锁定：会话内容占据内容区，切换导航项没有去处。</summary>
-    public bool IsNavigationLockedBySessions(int sessionCount) => sessionCount > 0;
+    /// <summary>仅在显示会话内容时锁定页面导航；返回主菜单后，后台连接不阻止切换页面。</summary>
+    public bool IsNavigationLocked(bool isSessionLayout) => isSessionLayout;
 
     /// <summary>
     /// 内容区留白。会话布局比页面布局收得更紧：终端和目录列表要的是可视面积，

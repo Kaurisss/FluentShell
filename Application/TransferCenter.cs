@@ -76,6 +76,7 @@ public sealed class TransferTask : INotifyPropertyChanged
     public TransferTaskState State { get; private set; } = TransferTaskState.Running;
     public string Message { get; private set; } = "正在准备传输…";
     public TransferQueue Queue { get; private set; } = TransferQueue.Empty;
+    public ObservableCollection<TransferFileProgress> Files { get; } = [];
     public bool IsActive => State is TransferTaskState.Running or TransferTaskState.Paused;
     public bool CanPause => IsActive && _control is not null;
     public bool CanRetry => State == TransferTaskState.Failed && !_retrying && _retry is not null && _canRetry?.Invoke() == true;
@@ -115,6 +116,7 @@ public sealed class TransferTask : INotifyPropertyChanged
         State = TransferTaskState.Running;
         Message = "正在准备传输…";
         Queue = TransferQueue.Empty;
+        Files.Clear();
         _progress = null;
         NotifyChanged();
     }
@@ -123,9 +125,29 @@ public sealed class TransferTask : INotifyPropertyChanged
     {
         if (!IsActive) return;
         Queue = snapshot.Queue;
+        UpdateFiles(Queue.Items);
         _progress = snapshot.Transfer.Progress;
         if (!string.IsNullOrEmpty(snapshot.Transfer.Message)) Message = snapshot.Transfer.Message;
         NotifyChanged();
+    }
+
+    internal void UpdateFiles(IReadOnlyList<TransferQueueItem> items)
+    {
+        // Snapshots are immutable, but list rows must retain identity across progress ticks.
+        var wanted = items.Select(i => i.RelativePath).ToHashSet(StringComparer.Ordinal);
+        for (var i = Files.Count - 1; i >= 0; i--)
+            if (!wanted.Contains(Files[i].RelativePath)) Files.RemoveAt(i);
+        var existing = Files.ToDictionary(i => i.RelativePath, StringComparer.Ordinal);
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (existing.TryGetValue(item.RelativePath, out var row))
+            {
+                if (!ReferenceEquals(Files[i], row)) Files.Move(Files.IndexOf(row), i);
+                row.Update(item);
+            }
+            else Files.Insert(i, new TransferFileProgress(item));
+        }
     }
 
     internal void Finish(bool failed, string? message = null)
@@ -201,4 +223,27 @@ public sealed class TransferTask : INotifyPropertyChanged
         < 1024L * 1024 * 1024 => $"{bytes / 1048576d:0.0} MB",
         _ => $"{bytes / 1073741824d:0.0} GB"
     };
+}
+
+/// <summary>Stable, UI-thread-owned presentation of an immutable file snapshot.</summary>
+public sealed class TransferFileProgress(TransferQueueItem item) : INotifyPropertyChanged
+{
+    private TransferQueueItem _item = item;
+    public string RelativePath => _item.RelativePath;
+    public double PercentComplete => _item.PercentComplete;
+    public string StatusLabel => _item.StatusLabel;
+    public string? ErrorMessage => _item.ErrorMessage;
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal void Update(TransferQueueItem item)
+    {
+        var previous = _item;
+        _item = item;
+        if (previous.PercentComplete != item.PercentComplete)
+            PropertyChanged?.Invoke(this, new(nameof(PercentComplete)));
+        if (previous.StatusLabel != item.StatusLabel)
+            PropertyChanged?.Invoke(this, new(nameof(StatusLabel)));
+        if (previous.ErrorMessage != item.ErrorMessage)
+            PropertyChanged?.Invoke(this, new(nameof(ErrorMessage)));
+    }
 }

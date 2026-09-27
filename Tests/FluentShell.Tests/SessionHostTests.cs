@@ -7,6 +7,28 @@ namespace FluentShell.Tests;
 public sealed class SessionHostTests
 {
     [TestMethod]
+    public void Returning_to_menu_preserves_tabs_and_allows_reselecting_the_same_session()
+    {
+        var tabStrip = new RecordingSessionTabStrip();
+        var host = new SessionHost(tabStrip);
+        var session = CreateSession("生产机");
+        host.Add(session);
+        IShellSession? content = session;
+        host.ContentChanged += (_, current) => content = current;
+
+        host.Select(null);
+
+        Assert.IsNull(host.Selected);
+        Assert.IsNull(tabStrip.Selected);
+        Assert.IsNull(content);
+        CollectionAssert.AreEqual(new[] { session }, tabStrip.Tabs);
+
+        host.Select(session);
+        Assert.AreSame(session, content);
+        Assert.AreSame(session, tabStrip.Selected);
+    }
+
+    [TestMethod]
     public void Adding_a_session_puts_it_on_the_tab_strip_and_selects_it()
     {
         var tabStrip = new RecordingSessionTabStrip();
@@ -126,7 +148,7 @@ public sealed class SessionHostTests
 
         public void Add(IShellSession session) => Tabs.Add(session);
 
-        public void Select(IShellSession session) => Selected = session;
+        public void Select(IShellSession? session) => Selected = session;
 
         public void Remove(IShellSession session)
         {

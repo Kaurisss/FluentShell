@@ -30,6 +30,6 @@ public interface ISessionTabStrip
     event EventHandler<IShellSession>? SessionCloseRequested;
 
     void Add(IShellSession session);
-    void Select(IShellSession session);
+    void Select(IShellSession? session);
     void Remove(IShellSession session);
 }

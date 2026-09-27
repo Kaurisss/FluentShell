@@ -30,7 +30,7 @@ public sealed class SessionHost
         Select(session);
     }
 
-    public void Select(IShellSession session)
+    public void Select(IShellSession? session)
     {
         _tabStrip.Select(session);
         Selected = session;
