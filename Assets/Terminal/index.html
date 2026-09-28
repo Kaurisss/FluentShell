@@ -13,7 +13,7 @@
         }
 
         body {
-            background: #101214;
+            background: #FEFEFE;
             box-sizing: border-box;
             padding: 12px;
         }
@@ -29,6 +29,22 @@
     <script src="addon-fit.js"></script>
     <script>
         (() => {
+            const themes = {
+                light: {
+                    background: '#FEFEFE', foreground: '#17212B',
+                    cursor: '#17212B', cursorAccent: '#FEFEFE',
+                    selectionBackground: '#BDD8F5',
+                    black: '#24292F', red: '#B42318', green: '#216E39', yellow: '#805500',
+                    blue: '#0550AE', magenta: '#7446C8', cyan: '#076678', white: '#59636E',
+                    brightBlack: '#57606A', brightRed: '#CF222E', brightGreen: '#187632', brightYellow: '#8C5D00',
+                    brightBlue: '#0969DA', brightMagenta: '#A03AAF', brightCyan: '#076F7C', brightWhite: '#616B75'
+                },
+                dark: {
+                    background: '#363636', foreground: '#E6EDF3',
+                    cursor: '#E6EDF3', cursorAccent: '#363636',
+                    selectionBackground: 'rgba(120, 170, 255, 0.35)'
+                }
+            };
             const terminal = new Terminal({
                 allowProposedApi: true,
                 convertEol: false,
@@ -37,12 +53,7 @@
                 fontFamily: 'Cascadia Mono, Consolas, monospace',
                 fontSize: 14,
                 scrollback: 20000,
-                theme: {
-                    background: '#101214',
-                    foreground: '#E6EDF3',
-                    cursor: '#E6EDF3',
-                    selectionBackground: 'rgba(120, 170, 255, 0.35)'
-                }
+                theme: themes.light
             });
             const fitAddon = new FitAddon.FitAddon();
             terminal.loadAddon(fitAddon);
@@ -60,6 +71,12 @@
             terminal.onResize(size => post({ type: 'resize', cols: size.cols, rows: size.rows }));
 
       window.fluentShellTerminal = {
+                setTheme: value => {
+                    const theme = value === 'light' ? themes.light : themes.dark;
+                    terminal.options.theme = theme;
+                    document.body.style.backgroundColor = theme.background;
+                    document.documentElement.style.colorScheme = value === 'light' ? 'light' : 'dark';
+                },
                 focus: () => terminal.focus(),
                 write: data => terminal.write(data || ''),
                 clear: () => terminal.clear(),
@@ -79,6 +96,7 @@
         if (message.type === 'clear') window.fluentShellTerminal.clear();
         if (message.type === 'focus') window.fluentShellTerminal.focus();
         if (message.type === 'fontSize') window.fluentShellTerminal.setFontSize(message.value);
+        if (message.type === 'theme') window.fluentShellTerminal.setTheme(message.value);
             });
 
             const resizeObserver = new ResizeObserver(() => requestAnimationFrame(fit));

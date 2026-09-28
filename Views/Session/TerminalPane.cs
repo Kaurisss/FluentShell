@@ -26,6 +26,7 @@ public sealed class TerminalPane : UserControl, IDisposable
         _terminalView.HorizontalAlignment = HorizontalAlignment.Stretch;
         _terminalView.VerticalAlignment = VerticalAlignment.Stretch;
         _terminalView.Loaded += TerminalView_Loaded;
+        ActualThemeChanged += TerminalPane_ActualThemeChanged;
     }
 
     public event EventHandler<string>? InputReceived;
@@ -55,6 +56,9 @@ public sealed class TerminalPane : UserControl, IDisposable
 
     private void TerminalView_Loaded(object sender, RoutedEventArgs e)
     {
+        // A cached WebView can miss theme updates while detached for settings navigation.
+        // Re-send the inherited theme each time it returns to the live visual tree.
+        UpdateTheme();
         if (_initializationStarted) return;
         _initializationStarted = true;
         _ = InitializeAsync();
@@ -119,6 +123,7 @@ public sealed class TerminalPane : UserControl, IDisposable
     private void MarkReady()
     {
         _ready = true;
+        UpdateTheme();
         PostMessage(new { type = "fontSize", value = _fontSize });
         if (_pendingOutput.Length == 0) return;
 
@@ -126,6 +131,11 @@ public sealed class TerminalPane : UserControl, IDisposable
         _pendingOutput.Clear();
         PostMessage(new { type = "write", data = pending });
     }
+
+    private void TerminalPane_ActualThemeChanged(FrameworkElement sender, object args) => UpdateTheme();
+
+    private void UpdateTheme() =>
+        PostMessage(new { type = "theme", value = ActualTheme == ElementTheme.Light ? "light" : "dark" });
 
     private void PostMessage(object message)
     {
@@ -135,6 +145,7 @@ public sealed class TerminalPane : UserControl, IDisposable
 
     public void Dispose()
     {
+        ActualThemeChanged -= TerminalPane_ActualThemeChanged;
         _terminalView.Loaded -= TerminalView_Loaded;
         if (_terminalView.CoreWebView2 is not null)
             _terminalView.CoreWebView2.WebMessageReceived -= TerminalView_WebMessageReceived;

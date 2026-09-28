@@ -61,7 +61,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid ColumnSpacing="12">
+    <Grid ColumnSpacing="6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="*" />

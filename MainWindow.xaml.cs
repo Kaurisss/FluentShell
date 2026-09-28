@@ -55,7 +55,7 @@ public sealed partial class MainWindow : Window
                 (secret, cancellationToken) => CreateConnectionAsync(profile, secret, cancellationToken),
                 fingerprintConfirmation,
                 secretProvider,
-                RootGrid.ActualTheme, _transfers),
+                _transfers),
             profile => ShellDialogService.PromptSecretAsync(Content.XamlRoot, profile),
             fingerprint => ShellDialogService.ConfirmFingerprintAsync(Content.XamlRoot, fingerprint));
         _serverCatalogPage = new ServerCatalogPage(

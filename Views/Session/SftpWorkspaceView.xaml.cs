@@ -30,10 +30,9 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         string.Empty,
         null);
 
-    public SftpWorkspaceView(IntPtr windowHandle, ElementTheme workspaceTheme)
+    public SftpWorkspaceView(IntPtr windowHandle)
     {
         _windowHandle = windowHandle;
-        RequestedTheme = workspaceTheme;
         InitializeComponent();
         ConfigureRemoteTable();
         InitializeLocalPane();

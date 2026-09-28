@@ -3,7 +3,6 @@ using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace FluentShell.Views.Shell;
 
@@ -160,8 +159,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
             row.Children.Add(new TextBlock { Text = label, FontSize = 12 });
             var valueText = new TextBlock
             {
-                FontSize = 12,
-                Foreground = (Brush)Application.Current.Resources["MutedTextBrush"]
+                Style = (Style)Resources["MetricMutedTextStyle"]
             };
             Grid.SetColumn(valueText, 1);
             row.Children.Add(valueText);
@@ -194,8 +192,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
             row.Children.Add(new TextBlock
             {
                 Text = label,
-                FontSize = 12,
-                Foreground = (Brush)Application.Current.Resources["MutedTextBrush"]
+                Style = (Style)Resources["MetricMutedTextStyle"]
             });
             var valueText = new TextBlock
             {

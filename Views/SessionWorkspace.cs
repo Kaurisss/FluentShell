@@ -27,7 +27,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     private const string PanelBottomExpandPath = "M10.5 8.82585L11.3737 9.82437C11.5556 10.0322 11.8714 10.0532 12.0793 9.87141C12.2871 9.68956 12.3081 9.37368 12.1263 9.16586L10.3763 7.16586C10.2814 7.05736 10.1442 6.99512 10 6.99512C9.85583 6.99512 9.71866 7.05736 9.62372 7.16586L7.87372 9.16586C7.69188 9.37368 7.71294 9.68956 7.92075 9.87141C8.12857 10.0532 8.44445 10.0322 8.6263 9.82437L9.50001 8.82583L9.50001 12.5049C9.50001 12.781 9.72387 13.0049 10 13.0049C10.2762 13.0049 10.5 12.781 10.5 12.5049L10.5 8.82585ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H11.5V12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H8.50003V11H3V6Z";
 
     private readonly ServerProfile _profile;
-    private readonly ElementTheme _workspaceTheme;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly TerminalPane _terminalPane = new();
     private readonly Grid _workspaceGrid = new();
@@ -49,14 +48,10 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         Func<string, CancellationToken, Task<ISshConnection?>> connectionFactory,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> fingerprintConfirmation,
         Func<Task<string?>> passwordProvider,
-        ElementTheme workspaceTheme,
         TransferCenter? transfers = null)
     {
         _profile = profile;
-        _workspaceTheme = workspaceTheme == ElementTheme.Dark
-            ? ElementTheme.Dark
-            : ElementTheme.Light;
-        RequestedTheme = _workspaceTheme;
+        // Inherit the live root theme, including when a cached session is reattached.
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         _connection = new SessionConnection(
@@ -66,7 +61,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             fingerprintConfirmation,
             work => _dispatcherQueue.TryEnqueue(() => work()),
             CancelSftpTransfer);
-        _sftpView = new SftpWorkspaceView(windowHandle, _workspaceTheme);
+        _sftpView = new SftpWorkspaceView(windowHandle);
         // 字节进度回调来自传输流的写入线程，必须编组回 UI 线程再进快照发布。
         // 传输走独立 SFTP 通道，浏览目录不必等传输结束。
         _sftpWorkspace = new SftpWorkspace(

@@ -1,0 +1,18 @@
+# Offline theme regression
+
+Windows/x64 interactive desktop check using the real WinUI session, sidebar, SFTP controls and WebView2 page. The test-only executable is unpackaged; the application's deployment model is unchanged. It reuses `App` resources but overrides startup so it never opens `MainWindow`, loads saved profiles, or connects to an SSH server. The local file pane performs its normal read-only directory listing.
+
+```powershell
+dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
+& Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe theme-smoke.json
+```
+
+The temporary window exits automatically. Exit code 0 and `passed: true` in the JSON report indicate success. A failed assertion or startup exception produces exit code 1 and its details in the report. A missing report is not a passing run.
+
+The scenario creates a session in light mode, detaches it as when navigating to settings, changes the root theme, and reattaches it for Light → Dark → Light. Checks include the effective themes of the workspace/terminal/SFTP grids/path inputs, actual sidebar metric foreground colors, and the WebView page's actual computed background and color scheme.
+
+Terminal palette contrast and bridge behavior are also covered by:
+
+```powershell
+node --test Tests/Terminal/theme.test.cjs
+```
