@@ -71,23 +71,13 @@
                 <RowDefinition Height="34" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid ColumnSpacing="4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox Style="{StaticResource SftpPathInputStyle}" x:Name="LocalPathBox" Grid.ColumnSpan="2" PlaceholderText="本地路径" KeyDown="LocalPath_KeyDown" AutomationProperties.Name="本地路径" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                    <Button Style="{StaticResource SftpToolbarButtonStyle}" Click="LocalRefresh_Click" ToolTipService.ToolTip="刷新本地目录" AutomationProperties.Name="刷新本地目录"><SymbolIcon Symbol="Refresh" /></Button>
-                </StackPanel>
-            </Grid>
+            <TextBox Style="{StaticResource SftpPathInputStyle}" x:Name="LocalPathBox" PlaceholderText="本地路径" KeyDown="LocalPath_KeyDown" AutomationProperties.Name="本地路径" />
             <syncfusion:SfDataGrid
                 x:Name="LocalFiles" Grid.Row="1"
                 AutoGenerateColumns="False" IsReadOnly="True"
                 SelectionMode="Extended" SelectionUnit="Row"
                 CurrentCellBorderThickness="0"
-                AllowSorting="True" AllowFiltering="True"
+                AllowSorting="True" AllowFiltering="False"
                 AllowResizingColumns="False" AllowDraggingColumns="False"
                 AllowGrouping="False" AllowRowHoverHighlighting="True"
                 ShowRowHeader="False" HeaderRowHeight="34" RowHeight="34"
@@ -111,7 +101,6 @@
                 Style="{StaticResource SftpPathInputStyle}"
                 KeyDown="PathBox_KeyDown" />
             <StackPanel x:Name="Toolbar" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="4,0,0,0">
-                <Button Style="{StaticResource SftpToolbarButtonStyle}" Click="RefreshButton_Click" ToolTipService.ToolTip="刷新" AutomationProperties.Name="刷新"><SymbolIcon Symbol="Refresh" /></Button>
                 <Button x:Name="UploadButton" Style="{StaticResource SftpToolbarButtonStyle}" Click="UploadButton_Click" ToolTipService.ToolTip="上传" AutomationProperties.Name="上传"><SymbolIcon Symbol="Upload" /></Button>
                 <Button x:Name="DownloadButton" Style="{StaticResource SftpToolbarButtonStyle}" Click="DownloadButton_Click" ToolTipService.ToolTip="下载" AutomationProperties.Name="下载"><SymbolIcon Symbol="Download" /></Button>
             </StackPanel>
@@ -125,7 +114,7 @@
             SelectionUnit="Row"
             CurrentCellBorderThickness="0"
             AllowSorting="True"
-            AllowFiltering="True"
+            AllowFiltering="False"
             AllowResizingColumns="False"
             AllowDraggingColumns="False"
             AllowGrouping="False"

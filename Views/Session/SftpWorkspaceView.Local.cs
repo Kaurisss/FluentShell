@@ -24,6 +24,17 @@ public sealed partial class SftpWorkspaceView
         LocalFiles.CellDoubleTapped += LocalFiles_DoubleTapped;
         LocalFiles.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(LocalFiles_KeyDown), true);
         LocalFiles.RecordContextFlyout = BuildLocalRowMenu();
+        var emptyAreaMenu = new MenuFlyout();
+        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        refresh.Click += (_, _) => RefreshLocalDirectory();
+        emptyAreaMenu.Items.Add(refresh);
+        ApplyChineseMenuFont(emptyAreaMenu);
+        LocalFiles.RightTapped += (_, e) =>
+        {
+            if (e.OriginalSource is DependencyObject source && IsOnRowOrChrome(source, LocalFiles)) return;
+            e.Handled = true;
+            emptyAreaMenu.ShowAt(LocalFiles, e.GetPosition(LocalFiles));
+        };
         LocalFiles.GridContextFlyoutOpening += (_, e) =>
         {
             if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: LocalPaneItem item }
@@ -109,7 +120,6 @@ public sealed partial class SftpWorkspaceView
         await NavigateLocalAsync(LocalPathBox.Text);
     }
 
-    private void LocalRefresh_Click(object sender, RoutedEventArgs e) => RefreshLocalDirectory();
     private Task NavigateLocalParentAsync() => _localPath is not null && Directory.GetParent(_localPath) is { } parent
         ? NavigateLocalAsync(parent.FullName) : Task.CompletedTask;
 
@@ -136,6 +146,10 @@ public sealed partial class SftpWorkspaceView
     private MenuFlyout BuildLocalRowMenu()
     {
         var menu = new MenuFlyout();
+        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        refresh.Click += (_, _) => RefreshLocalDirectory();
+        menu.Items.Add(refresh);
+        menu.Items.Add(new MenuFlyoutSeparator());
         var upload = new MenuFlyoutItem { Text = "上传" };
         menu.Opened += (_, _) =>
         {

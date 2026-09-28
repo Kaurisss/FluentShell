@@ -232,6 +232,10 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
         var properties = new MenuFlyoutItem { Text = "属性" };
         properties.Click += (_, _) => _ = ShowSelectedItemPropertiesAsync();
+        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
+        menu.Items.Add(refresh);
+        menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(open);
         menu.Items.Add(download);
         menu.Items.Add(copyPath);
@@ -246,6 +250,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         menu.Opened += (_, _) =>
         {
             var item = SelectedItem;
+            refresh.IsEnabled = _snapshot.CanNavigate;
             open.IsEnabled = _snapshot.CanNavigate && item?.IsDirectory == true;
             download.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." } && _localPath is not null;
             copyPath.IsEnabled = item is not null;
@@ -297,16 +302,16 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     private void RemoteTable_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         // 落在单元格、表头或滚动条上的右键不归这里管：单元格有行菜单，表头、滚动条不该弹目录菜单。
-        if (e.OriginalSource is DependencyObject source && IsOnRowOrChrome(source)) return;
+        if (e.OriginalSource is DependencyObject source && IsOnRowOrChrome(source, RemoteTable)) return;
 
         e.Handled = true;
         _emptyAreaMenu?.ShowAt(RemoteTable, e.GetPosition(RemoteTable));
     }
 
-    private bool IsOnRowOrChrome(DependencyObject source)
+    private static bool IsOnRowOrChrome(DependencyObject source, SfDataGrid table)
     {
         for (var current = source;
-             current is not null && !ReferenceEquals(current, RemoteTable);
+             current is not null && !ReferenceEquals(current, table);
              current = VisualTreeHelper.GetParent(current))
         {
             if (current is GridCell
@@ -318,9 +323,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         }
         return false;
     }
-
-    private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
-        RefreshRequested?.Invoke(this, EventArgs.Empty);
 
     private void UploadButton_Click(object sender, RoutedEventArgs e) =>
         UploadRequested?.Invoke(this, EventArgs.Empty);
