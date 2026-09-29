@@ -86,6 +86,7 @@ public sealed partial class SftpWorkspaceView
             {
                 var fullPath = System.IO.Path.GetFullPath(path);
                 var entries = new DirectoryInfo(fullPath).EnumerateFileSystemInfos()
+                    .Where(info => _preferences.ShowHiddenFiles || (!info.Name.StartsWith('.') && (info.Attributes & FileAttributes.Hidden) == 0))
                     .Select(info => new LocalPaneItem(info.Name, info.FullName,
                         (info.Attributes & FileAttributes.Directory) != 0,
                         info is FileInfo file ? file.Length : 0, info.LastWriteTime))

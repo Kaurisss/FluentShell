@@ -27,6 +27,8 @@ public sealed class SftpWorkspace : IDisposable
     private bool _batchRunning;
     private bool _picking;
     private bool _disposed;
+    private UserPreferences _preferences = new();
+    public void SetPreferences(UserPreferences preferences) => _preferences = preferences.Normalize();
 
     public SftpWorkspace(
         ISftpFileService fileService,
@@ -141,10 +143,12 @@ public sealed class SftpWorkspace : IDisposable
         using var control = new TransferControl();
         task.Start(control);
         _controller.BeginBatch(control);
-        _conflictResolver.Reset();
+        _conflictResolver.Reset(_preferences.ConflictPolicy);
         _transfers.RefreshCommands();
         try
         {
+            using var lease = await _transfers.Limiter.AcquireAsync(control.Token);
+            await control.WaitAsync();
             await operation();
             var snapshot = _controller.Snapshot;
             task.Update(snapshot);

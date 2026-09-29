@@ -21,12 +21,15 @@
         #terminal {
             outline: none;
         }
+        #search { position: fixed; right: 16px; top: 16px; z-index: 2; padding: 8px; background: Canvas; color: CanvasText; border: 1px solid GrayText; }
     </style>
 </head>
 <body>
     <div id="terminal" aria-label="SSH 终端"></div>
+    <div id="search" hidden><input id="search-input" aria-label="查找终端内容"><button id="search-next">下一个</button><button id="search-close">关闭</button></div>
     <script src="xterm.js"></script>
     <script src="addon-fit.js"></script>
+    <script src="addon-search.js"></script>
     <script>
         (() => {
             const themes = {
@@ -42,7 +45,11 @@
                 dark: {
                     background: '#363636', foreground: '#E6EDF3',
                     cursor: '#E6EDF3', cursorAccent: '#363636',
-                    selectionBackground: 'rgba(120, 170, 255, 0.35)'
+                    selectionBackground: 'rgba(120, 170, 255, 0.35)',
+                    black: '#24292F', red: '#FF7B72', green: '#7EE787', yellow: '#E3B341',
+                    blue: '#79C0FF', magenta: '#D2A8FF', cyan: '#76E3EA', white: '#D0D7DE',
+                    brightBlack: '#9DA7B3', brightRed: '#FFA198', brightGreen: '#AFF5B4', brightYellow: '#F8E3A1',
+                    brightBlue: '#A5D6FF', brightMagenta: '#E2C5FF', brightCyan: '#B3F0FF', brightWhite: '#FFFFFF'
                 }
             };
             const terminal = new Terminal({
@@ -59,6 +66,39 @@
             terminal.loadAddon(fitAddon);
             terminal.open(document.getElementById('terminal'));
 
+            const searchAddon = new SearchAddon.SearchAddon();
+            terminal.loadAddon(searchAddon);
+            let preferences = { copyOnSelect: false, rightClickPaste: false, shortcuts: {} };
+            const showSearch = () => { document.getElementById('search').hidden = false; document.getElementById('search-input').focus(); };
+            const find = () => searchAddon.findNext(document.getElementById('search-input').value);
+            document.getElementById('search-next').addEventListener('click', find);
+            document.getElementById('search-close').addEventListener('click', () => { document.getElementById('search').hidden = true; terminal.focus(); });
+            document.getElementById('search-input').addEventListener('keydown', e => {
+                if (e.key === 'Enter') find();
+                if (e.key === 'Escape') { document.getElementById('search').hidden = true; terminal.focus(); }
+            });
+            terminal.attachCustomKeyEventHandler(e => {
+                if (e.ctrlKey && e.shiftKey && !e.altKey) {
+                    const action = Object.keys(preferences.shortcuts).find(action => preferences.shortcuts[action] === e.key.toUpperCase());
+                    if (action) {
+                        if (e.type === 'keydown') post({ type: 'shortcut', action });
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+                return true;
+            });
+            document.getElementById('terminal').addEventListener('paste', e => {
+                e.preventDefault(); e.stopImmediatePropagation();
+                post({ type: 'paste', data: e.clipboardData.getData('text/plain') });
+            }, true);
+            document.getElementById('terminal').addEventListener('contextmenu', e => {
+                if (preferences.rightClickPaste) { e.preventDefault(); post({ type: 'paste' }); }
+            });
+            terminal.onSelectionChange(() => {
+                if (preferences.copyOnSelect && terminal.hasSelection()) post({ type: 'copy', data: terminal.getSelection() });
+            });
+
             const post = message => window.chrome.webview.postMessage(message);
             const fit = () => {
                 try {
@@ -71,8 +111,13 @@
             terminal.onResize(size => post({ type: 'resize', cols: size.cols, rows: size.rows }));
 
       window.fluentShellTerminal = {
-                setTheme: value => {
-                    const theme = value === 'light' ? themes.light : themes.dark;
+                setTheme: (value, colors) => {
+                    const theme = { ...(value === 'light' ? themes.light : themes.dark) };
+                    // Accept only known theme colors; never treat saved values as CSS or HTML.
+                    for (const key of Object.keys(theme)) {
+                        if (colors && typeof colors[key] === 'string' && /^#[0-9a-f]{6}$/i.test(colors[key]))
+                            theme[key] = colors[key];
+                    }
                     terminal.options.theme = theme;
                     document.body.style.backgroundColor = theme.background;
                     document.documentElement.style.colorScheme = value === 'light' ? 'light' : 'dark';
@@ -96,7 +141,17 @@
         if (message.type === 'clear') window.fluentShellTerminal.clear();
         if (message.type === 'focus') window.fluentShellTerminal.focus();
         if (message.type === 'fontSize') window.fluentShellTerminal.setFontSize(message.value);
-        if (message.type === 'theme') window.fluentShellTerminal.setTheme(message.value);
+        if (message.type === 'theme') window.fluentShellTerminal.setTheme(message.value, message.colors);
+        if (message.type === 'paste') terminal.paste(message.data || '');
+        if (message.type === 'search') showSearch();
+        if (message.type === 'preferences' && message.value) {
+            preferences = message.value;
+            terminal.options.fontFamily = preferences.fontFamily + ', monospace';
+            terminal.options.cursorStyle = preferences.cursorStyle;
+            terminal.options.cursorBlink = preferences.cursorBlink;
+            terminal.options.scrollback = preferences.scrollback;
+            fit();
+        }
             });
 
             const resizeObserver = new ResizeObserver(() => requestAnimationFrame(fit));

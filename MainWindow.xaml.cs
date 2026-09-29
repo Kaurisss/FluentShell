@@ -12,6 +12,9 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
+using Microsoft.UI.Xaml.Input;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 using WinRT.Interop;
 
 namespace FluentShell;
@@ -37,6 +40,9 @@ public sealed partial class MainWindow : Window
     private bool _isSessionLayout;
     private bool _hasDisplayedPage;
     private string? _currentPage;
+    private bool? _sidebarPreference;
+    private readonly InfoBar _transferNotice = new() { Title = "传输完成", Severity = InfoBarSeverity.Success, IsClosable = true,
+        HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, MaxWidth = 440, Margin = new Thickness(16) };
 
     public MainWindow()
     {
@@ -81,6 +87,15 @@ public sealed partial class MainWindow : Window
                 $"传输任务，{count} 项进行中，{_transfers.FailedCount} 项失败");
         };
         WireModules();
+        Grid.SetRow(_transferNotice, 1);
+        Canvas.SetZIndex(_transferNotice, 50);
+        RootGrid.Children.Add(_transferNotice);
+        _transfers.Completed += (_, task) =>
+        {
+            if (!_shell.Settings.Preferences.NotifyTransferComplete) return;
+            _transferNotice.Message = $"{task.Direction} · {task.Title}";
+            _transferNotice.IsOpen = true;
+        };
         RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
     }
@@ -136,8 +151,16 @@ public sealed partial class MainWindow : Window
 
         _settingsPage.SettingsChanged += async (_, update) =>
         {
-            await _shell.UpdateSettingsAsync(update);
-            ApplySettings(_shell.Settings);
+            try
+            {
+                await _shell.UpdateSettingsAsync(update);
+                ApplySettings(_shell.Settings);
+            }
+            catch (Exception)
+            {
+                DiagnosticLog.Record("SettingsSaveFailed");
+                await ShellDialogService.ShowMessageAsync(Content.XamlRoot, "设置保存失败", "请检查数据目录权限或磁盘空间，然后重试。");
+            }
         };
         _settingsPage.ClearLocalDataRequested += (_, _) => _shell.ClearLocalData();
 
@@ -150,10 +173,15 @@ public sealed partial class MainWindow : Window
                 args.Message));
         _shell.SessionAdded += (_, session) =>
         {
+            if (session is SessionWorkspace workspace) workspace.ShortcutRequested += Workspace_ShortcutRequested;
             _sessionHost.Add(session);
             ShowConnectedLayout();
         };
-        _shell.SessionRemoved += (_, session) => _sessionHost.Remove(session);
+        _shell.SessionRemoved += (_, session) =>
+        {
+            if (session is SessionWorkspace workspace) workspace.ShortcutRequested -= Workspace_ShortcutRequested;
+            _sessionHost.Remove(session);
+        };
         _shell.SessionSelected += (_, session) =>
         {
             if (session is null)
@@ -200,6 +228,41 @@ public sealed partial class MainWindow : Window
     {
         ApplyTheme(settings.Theme);
         ApplyBackdrop(settings.BackdropMaterial);
+        _transfers.Limiter.SetLimit(settings.Preferences.MaxTransfers);
+        if (!settings.Preferences.NotifyTransferComplete) _transferNotice.IsOpen = false;
+        if (_sidebarPreference != settings.Preferences.SidebarOpen)
+        {
+            _sidebarPreference = settings.Preferences.SidebarOpen;
+            _layout.SetDefaultPaneOpen(settings.Preferences.SidebarOpen);
+            RootNavigationView.IsPaneOpen = settings.Preferences.SidebarOpen;
+        }
+        RootGrid.KeyboardAccelerators.Clear();
+        foreach (var (action, key) in settings.Preferences.Shortcuts())
+        {
+            var accelerator = new KeyboardAccelerator { Key = Enum.Parse<VirtualKey>(key), Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift };
+            accelerator.Invoked += async (_, args) =>
+            {
+                if (ShortcutKeyPicker.IsRecording) return;
+                args.Handled = true;
+                await ExecuteShortcutAsync(action);
+            };
+            RootGrid.KeyboardAccelerators.Add(accelerator);
+        }
+    }
+
+    private async void Workspace_ShortcutRequested(object? sender, string action) => await ExecuteShortcutAsync(action);
+
+    private async Task ExecuteShortcutAsync(string action)
+    {
+        if (action == "new") { _sessionHost.Select(null); ShowUnconnectedLayout("overview"); }
+        else if (action == "close" && _shell.SelectedSession is { } selected)
+            await _shell.CloseSessionAsync(selected, ConfirmCloseSessionAsync);
+        else if (action == "next")
+        {
+            var sessions = _shell.Sessions.ToList();
+            if (sessions.Count > 0) await _shell.ConnectAsync(sessions[(sessions.IndexOf(_shell.SelectedSession!) + 1) % sessions.Count].Profile);
+        }
+        else if (_shell.SelectedSession is SessionWorkspace workspace) workspace.ExecuteShortcut(action);
     }
 
     private void ApplyTheme(string theme)
@@ -259,17 +322,15 @@ public sealed partial class MainWindow : Window
     {
         var isNarrow = _layout.IsNarrow;
         var spacing = ShellLayoutMode.MeasureContentSpacing(isNarrow, _isSessionLayout);
-        ContentHeader.Padding = new Thickness(
-            spacing.Horizontal,
-            isNarrow ? 16 : 24,
-            spacing.Horizontal,
-            isNarrow ? 12 : 18);
         ContentHost.Padding = new Thickness(
             spacing.Horizontal,
-            0,
-            spacing.Horizontal,
+            _isSessionLayout ? spacing.Horizontal : (isNarrow ? 16 : 24),
+            _isSessionLayout ? spacing.Horizontal : 0,
             _isSessionLayout ? spacing.Bottom : 0);
-        _overviewPage.UpdateResponsiveLayout(spacing.Horizontal);
+        var pageSpacing = ShellLayoutMode.MeasureContentSpacing(isNarrow, false).Horizontal;
+        _overviewPage.UpdateResponsiveLayout(pageSpacing);
+        _settingsPage.UpdateResponsiveLayout(pageSpacing);
+        _serverCatalogPage.UpdateResponsiveLayout(pageSpacing);
     }
 
     private void NavigateTo(string page)
@@ -282,15 +343,6 @@ public sealed partial class MainWindow : Window
             "settings" => _settingsPage,
             _ => _overviewPage
         };
-        PageTitleText.Text = page switch
-        {
-            "servers" => "已保存的服务器",
-            "settings" => "设置",
-            _ => "概览"
-        };
-        PageSubtitleText.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
-        PageSubtitleText.Text = page == "settings" ? "连接安全与界面偏好。" : string.Empty;
-
         _currentPage = page;
         _hasDisplayedPage = true;
         if (shouldAnimate)
@@ -333,7 +385,6 @@ public sealed partial class MainWindow : Window
     {
         _isSessionLayout = true;
         ApplyContentSpacing();
-        ContentHeader.Visibility = Visibility.Collapsed;
         PageContentPresenter.Visibility = Visibility.Collapsed;
         SessionContentPresenter.Visibility = Visibility.Visible;
         SessionTabHost.Visibility = Visibility.Visible;
@@ -349,7 +400,6 @@ public sealed partial class MainWindow : Window
     {
         _isSessionLayout = false;
         ApplyContentSpacing();
-        ContentHeader.Visibility = Visibility.Visible;
         PageContentPresenter.Visibility = Visibility.Visible;
         SessionContentPresenter.Visibility = Visibility.Collapsed;
         SessionContentPresenter.Content = null;

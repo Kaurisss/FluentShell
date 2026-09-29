@@ -13,6 +13,7 @@ public sealed partial class ServerCatalogPage : UserControl
     private readonly Func<ServerProfile, bool> _hasSavedCredential;
     private IReadOnlyList<ServerProfile> _profiles = [];
     private bool _initialized;
+    private readonly Style _profileItemStyle;
 
     public ServerCatalogPage(
         IntPtr windowHandle,
@@ -21,7 +22,18 @@ public sealed partial class ServerCatalogPage : UserControl
         _windowHandle = windowHandle;
         _hasSavedCredential = hasSavedCredential;
         InitializeComponent();
+        _profileItemStyle = ProfilesList.ItemContainerStyle;
+        UpdateResponsiveLayout(30);
         _initialized = true;
+    }
+
+    public void UpdateResponsiveLayout(double horizontalSpacing)
+    {
+        Toolbar.Margin = new Thickness(0, 0, horizontalSpacing, 16);
+        EmptyState.Margin = new Thickness(0, 0, horizontalSpacing, 0);
+        var itemStyle = new Style(typeof(ListViewItem)) { BasedOn = _profileItemStyle };
+        itemStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 0, horizontalSpacing, 0)));
+        ProfilesList.ItemContainerStyle = itemStyle;
     }
 
     public event EventHandler? RefreshRequested;

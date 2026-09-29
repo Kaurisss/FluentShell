@@ -21,7 +21,6 @@ public sealed partial class OverviewPage : UserControl
     public void UpdateResponsiveLayout(double contentHorizontalSpacing)
     {
         _contentHorizontalSpacing = Math.Max(0, contentHorizontalSpacing);
-        RootScrollViewer.Margin = new Thickness(0, 0, -contentHorizontalSpacing, 0);
         UpdateContentWidth();
     }
 

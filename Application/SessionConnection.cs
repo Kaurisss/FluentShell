@@ -34,6 +34,18 @@ public sealed class SessionConnection : IAsyncDisposable
     private CancellationTokenSource? _metricsCts;
     private SessionConnectionState _state = SessionConnectionState.Disconnected;
     private bool _isActive;
+    private UserPreferences _preferences = new();
+    private CancellationTokenSource? _reconnectCts;
+    private Task? _reconnectTask;
+    private bool _disposed;
+    private bool _connectionCancelled;
+    private bool _automaticReconnect;
+
+    public void SetPreferences(UserPreferences preferences)
+    {
+        _preferences = preferences.Normalize();
+        if (_preferences.ReconnectAttempts == 0) _reconnectCts?.Cancel();
+    }
 
     public SessionConnection(
         ServerProfile profile,
@@ -85,7 +97,9 @@ public sealed class SessionConnection : IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        if (_disposed) return;
         if (_state == SessionConnectionState.Connecting || IsConnected) return;
+        _connectionCancelled = false;
         _state = SessionConnectionState.Connecting;
         StatusChanged?.Invoke(this, "连接中");
         try
@@ -95,6 +109,7 @@ public sealed class SessionConnection : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             if (secret is null)
             {
+                _connectionCancelled = true;
                 _state = SessionConnectionState.Disconnected;
                 StatusChanged?.Invoke(this, "连接已取消");
                 return;
@@ -111,7 +126,7 @@ public sealed class SessionConnection : IAsyncDisposable
         {
             _state = SessionConnectionState.Disconnected;
             StatusChanged?.Invoke(this, $"连接失败：{exception.Message}");
-            ConnectionFailed?.Invoke(this, exception.Message);
+            if (!_automaticReconnect) ConnectionFailed?.Invoke(this, exception.Message);
             Output?.Invoke(this, $"\r\n[连接失败] {exception.Message}\r\n");
         }
     }
@@ -169,6 +184,7 @@ public sealed class SessionConnection : IAsyncDisposable
         var connection = await _connectionFactory(secret, cancellationToken);
         if (connection is null)
         {
+            _connectionCancelled = true;
             _state = SessionConnectionState.Disconnected;
             StatusChanged?.Invoke(this, "连接已取消");
             return;
@@ -292,10 +308,40 @@ public sealed class SessionConnection : IAsyncDisposable
         _cancelTransfers();
         StatusChanged?.Invoke(this, "连接已断开");
         Output?.Invoke(this, "\r\n[连接已断开]\r\n");
+        if (!_disposed && _preferences.ReconnectAttempts > 0 && (_reconnectTask is null || _reconnectTask.IsCompleted))
+        {
+            _reconnectCts?.Dispose();
+            _reconnectCts = new CancellationTokenSource();
+            _reconnectTask = ReconnectLoopAsync(_reconnectCts.Token);
+        }
     });
+
+    private async Task ReconnectLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            for (var attempt = 1; attempt <= _preferences.ReconnectAttempts && !_disposed; attempt++)
+            {
+                StatusChanged?.Invoke(this, $"等待重连（{attempt}/{_preferences.ReconnectAttempts}）");
+                await Task.Delay(TimeSpan.FromSeconds(_preferences.ReconnectDelaySeconds), token);
+                if (_disposed || IsConnected || _state == SessionConnectionState.Connecting) return;
+                _automaticReconnect = true;
+                try { await ConnectAsync(token); }
+                finally { _automaticReconnect = false; }
+                if (IsConnected || _connectionCancelled) return;
+            }
+            if (!_disposed) StatusChanged?.Invoke(this, "自动重连已结束，请手动重连");
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _reconnectCts?.Cancel();
+        if (_reconnectTask is not null) await _reconnectTask;
+        _reconnectCts?.Dispose();
         _metricsCts?.Cancel();
         _cancelTransfers();
         await ReleaseActiveConnectionAsync();

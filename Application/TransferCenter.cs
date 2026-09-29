@@ -8,6 +8,9 @@ public enum TransferTaskState { Running, Paused, Completed, Failed, Disconnected
 /// <summary>Window-scoped transfer history. Mutations and commands run on the shell dispatcher.</summary>
 public sealed class TransferCenter
 {
+    public TransferLimiter Limiter { get; } = new();
+    public event EventHandler<TransferTask>? Completed;
+    private readonly HashSet<TransferTask> _completed = [];
     public ObservableCollection<TransferConnectionGroup> Groups { get; } = [];
     public event EventHandler? Changed;
     public int RunningCount => Groups.SelectMany(g => g).Count(t => t.State == TransferTaskState.Running);
@@ -31,6 +34,7 @@ public sealed class TransferCenter
 
     public void Discard(TransferTask task)
     {
+        _completed.Remove(task);
         task.Discard();
         task.PropertyChanged -= TaskChanged;
         foreach (var group in Groups.ToArray())
@@ -53,7 +57,12 @@ public sealed class TransferCenter
         foreach (var task in Groups.SelectMany(g => g)) task.NotifyChanged();
     }
 
-    private void TaskChanged(object? sender, PropertyChangedEventArgs e) => NotifyChanged();
+    private void TaskChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is TransferTask { State: TransferTaskState.Completed } task && _completed.Add(task))
+            Completed?.Invoke(this, task);
+        NotifyChanged();
+    }
     private void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
 }
 

@@ -67,6 +67,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string Theme { get => _theme; set => SetField(ref _theme, value); }
     public string BackdropMaterial { get => _backdropMaterial; set => SetField(ref _backdropMaterial, value); }
     public double TerminalFontSize { get => _terminalFontSize; set => SetField(ref _terminalFontSize, value); }
+    public TerminalColors TerminalColors { get; set; } = new();
+    public UserPreferences Preferences { get; set; } = new();
     public string DownloadDirectory { get => _downloadDirectory; set => SetField(ref _downloadDirectory, value); }
     public bool HasCustomDownloadDirectory { get => _hasCustomDownloadDirectory; set => SetField(ref _hasCustomDownloadDirectory, value); }
 

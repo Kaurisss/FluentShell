@@ -16,6 +16,15 @@ namespace FluentShell.Views.Session;
 
 public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView
 {
+    private UserPreferences _preferences = new();
+    private string _downloadDirectory = AppSettings.DefaultDownloadDirectory;
+    public void SetPreferences(UserPreferences preferences, string downloadDirectory)
+    {
+        var refresh = _preferences.ShowHiddenFiles != preferences.ShowHiddenFiles;
+        _preferences = preferences;
+        _downloadDirectory = downloadDirectory;
+        if (refresh) { RenderDirectoryListing(_snapshot.DirectoryListing); RefreshLocalDirectory(); }
+    }
     private readonly IntPtr _windowHandle;
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
     private bool _isFailureDialogOpen;
@@ -86,7 +95,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         // 那一列填不满，表头右侧会留下大片空白。
         RemoteTable.SelectedItem = null;
         _remoteFiles.Clear();
-        foreach (var item in listing.Items) _remoteFiles.Add(item);
+        foreach (var item in listing.Items.Where(item => _preferences.ShowHiddenFiles || item.Name == ".." || !item.Name.StartsWith('.'))) _remoteFiles.Add(item);
         PathBox.Text = listing.Path;
     }
 
@@ -165,6 +174,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     public async Task<string?> PickDownloadDirectoryAsync()
     {
+        if (_preferences.UseDefaultDownloadDirectory) return _downloadDirectory;
         var picker = new FolderPicker();
         picker.FileTypeFilter.Add("*");
         InitializeWithWindow.Initialize(picker, _windowHandle);

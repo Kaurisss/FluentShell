@@ -31,6 +31,8 @@ public interface IShellSession : IAsyncDisposable
     Task ConnectAsync(CancellationToken cancellationToken = default);
     void SetActive(bool active);
     void SetTerminalFontSize(double value);
+    void SetTerminalColors(TerminalColors colors);
+    void SetPreferences(UserPreferences preferences, string downloadDirectory);
 }
 
 public sealed record ServerProfileUpdate(
@@ -45,7 +47,10 @@ public sealed record AppSettingsUpdate(
     string? Theme = null,
     string? BackdropMaterial = null,
     double? TerminalFontSize = null,
-    string? DownloadDirectory = null);
+    string? DownloadDirectory = null,
+    TerminalColors? TerminalColors = null,
+    UserPreferences? Preferences = null,
+    AppSettings? Replacement = null);
 public sealed class ShellCoordinator
 {
     private readonly ILocalStore _localStore;
@@ -60,6 +65,7 @@ public sealed class ShellCoordinator
     private readonly Dictionary<Guid, string> _sessionSecrets = [];
     private readonly Dictionary<Guid, bool> _credentialPersistenceOverrides = [];
     private AppSettings _settings = new();
+    private readonly SemaphoreSlim _settingsUpdateGate = new(1, 1);
     private CancellationTokenSource? _connectionCancellation;
 
     public ShellCoordinator(
@@ -91,7 +97,9 @@ public sealed class ShellCoordinator
 
     public async Task LoadAsync()
     {
-        _settings = await _localStore.LoadAsync();
+        _settings = SettingsBackup.Normalize(await _localStore.LoadAsync());
+        _settings.TerminalColors = (_settings.TerminalColors ?? new()).Normalize();
+        _settings.Preferences = (_settings.Preferences ?? new()).Normalize();
         NotifyStateChanged();
     }
 
@@ -108,14 +116,14 @@ public sealed class ShellCoordinator
         CancellationToken cancellationToken)
     {
         var jump = JumpHostResolver.Resolve(profile, Profiles);
-        if (jump is null) return new SshConnectionService(profile, secret);
+        if (jump is null) return new SshConnectionService(profile, secret, _settings.Preferences);
 
         cancellationToken.ThrowIfCancellationRequested();
         var jumpSecret = await ResolveHopSecretAsync(jump);
         cancellationToken.ThrowIfCancellationRequested();
         return jumpSecret is null
             ? null
-            : new JumpHostConnectionService(profile, secret, jump, jumpSecret);
+            : new JumpHostConnectionService(profile, secret, jump, jumpSecret, _settings.Preferences);
     }
 
     public async Task SaveProfileAsync(ServerProfileUpdate update)
@@ -162,24 +170,41 @@ public sealed class ShellCoordinator
 
     public async Task UpdateSettingsAsync(AppSettingsUpdate update)
     {
-        if (update.Theme is not null) _settings.Theme = update.Theme;
-        if (update.BackdropMaterial is not null) _settings.BackdropMaterial = update.BackdropMaterial;
-        if (update.TerminalFontSize is not null)
+        await _settingsUpdateGate.WaitAsync();
+        try
         {
-            _settings.TerminalFontSize = update.TerminalFontSize.Value;
+            var source = update.Replacement ?? _settings;
+            var next = new AppSettings
+            {
+                Theme = source.Theme, BackdropMaterial = source.BackdropMaterial,
+                TerminalFontSize = source.TerminalFontSize, TerminalColors = source.TerminalColors,
+                Preferences = source.Preferences, DownloadDirectory = source.DownloadDirectory,
+                HasCustomDownloadDirectory = source.HasCustomDownloadDirectory
+            };
+            if (update.Replacement is not null) next = SettingsBackup.Normalize(next);
+            if (update.Preferences is not null) next.Preferences = update.Preferences.Normalize();
+            if (!next.Preferences.HasUniqueShortcuts) throw new ArgumentException("快捷键重复。");
+            if (update.TerminalColors is not null) next.TerminalColors = update.TerminalColors.Normalize();
+            if (update.Theme is not null) next.Theme = update.Theme;
+            if (update.BackdropMaterial is not null) next.BackdropMaterial = update.BackdropMaterial;
+            if (update.TerminalFontSize is not null) next.TerminalFontSize = Math.Clamp(update.TerminalFontSize.Value, 11, 24);
+            if (update.DownloadDirectory is not null)
+            {
+                next.DownloadDirectory = update.DownloadDirectory;
+                next.HasCustomDownloadDirectory = true;
+            }
+            await _localStore.SaveSettingsAsync(next);
+            _settings = next;
             foreach (var session in _sessions.Sessions)
-                session.SetTerminalFontSize(update.TerminalFontSize.Value);
+            {
+                session.SetTerminalFontSize(next.TerminalFontSize);
+                session.SetTerminalColors(next.TerminalColors);
+                session.SetPreferences(next.Preferences, next.DownloadDirectory);
+            }
+            NotifyStateChanged();
         }
-        if (update.DownloadDirectory is not null)
-        {
-            _settings.DownloadDirectory = update.DownloadDirectory;
-            _settings.HasCustomDownloadDirectory = true;
-        }
-
-        await _localStore.SaveSettingsAsync(_settings);
-        NotifyStateChanged();
+        finally { _settingsUpdateGate.Release(); }
     }
-
     public async Task ConnectAsync(ServerProfile profile)
     {
         if (_sessions.TryGet(profile.Id, out var existing))
@@ -196,6 +221,8 @@ public sealed class ShellCoordinator
             () => ResolveSecretAsync(profile),
             _fingerprintConfirmation);
         session.SetTerminalFontSize(_settings.TerminalFontSize);
+        session.SetTerminalColors(_settings.TerminalColors);
+        session.SetPreferences(_settings.Preferences, _settings.DownloadDirectory);
         SubscribeSession(session);
         ConnectionProgressChanged?.Invoke(
             this,

@@ -3,6 +3,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using System.Text;
 using System.Text.Json;
+using FluentShell.Models;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace FluentShell.Views.Session;
 
@@ -19,6 +21,58 @@ public sealed class TerminalPane : UserControl, IDisposable
     private bool _initializationStarted;
     private bool _ready;
     private double _fontSize = 14;
+    private TerminalColors _colors = new();
+    private UserPreferences _preferences = new();
+    private bool _pasting;
+    public event EventHandler<string>? ShortcutRequested;
+
+    public void SetPreferences(UserPreferences preferences)
+    {
+        _preferences = preferences.Normalize();
+        PostPreferences();
+        UpdateTheme();
+    }
+
+    public void Search() => PostMessage(new { type = "search" });
+
+    private void PostPreferences() => PostMessage(new { type = "preferences", value = new {
+        fontFamily = _preferences.FontFamily, cursorStyle = _preferences.CursorStyle,
+        cursorBlink = _preferences.CursorBlink, scrollback = _preferences.Scrollback,
+        copyOnSelect = _preferences.CopyOnSelect, rightClickPaste = _preferences.RightClickPaste,
+        shortcuts = _preferences.Shortcuts()
+    } });
+
+    private async Task PasteAsync(string? text = null)
+    {
+        if (_pasting) return;
+        _pasting = true;
+        try
+        {
+            if (text is null)
+            {
+                var content = Clipboard.GetContent();
+                if (!content.Contains(StandardDataFormats.Text)) return;
+                text = await content.GetTextAsync();
+            }
+            if (string.IsNullOrEmpty(text)) return;
+            if (_preferences.ConfirmMultilinePaste && (text.Contains('\n') || text.Contains('\r')))
+            {
+                var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "确认多行粘贴",
+                    Content = "粘贴内容包含换行，可能立即执行多条远程命令。是否继续？",
+                    PrimaryButtonText = "粘贴", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Close };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            }
+            PostMessage(new { type = "paste", data = text });
+        }
+        catch (Exception) { /* Clipboard may be locked; never send partially read content. */ }
+        finally { _pasting = false; }
+    }
+
+    public void SetColors(TerminalColors colors)
+    {
+        _colors = colors.Normalize();
+        UpdateTheme();
+    }
 
     public TerminalPane()
     {
@@ -91,12 +145,29 @@ public sealed class TerminalPane : UserControl, IDisposable
     {
         try
         {
+            if (e.Source != "https://fluentshell.local/index.html") return;
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var root = document.RootElement;
             if (!root.TryGetProperty("type", out var typeElement)) return;
 
             switch (typeElement.GetString())
             {
+                case "paste":
+                    _ = PasteAsync(root.TryGetProperty("data", out var paste) && paste.ValueKind == JsonValueKind.String ? paste.GetString() : null);
+                    break;
+                case "copy" when _preferences.CopyOnSelect:
+                    if (root.TryGetProperty("data", out var copy) && copy.ValueKind == JsonValueKind.String)
+                    {
+                        var package = new DataPackage();
+                        package.SetText(copy.GetString() ?? "");
+                        Clipboard.SetContent(package);
+                    }
+                    break;
+                case "shortcut":
+                    if (root.TryGetProperty("action", out var action) && action.ValueKind == JsonValueKind.String &&
+                        _preferences.Shortcuts().ContainsKey(action.GetString()!))
+                        ShortcutRequested?.Invoke(this, action.GetString()!);
+                    break;
                 case "ready":
                     MarkReady();
                     break;
@@ -123,6 +194,7 @@ public sealed class TerminalPane : UserControl, IDisposable
     private void MarkReady()
     {
         _ready = true;
+        PostPreferences();
         UpdateTheme();
         PostMessage(new { type = "fontSize", value = _fontSize });
         if (_pendingOutput.Length == 0) return;
@@ -134,8 +206,11 @@ public sealed class TerminalPane : UserControl, IDisposable
 
     private void TerminalPane_ActualThemeChanged(FrameworkElement sender, object args) => UpdateTheme();
 
-    private void UpdateTheme() =>
-        PostMessage(new { type = "theme", value = ActualTheme == ElementTheme.Light ? "light" : "dark" });
+    private void UpdateTheme()
+    {
+        var light = _preferences.TerminalTheme == "light" || (_preferences.TerminalTheme == "system" && ActualTheme == ElementTheme.Light);
+        PostMessage(new { type = "theme", value = light ? "light" : "dark", colors = light ? _colors.Light : _colors.Dark });
+    }
 
     private void PostMessage(object message)
     {

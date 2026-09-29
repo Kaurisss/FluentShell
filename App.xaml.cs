@@ -18,6 +18,7 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        Services.DiagnosticLog.Record("ApplicationStarted");
         _window = new MainWindow();
         _window.Activate();
     }

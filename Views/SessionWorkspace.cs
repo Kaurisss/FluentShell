@@ -102,6 +102,29 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public void SetActive(bool active) => _connection.SetActive(active);
 
     public void SetTerminalFontSize(double value) => _terminalPane.SetFontSize(value);
+    public void SetTerminalColors(TerminalColors colors) => _terminalPane.SetColors(colors);
+    public event EventHandler<string>? ShortcutRequested
+    {
+        add => _terminalPane.ShortcutRequested += value;
+        remove => _terminalPane.ShortcutRequested -= value;
+    }
+
+    public void SetPreferences(UserPreferences preferences, string downloadDirectory)
+    {
+        _terminalPane.SetPreferences(preferences);
+        _connection.SetPreferences(preferences);
+        _sftpWorkspace.SetPreferences(preferences);
+        _sftpView.SetPreferences(preferences, downloadDirectory);
+    }
+
+    public void ExecuteShortcut(string action)
+    {
+        if (action == "search") _terminalPane.Search();
+        if (action == "files")
+        {
+            ToggleSftp();
+        }
+    }
 
     private UIElement BuildLayout()
     {

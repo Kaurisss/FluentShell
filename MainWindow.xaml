@@ -6,7 +6,8 @@
     xmlns:shell="using:FluentShell.Views.Shell"
     Title="FluentShell">
 
-    <Grid x:Name="RootGrid">
+    <!-- Global accelerators belong to the shell, not to the surface under the pointer. -->
+    <Grid x:Name="RootGrid" KeyboardAcceleratorPlacementMode="Hidden">
         <Grid.Resources>
             <Style x:Key="TransferFlyoutPresenterStyle" TargetType="FlyoutPresenter">
                 <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
@@ -78,14 +79,7 @@
                 <shell:ConnectedServerSidebar x:Name="ConnectedSidebar" Visibility="Collapsed" VerticalAlignment="Stretch" />
             </NavigationView.PaneCustomContent>
             <Grid x:Name="ContentRoot" Background="Transparent">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <Grid x:Name="ContentHeader" Padding="30,24,30,18">
-                    <StackPanel Spacing="3">
-                        <TextBlock x:Name="PageTitleText" Text="概览" FontSize="24" FontWeight="SemiBold" />
-                        <TextBlock x:Name="PageSubtitleText" Text="从最近或已保存的服务器开始 SSH 会话。" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" />
-                    </StackPanel>
-                </Grid>
-                <Grid Grid.Row="1" x:Name="ContentHost" Padding="30,0,30,28">
+                <Grid x:Name="ContentHost" Padding="30,24,0,28">
                     <ContentPresenter x:Name="PageContentPresenter">
                         <ContentPresenter.RenderTransform>
                             <TranslateTransform x:Name="PageContentTransform" />

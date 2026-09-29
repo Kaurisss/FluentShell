@@ -15,7 +15,7 @@ public sealed class HostFingerprintRequiredEventArgs : EventArgs
 
 public sealed class SshConnectionService : ISshConnection
 {
-    private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(12);
+    private readonly UserPreferences _preferences;
     private readonly ServerProfile _profile;
     private readonly string _secret;
     private readonly string _connectHost;
@@ -32,13 +32,14 @@ public sealed class SshConnectionService : ISshConnection
     private readonly SemaphoreSlim _metricsCommandGate = new(1, 1);
     private readonly LinuxCpuUsageCalculator _cpuUsageCalculator = new();
 
-    public SshConnectionService(ServerProfile profile, string secret)
-        : this(profile, secret, profile.Host, profile.Port)
+    public SshConnectionService(ServerProfile profile, string secret, UserPreferences? preferences = null)
+        : this(profile, secret, profile.Host, profile.Port, preferences)
     {
     }
 
-    internal SshConnectionService(ServerProfile profile, string secret, string connectHost, int connectPort)
+    internal SshConnectionService(ServerProfile profile, string secret, string connectHost, int connectPort, UserPreferences? preferences = null)
     {
+        _preferences = (preferences ?? new()).Normalize();
         _profile = profile;
         _secret = secret;
         _connectHost = connectHost;
@@ -70,7 +71,8 @@ public sealed class SshConnectionService : ISshConnection
         var privateKeyFiles = new List<PrivateKeyFile>();
         try
         {
-            sshClient = new SshClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
+            sshClient = new SshClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
+            sshClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
             sshClient.HostKeyReceived += OnHostKeyReceived;
             sshConnectTask = sshClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(sshConnectTask, cancellationToken).ConfigureAwait(false);
@@ -85,14 +87,16 @@ public sealed class SshConnectionService : ISshConnection
                 cancellationToken);
             shell = await AwaitOperationAsync(shellTask, cancellationToken).ConfigureAwait(false);
 
-            sftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
+            sftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
+            sftpClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
             sftpClient.HostKeyReceived += OnHostKeyReceived;
             sftpConnectTask = sftpClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(sftpConnectTask, cancellationToken).ConfigureAwait(false);
 
             // 传输走独立连接：SSH.NET 客户端不保证并发安全，
             // 浏览目录不该排在大文件传输后面。
-            transferSftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort));
+            transferSftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
+            transferSftpClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
             transferSftpClient.HostKeyReceived += OnHostKeyReceived;
             transferSftpConnectTask = transferSftpClient.ConnectAsync(cancellationToken);
             await AwaitOperationAsync(transferSftpConnectTask, cancellationToken).ConfigureAwait(false);
@@ -308,7 +312,7 @@ public sealed class SshConnectionService : ISshConnection
         string secret,
         ICollection<PrivateKeyFile> privateKeyFiles,
         string connectHost,
-        int connectPort)
+        int connectPort, int timeoutSeconds = 12)
     {
         Renci.SshNet.AuthenticationMethod auth = profile.Authentication switch
         {
@@ -319,7 +323,7 @@ public sealed class SshConnectionService : ISshConnection
 
         return new ConnectionInfo(connectHost, connectPort, profile.Username, auth)
         {
-            Timeout = ConnectionTimeout
+            Timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 3, 120))
         };
     }
 

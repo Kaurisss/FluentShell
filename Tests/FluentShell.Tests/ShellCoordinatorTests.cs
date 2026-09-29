@@ -9,6 +9,26 @@ namespace FluentShell.Tests;
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
+    public async Task Terminal_colors_apply_to_existing_and_new_sessions_and_reset()
+    {
+        var store = new InMemoryLocalStore();
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile, current =>
+        {
+            current.SetConnectionState(SessionConnectionState.Connected);
+            return Task.CompletedTask;
+        }), store: store);
+        await coordinator.LoadAsync();
+        await coordinator.ConnectAsync(new ServerProfile { Host = "first" });
+        await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(TerminalColors: new() { Dark = new() { ["red"] = "#abcdef" } }));
+        await coordinator.ConnectAsync(new ServerProfile { Host = "second" });
+        Assert.AreEqual("#ABCDEF", store.PersistedSettings.TerminalColors.Dark["red"]);
+        foreach (var session in coordinator.Sessions.Cast<FakeShellSession>())
+            Assert.AreEqual("#ABCDEF", session.TerminalColors.Dark["red"]);
+        await coordinator.UpdateSettingsAsync(new AppSettingsUpdate(TerminalColors: new()));
+        foreach (var session in coordinator.Sessions.Cast<FakeShellSession>())
+            Assert.IsEmpty(session.TerminalColors.Dark);
+    }
+    [TestMethod]
     public async Task Connection_factory_uses_saved_jump_and_cancellation_of_jump_prompt()
     {
         var jump = new ServerProfile { Name = "跳板", Host = "jump", Username = "jump" };

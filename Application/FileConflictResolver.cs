@@ -49,9 +49,9 @@ public sealed class FileConflictResolver
     /// <summary>
     /// 重置冲突解决策略，用于新的批量操作。
     /// </summary>
-    public void Reset()
+    public void Reset(string policy = "ask")
     {
-        _policy = null;
+        _policy = policy switch { "overwrite" => FileConflictPolicy.OverwriteAll, "skip" => FileConflictPolicy.SkipAll, _ => null };
     }
 
     private enum FileConflictPolicy

@@ -58,6 +58,10 @@ internal sealed class FakeShellSession : IShellSession
     }
 
     public void SetTerminalFontSize(double value) { }
+    public TerminalColors TerminalColors { get; private set; } = new();
+    public void SetTerminalColors(TerminalColors colors) => TerminalColors = colors;
+    public UserPreferences Preferences { get; private set; } = new();
+    public void SetPreferences(UserPreferences preferences, string downloadDirectory) => Preferences = preferences;
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 

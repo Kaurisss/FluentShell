@@ -11,6 +11,11 @@ The temporary window exits automatically. Exit code 0 and `passed: true` in the 
 
 The scenario creates a session in light mode, detaches it as when navigating to settings, changes the root theme, and reattaches it for Light → Dark → Light. Checks include the effective themes of the workspace/terminal/SFTP grids/path inputs, actual sidebar metric foreground colors, and the WebView page's actual computed background and color scheme.
 
+The scenario also opens the secondary terminal-color settings page and its real
+ColorDialog, checks cancel/confirm and back navigation, then verifies applying
+and resetting a custom background on the cached terminal. It uses only in-memory
+settings and does not modify the user's saved preferences.
+
 Terminal palette contrast and bridge behavior are also covered by:
 
 ```powershell

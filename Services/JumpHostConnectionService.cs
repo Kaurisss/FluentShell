@@ -14,6 +14,7 @@ public sealed class JumpHostConnectionService : ISshConnection
     private readonly string _targetSecret;
     private readonly ServerProfile _jumpProfile;
     private readonly string _jumpSecret;
+    private readonly UserPreferences _preferences;
     private SshClient? _jumpClient;
     private ForwardedPortLocal? _forward;
     private SshConnectionService? _target;
@@ -23,8 +24,9 @@ public sealed class JumpHostConnectionService : ISshConnection
         ServerProfile targetProfile,
         string targetSecret,
         ServerProfile jumpProfile,
-        string jumpSecret)
+        string jumpSecret, UserPreferences? preferences = null)
     {
+        _preferences = (preferences ?? new()).Normalize();
         _targetProfile = targetProfile;
         _targetSecret = targetSecret;
         _jumpProfile = jumpProfile;
@@ -53,7 +55,8 @@ public sealed class JumpHostConnectionService : ISshConnection
         try
         {
             jumpClient = new SshClient(SshConnectionService.CreateConnectionInfo(
-                _jumpProfile, _jumpSecret, jumpPrivateKeys, _jumpProfile.Host, _jumpProfile.Port));
+                _jumpProfile, _jumpSecret, jumpPrivateKeys, _jumpProfile.Host, _jumpProfile.Port, _preferences.ConnectionTimeoutSeconds));
+            jumpClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
             jumpClient.HostKeyReceived += OnJumpHostKeyReceived;
             jumpConnectTask = jumpClient.ConnectAsync(cancellationToken);
             await jumpConnectTask.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -68,7 +71,7 @@ public sealed class JumpHostConnectionService : ISshConnection
             cancellationToken.ThrowIfCancellationRequested();
 
             target = new SshConnectionService(
-                _targetProfile, _targetSecret, "127.0.0.1", checked((int)forward.BoundPort));
+                _targetProfile, _targetSecret, "127.0.0.1", checked((int)forward.BoundPort), _preferences);
             target.OutputReceived += Target_OutputReceived;
             target.HostFingerprintRequired += Target_HostFingerprintRequired;
             target.Disconnected += Target_Disconnected;

@@ -8,6 +8,28 @@ namespace FluentShell.Tests;
 public sealed class SessionConnectionTests
 {
     [TestMethod]
+    public async Task Automatic_reconnect_runs_after_disconnect_and_stops_on_dispose()
+    {
+        var first = new FakeSshConnection();
+        var second = new FakeSshConnection();
+        var connections = new Queue<FakeSshConnection>([first, second]);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var count = 0;
+        await using var session = CreateSession(() => connections.Dequeue());
+        session.SetPreferences(new UserPreferences { ReconnectAttempts = 2, ReconnectDelaySeconds = 1 });
+        session.Connected += (_, _) => { if (++count == 2) connected.TrySetResult(); };
+        await session.ConnectAsync();
+        first.IsConnected = false;
+        first.RaiseDisconnected();
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.IsTrue(session.IsConnected);
+        Assert.AreEqual(1, first.DisposeCount);
+        second.IsConnected = false;
+        second.RaiseDisconnected();
+        await session.DisposeAsync();
+        Assert.AreEqual(2, count);
+    }
+    [TestMethod]
     public async Task Connection_failure_returns_to_disconnected_and_reports_the_reason()
     {
         var connection = new FakeSshConnection { ConnectFailure = new IOException("网络不可达") };

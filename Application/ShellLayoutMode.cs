@@ -37,6 +37,7 @@ public sealed class ShellLayoutMode
     private bool? _isNarrow;
     private bool _paneWasOpenBeforeNarrow = true;
     private bool _isApplying;
+    public void SetDefaultPaneOpen(bool open) => _paneWasOpenBeforeNarrow = open;
 
     /// <summary>是否已经量过一次宽度。量过之前不应用布局，避免在控件加载完成前写面板状态。</summary>
     public bool IsMeasured => _isNarrow is not null;
@@ -55,7 +56,7 @@ public sealed class ShellLayoutMode
     /// </summary>
     public static ShellContentSpacing MeasureContentSpacing(bool isNarrow, bool isSessionLayout) =>
         isSessionLayout
-            ? new ShellContentSpacing(isNarrow ? 8 : 12, isNarrow ? 8 : 10)
+            ? new ShellContentSpacing(8, 8)
             : new ShellContentSpacing(isNarrow ? 16 : 30, isNarrow ? 16 : 28);
 
     public ShellLayout Measure(double width, bool isPaneOpen)

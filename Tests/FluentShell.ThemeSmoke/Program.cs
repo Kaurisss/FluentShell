@@ -6,9 +6,14 @@ using FluentShell.Services;
 using FluentShell.Views;
 using FluentShell.Views.Session;
 using FluentShell.Views.Shell;
+using FluentShell.Views.Dialogs;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics.Imaging;
+using System.Runtime.InteropServices.WindowsRuntime;
+using CommunityToolkit.WinUI.Controls;
 
 namespace FluentShell.ThemeSmoke;
 
@@ -51,7 +56,8 @@ internal sealed class SmokeApp : App
         try
         {
             _window = new Window { Title = "FluentShell offline theme regression" };
-            var root = new Grid { RequestedTheme = ElementTheme.Light };
+            _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 1050));
+            var root = new Grid { RequestedTheme = ElementTheme.Light, Background = new SolidColorBrush(Microsoft.UI.Colors.WhiteSmoke) };
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
             root.ColumnDefinitions.Add(new ColumnDefinition());
             _window.Content = root;
@@ -109,14 +115,197 @@ internal sealed class SmokeApp : App
                 Program.Results.Add(new { phase = theme.ToString(), control = "xterm page", scheme, background, passed = webPassed });
                 if (!webPassed) failures.Add($"xterm expected {expectedScheme}/{expectedBackground}, got {scheme}/{background}");
             }
+            // Exercise the settings editor without touching user settings or SSH.
+            root.Children.Remove(workspace);
+            var settingsPage = new SettingsPage(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            Grid.SetColumn(settingsPage, 1);
+            root.Children.Add(settingsPage);
+            settingsPage.SetSettings(new AppSettings(), "Offline fixture");
+            root.UpdateLayout();
+            await Task.Delay(200, timeout.Token);
+            var homePanel = (StackPanel)((ScrollViewer)settingsPage.FindName("SettingsHome")).Content;
+            if (homePanel.Children.OfType<SettingsCard>().Count() != 7) failures.Add("Settings home must contain seven category cards.");
+            var cardBounds = homePanel.Children.OfType<SettingsCard>().First();
+            Program.Results.Add(new { control = "settings card layout", rootWidth = root.ActualWidth, settingsWidth = settingsPage.ActualWidth,
+                panelWidth = homePanel.ActualWidth, cardWidth = cardBounds.ActualWidth,
+                panelX = homePanel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point()).X,
+                cardX = cardBounds.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point()).X });
+            var cardRight = cardBounds.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(cardBounds.ActualWidth, 0)).X;
+            if (cardRight > root.ActualWidth + 1) failures.Add("Settings cards must fit within the viewport.");
+            await CaptureAsync(root, Program.ReportPath + ".home.png");
+            foreach (var key in new[] { "appearance", "terminal", "connection", "transfer", "shortcuts", "data", "about" })
+            {
+                typeof(SettingsPage).GetMethod("ShowCategory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { key });
+                root.UpdateLayout();
+                var crumbs = ((BreadcrumbBar)settingsPage.FindName("SettingsBreadcrumb")).ItemsSource as string[];
+                if (crumbs is not { Length: 2 } || crumbs[0] != "设置") failures.Add("Category breadcrumb must include root and current page.");
+                if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Collapsed) failures.Add("Category navigation must hide home.");
+            }
+            typeof(SettingsPage).GetMethod("ShowCategory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { "shortcuts" });
+            root.UpdateLayout();
+            await Task.Delay(300, timeout.Token);
+            var shortcutCards = ((StackPanel)settingsPage.FindName("ShortcutOptions")).Children.OfType<SettingsCard>().ToArray();
+            if (shortcutCards.Length != 5 || shortcutCards.Any(c => c.Content is not ShortcutKeyPicker)) failures.Add("All shortcuts must use ShortcutKeyPicker.");
+            var keyPicker = (ShortcutKeyPicker)shortcutCards[0].Content;
+            if (keyPicker.Content is not ShortcutKeyPanel keyPanel || keyPanel.Children.Count != 3) failures.Add("ShortcutKeyPanel must render three key caps.");
+            await CaptureAsync(root, Program.ReportPath + ".shortcuts.png");
+            var keyPeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(keyPicker);
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)keyPeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            await Task.Delay(250, timeout.Token);
+            var keyDialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .SelectMany(popup => new[] { popup.Child }.Concat(Descendants(popup.Child))).OfType<ContentDialog>().Single();
+            if (keyDialog.XamlRoot != root.XamlRoot) failures.Add("Shortcut picker dialog must use the current XamlRoot.");
+            typeof(ShortcutKeyPicker).GetMethod("RecordKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(keyPicker,
+                new object[] { Windows.System.VirtualKey.K, Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift });
+            keyDialog.Hide();
+            while (Field<bool>(keyPicker, "_isOpen")) await Task.Delay(50, timeout.Token);
+            if (keyPicker.Key != "T") failures.Add("Cancelling shortcut recording must preserve the current key.");
+            var shortcutUpdates = 0;
+            settingsPage.SettingsChanged += (_, change) => { if (change.Preferences is not null) shortcutUpdates++; };
+            async Task RecordAndSave(string key)
+            {
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)keyPeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                await Task.Delay(200, timeout.Token);
+                typeof(ShortcutKeyPicker).GetMethod("RecordKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(keyPicker,
+                    new object[] { Enum.Parse<Windows.System.VirtualKey>(key), Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift });
+                var open = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                    .SelectMany(p => new[] { p.Child }.Concat(Descendants(p.Child))).OfType<ContentDialog>().Single();
+                var save = Descendants(open).OfType<Button>().Single(b => b.Name == "PrimaryButton");
+                var savePeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(save);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)savePeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                while (Field<bool>(keyPicker, "_isOpen")) await Task.Delay(50, timeout.Token);
+            }
+            await RecordAndSave("K");
+            if (keyPicker.Key != "K" || shortcutUpdates != 1) failures.Add("Recorded shortcut must be saved once.");
+            await RecordAndSave("W");
+            if (keyPicker.Key != "K" || shortcutUpdates != 1 || ((TextBlock)settingsPage.FindName("ShortcutError")).Visibility != Visibility.Visible)
+                failures.Add("Duplicate shortcut must show an error and retain the previous binding.");
+            Program.Results.Add(new { control = "breadcrumb and shortcut controls", passed = failures.Count == 0 });
+            typeof(SettingsPage).GetMethod("BackToSettings_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            ((Expander)settingsPage.FindName("LightColorsExpander")).IsExpanded = true;
+            var fields = Field<Dictionary<string, Button>>(settingsPage, "_lightColors");
+            var updates = 0;
+            settingsPage.SettingsChanged += (_, update) =>
+            {
+                if (update.TerminalColors is not null) { updates++; workspace.SetTerminalColors(update.TerminalColors); }
+            };
+            if (((ScrollViewer)settingsPage.FindName("TerminalColorsPage")).Visibility != Visibility.Collapsed)
+                failures.Add("Color editor must be a secondary settings page.");
+            typeof(SettingsPage).GetMethod("OpenTerminalColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            root.UpdateLayout();
+            await Task.Delay(300, timeout.Token);
+            await CaptureAsync(root, Program.ReportPath + ".terminal.png");
+            if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Collapsed)
+                failures.Add("Opening the color editor must hide settings home.");
+            await Task.Delay(150, timeout.Token);
+            // Open the real picker through its settings button; cancelling must not change the draft.
+            var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(fields["background"]);
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            await Task.Delay(250, timeout.Token);
+            var dialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .SelectMany(popup => new[] { popup.Child }.Concat(Descendants(popup.Child))).OfType<ColorDialog>().Single();
+            if (dialog.XamlRoot != settingsPage.XamlRoot) failures.Add("ColorDialog must be parented to the settings window.");
+            dialog.Hide();
+            while (Field<bool>(settingsPage, "_colorDialogOpen")) await Task.Delay(50, timeout.Token);
+            if (fields["background"].Tag is not null) failures.Add("Cancelling the color picker must retain the draft.");
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            await Task.Delay(250, timeout.Token);
+            dialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .SelectMany(popup => new[] { popup.Child }.Concat(Descendants(popup.Child))).OfType<ColorDialog>().Single();
+            ((ColorPicker)((ScrollViewer)dialog.Content).Content).Color = ColorDialog.Parse("#123456");
+            var confirm = Descendants(dialog).OfType<Button>().Single(button => button.Name == "PrimaryButton");
+            var confirmPeer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(confirm);
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)confirmPeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            while (Field<bool>(settingsPage, "_colorDialogOpen")) await Task.Delay(50, timeout.Token);
+            if (fields["background"].Tag as string != "#123456") failures.Add("Confirming ColorDialog must update the selected color.");
+            fields["red"].Tag = "#ABCDEF";
+            typeof(SettingsPage).GetMethod("SaveColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            typeof(SettingsPage).GetMethod("BackToSettings_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Visible)
+                failures.Add("Back must return to settings home.");
+            // Page scrollers reach the viewport edge; content retains its responsive inset.
+            foreach (var inset in new[] { 16d, 30d })
+            {
+                settingsPage.UpdateResponsiveLayout(inset);
+                foreach (var name in new[] { "SettingsHome", "AppearancePage", "TerminalColorsPage", "ConnectionPage", "TransferSettingsPage", "ShortcutSettingsPage", "DataSettingsPage", "AboutSettingsPage" })
+                {
+                    var scroller = (ScrollViewer)settingsPage.FindName(name);
+                    scroller.Visibility = Visibility.Visible;
+                    scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
+                    root.UpdateLayout();
+                    CheckScrollEdge(scroller, root, failures, name);
+                    if (Math.Abs(((FrameworkElement)scroller.Content).Margin.Right - inset) > 0.1) failures.Add(name + " lost content inset.");
+                    scroller.Visibility = Visibility.Collapsed;
+                }
+            }
+            root.Children.Remove(settingsPage);
+            var overview = new OverviewPage();
+            var catalog = new ServerCatalogPage(WinRT.Interop.WindowNative.GetWindowHandle(_window), _ => false);
+            catalog.SetProfiles(Enumerable.Range(1, 30).Select(i => new ServerProfile { Name = "Fixture " + i, Host = "offline.invalid", Username = "test" }).ToArray());
+            foreach (var page in new UserControl[] { overview, catalog })
+            {
+                Grid.SetColumn(page, 1);
+                root.Children.Add(page);
+                foreach (var inset in new[] { 16d, 30d })
+                {
+                    overview.UpdateResponsiveLayout(inset);
+                    catalog.UpdateResponsiveLayout(inset);
+                    root.UpdateLayout();
+                    var scroller = page == overview ? (ScrollViewer)overview.FindName("RootScrollViewer") : Descendants((ListView)catalog.FindName("ProfilesList")).OfType<ScrollViewer>().First();
+                    scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
+                    root.UpdateLayout();
+                    CheckScrollEdge(scroller, root, failures, page.GetType().Name);
+                }
+                await Task.Delay(300, timeout.Token);
+                root.UpdateLayout();
+                await CaptureAsync(root, Program.ReportPath + "." + page.GetType().Name + ".png");
+                root.Children.Remove(page);
+            }
+            Program.Results.Add(new { control = "page scrollbars at viewport edge", passed = failures.Count == 0 });
+            root.Children.Add(workspace);
+            await Task.Delay(400, timeout.Token);
+            var customBackground = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.body).backgroundColor"));
+            if (updates != 1 || customBackground != "rgb(18, 52, 86)") failures.Add("Saved custom background did not reach the cached terminal.");
+            typeof(SettingsPage).GetMethod("ResetColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            await Task.Delay(200, timeout.Token);
+            var resetBackground = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.body).backgroundColor"));
+            if (updates != 2 || resetBackground != "rgb(254, 254, 254)") failures.Add("Reset did not restore the terminal's default background.");
+            Program.Results.Add(new { control = "terminal color settings", customBackground, resetBackground, updates, passed = failures.Count == 0 });
             await workspace.DisposeAsync();
             if (failures.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
             Program.Finish();
         }
         catch (Exception e) { Program.Finish(e); }
     }
+    private static void CheckScrollEdge(ScrollViewer scroller, FrameworkElement root, List<string> failures, string name)
+    {
+        var bar = Descendants(scroller).OfType<Microsoft.UI.Xaml.Controls.Primitives.ScrollBar>()
+            .First(b =>
+            {
+                if (b.Orientation != Orientation.Vertical) return false;
+                DependencyObject parent = b;
+                do { parent = VisualTreeHelper.GetParent(parent); } while (parent is not null && parent is not ScrollViewer);
+                return ReferenceEquals(parent, scroller);
+            });
+        var right = bar.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(bar.ActualWidth, 0)).X;
+        if (Math.Abs(right - root.ActualWidth) > 2) failures.Add($"{name} scrollbar ends at {right}, expected {root.ActualWidth}.");
+    }
+
     private static T Field<T>(object owner, string name) =>
         (T)owner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner)!;
+    private static async Task CaptureAsync(UIElement element, string path)
+    {
+        var bitmap = new RenderTargetBitmap();
+        var framework = (FrameworkElement)element;
+        await bitmap.RenderAsync(element, (int)Math.Ceiling(framework.ActualWidth), (int)Math.Ceiling(framework.ActualHeight));
+        var pixels = await bitmap.GetPixelsAsync();
+        using var file = File.Create(path);
+        using var stream = file.AsRandomAccessStream();
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
+            (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, pixels.ToArray());
+        await encoder.FlushAsync();
+    }
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
     {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
