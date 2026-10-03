@@ -7,6 +7,7 @@ using FluentShell.Views;
 using FluentShell.Views.Session;
 using FluentShell.Views.Shell;
 using FluentShell.Views.Dialogs;
+using FluentShell.Views.Converters;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -123,6 +124,9 @@ internal sealed class SmokeApp : App
             settingsPage.SetSettings(new AppSettings(), "Offline fixture");
             root.UpdateLayout();
             await Task.Delay(200, timeout.Token);
+            foreach (var iconName in new[] { "Copy", "Paste", "Confirm" })
+                foreach (var scale in new[] { 1d, 1.25d, 1.5d })
+                    await VerifyIconEdgesAsync(settingsPage, root, iconName, scale, failures);
             var homePanel = (StackPanel)((ScrollViewer)settingsPage.FindName("SettingsHome")).Content;
             if (homePanel.Children.OfType<SettingsCard>().Count() != 7) failures.Add("Settings home must contain seven category cards.");
             var cardBounds = homePanel.Children.OfType<SettingsCard>().First();
@@ -140,6 +144,17 @@ internal sealed class SmokeApp : App
                 var crumbs = ((BreadcrumbBar)settingsPage.FindName("SettingsBreadcrumb")).ItemsSource as string[];
                 if (crumbs is not { Length: 2 } || crumbs[0] != "设置") failures.Add("Category breadcrumb must include root and current page.");
                 if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Collapsed) failures.Add("Category navigation must hide home.");
+                await Task.Delay(240, timeout.Token);
+                await CaptureAsync(root, Program.ReportPath + ".settings." + key + ".png");
+                if (key == "terminal")
+                {
+                    root.RequestedTheme = ElementTheme.Dark;
+                    root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 32, 32));
+                    await Task.Delay(200, timeout.Token);
+                    await CaptureAsync(root, Program.ReportPath + ".settings.terminal.dark.png");
+                    root.RequestedTheme = ElementTheme.Light;
+                    root.Background = new SolidColorBrush(Microsoft.UI.Colors.WhiteSmoke);
+                }
             }
             typeof(SettingsPage).GetMethod("ShowCategory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { "shortcuts" });
             root.UpdateLayout();
@@ -277,6 +292,60 @@ internal sealed class SmokeApp : App
         }
         catch (Exception e) { Program.Finish(e); }
     }
+    private static async Task VerifyIconEdgesAsync(SettingsPage settingsPage, Grid root, string iconName, double scale, List<string> failures)
+    {
+        var icon = new PathIcon
+        {
+            Data = IconGeometryConverter.Parse((string)settingsPage.Resources[$"Settings{iconName}IconData"]),
+            Style = (Style)settingsPage.Resources["SettingsOptionIconStyle"],
+            Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black)
+        };
+        var size = 20 * scale;
+        var tile = new Grid
+        {
+            Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.White)
+        };
+        tile.Children.Add(new Viewbox { Child = icon, Stretch = Stretch.Uniform });
+        Grid.SetColumn(tile, 1);
+        root.Children.Add(tile);
+        root.UpdateLayout();
+        var bitmap = new RenderTargetBitmap();
+        await bitmap.RenderAsync(tile, (int)size, (int)size);
+        var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+        var width = bitmap.PixelWidth;
+        var height = bitmap.PixelHeight;
+        var edgeIsClear = true;
+        var hasArtwork = false;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var offset = (y * width + x) * 4;
+                var painted = pixels[offset] < 255 || pixels[offset + 1] < 255 || pixels[offset + 2] < 255;
+                hasArtwork |= painted;
+                if (x == 0 || y == 0 || x == width - 1 || y == height - 1) edgeIsClear &= !painted;
+            }
+        }
+        var passed = edgeIsClear && hasArtwork;
+        if (!passed) failures.Add($"{iconName} at {scale} must draw a visible icon with clear edge pixels.");
+        await CaptureAsync(tile, Program.ReportPath + $".icon.{iconName}.{(int)(scale * 100)}.png");
+        ((Viewbox)tile.Children[0]).Child = new PathIcon
+        {
+            Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry),
+                (string)settingsPage.Resources[$"Settings{iconName}IconData"]),
+            Style = (Style)settingsPage.Resources["SettingsOptionIconStyle"],
+            Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black)
+        };
+        root.UpdateLayout();
+        await bitmap.RenderAsync(tile, (int)size, (int)size);
+        var tightPixels = (await bitmap.GetPixelsAsync()).ToArray();
+        var changedPixels = Enumerable.Range(0, width * height).Count(i =>
+            pixels[i * 4] != tightPixels[i * 4] || pixels[i * 4 + 1] != tightPixels[i * 4 + 1] || pixels[i * 4 + 2] != tightPixels[i * 4 + 2]);
+        Program.Results.Add(new { control = "settings icon edge coverage", iconName, scale, edgeIsClear, hasArtwork, changedPixels, passed });
+        root.Children.Remove(tile);
+    }
+
     private static void CheckScrollEdge(ScrollViewer scroller, FrameworkElement root, List<string> failures, string name)
     {
         var bar = Descendants(scroller).OfType<Microsoft.UI.Xaml.Controls.Primitives.ScrollBar>()

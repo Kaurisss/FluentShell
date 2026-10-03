@@ -2,7 +2,7 @@
 
 ## Microsoft Fluent UI System Icons
 
-The sidebar toggle uses vector path data from
+The sidebar toggle and settings-page icons use vector path data from
 [Microsoft Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons).
 
 Copyright (c) Microsoft Corporation.
