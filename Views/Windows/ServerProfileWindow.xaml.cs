@@ -51,7 +51,6 @@ public sealed partial class ServerProfileWindow : Window
         ToastSurface.Translation = new System.Numerics.Vector3(0, 0, 24);
         Title = editing is null ? "添加服务器" : "编辑服务器";
         WindowTitle.Text = Title;
-        EditorHeading.Text = Title;
         SaveButton.Content = editing is null ? "保存" : "保存修改";
         var ownerRoot = context.OwnerXamlRoot.Content as FrameworkElement;
         void ApplyWindowTheme(FrameworkElement? _, object? args)
