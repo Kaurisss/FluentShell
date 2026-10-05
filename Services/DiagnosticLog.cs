@@ -5,7 +5,8 @@ namespace FluentShell.Services;
 public static class DiagnosticLog
 {
     public static string Folder => Path.Combine(AppDataPaths.Folder, "Logs");
-    public static string Summary => $"FluentShell {typeof(App).Assembly.GetName().Version}\n{RuntimeInformation.OSDescription}\n进程架构：{RuntimeInformation.ProcessArchitecture}\n.NET {Environment.Version}";
+    public static string ApplicationVersion => typeof(App).Assembly.GetName().Version?.ToString(3) ?? "未知";
+    public static string Summary => $"FluentShell {ApplicationVersion}\n{RuntimeInformation.OSDescription}\n进程架构：{RuntimeInformation.ProcessArchitecture}\n.NET {Environment.Version}";
 
     public static void Record(string eventName)
     {

@@ -160,6 +160,55 @@ internal sealed class SmokeApp : App
                     root.RequestedTheme = ElementTheme.Light;
                     root.Background = new SolidColorBrush(Microsoft.UI.Colors.WhiteSmoke);
                 }
+                if (key == "about")
+                {
+                    var aboutPage = (ScrollViewer)settingsPage.FindName("AboutSettingsPage");
+                    var links = Descendants(aboutPage).OfType<HyperlinkButton>().ToArray();
+                    if (links.Length != 6 || links.Any(link => link.NavigateUri is null
+                        || link.NavigateUri.Scheme != "https" || link.NavigateUri.Host != "github.com"
+                        || !link.NavigateUri.AbsolutePath.StartsWith("/Kaurisss/FluentShell", StringComparison.Ordinal)
+                        || !link.IsTabStop || !link.IsEnabled))
+                        failures.Add("About page must expose six keyboard-accessible FluentShell project links.");
+                    var versionText = (TextBlock)settingsPage.FindName("VersionText");
+                    if (!versionText.Text.StartsWith("版本 ", StringComparison.Ordinal) || versionText.Text.Contains('\n'))
+                        failures.Add("About version must be separate from system diagnostics.");
+                    if (((TextBlock)settingsPage.FindName("DiagnosticSummaryText")).Text != DiagnosticLog.Summary)
+                        failures.Add("Visible diagnostics must match the copied summary.");
+                    if (((Image)settingsPage.FindName("AboutAppLogo")).Source is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 })
+                        failures.Add("About app logo must load successfully.");
+                    root.RequestedTheme = ElementTheme.Dark;
+                    root.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 32, 32));
+                    await Task.Delay(200, timeout.Token);
+                    await CaptureAsync(root, Program.ReportPath + ".settings.about.dark.png");
+                    root.ColumnDefinitions[0].Width = new GridLength(0);
+                    settingsPage.UpdateResponsiveLayout(16);
+                    // Constrain the viewport directly so layout verification also works with a hidden test window.
+                    root.Width = 560;
+                    root.Height = 760;
+                    await Task.Delay(200, timeout.Token);
+                    root.UpdateLayout();
+                    if (root.ActualWidth > 561 || aboutPage.ScrollableHeight <= 0)
+                        failures.Add("About narrow layout must use a 560-pixel scrolling viewport.");
+                    foreach (var link in links)
+                    {
+                        var bounds = link.TransformToVisual(aboutPage).TransformBounds(
+                            new Windows.Foundation.Rect(0, 0, link.ActualWidth, link.ActualHeight));
+                        if (bounds.Left < 0 || bounds.Right > aboutPage.ActualWidth + 1 || link.ActualWidth <= 0)
+                            failures.Add("About link is clipped in the narrow layout: " + link.Content);
+                    }
+                    await CaptureAsync(root, Program.ReportPath + ".settings.about.narrow.dark.png");
+                    aboutPage.ChangeView(null, aboutPage.ScrollableHeight, null, true);
+                    await Task.Delay(100, timeout.Token);
+                    await CaptureAsync(root, Program.ReportPath + ".settings.about.diagnostics.png");
+                    aboutPage.ChangeView(null, 0, null, true);
+                    root.Width = double.NaN;
+                    root.Height = double.NaN;
+                    root.ColumnDefinitions[0].Width = new GridLength(260);
+                    settingsPage.UpdateResponsiveLayout(30);
+                    root.RequestedTheme = ElementTheme.Light;
+                    root.Background = new SolidColorBrush(Microsoft.UI.Colors.WhiteSmoke);
+                    Program.Results.Add(new { control = "About project links, version and narrow dark layout", passed = failures.Count == 0 });
+                }
             }
             typeof(SettingsPage).GetMethod("ShowCategory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { "shortcuts" });
             root.UpdateLayout();

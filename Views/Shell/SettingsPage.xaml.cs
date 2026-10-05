@@ -30,7 +30,8 @@ public sealed partial class SettingsPage : UserControl
         BuildPreferenceEditors();
         UpdateResponsiveLayout(30);
         SettingsBreadcrumb.ItemsSource = new[] { "设置" };
-        VersionText.Text = Services.DiagnosticLog.Summary;
+        VersionText.Text = $"版本 {Services.DiagnosticLog.ApplicationVersion}";
+        DiagnosticSummaryText.Text = Services.DiagnosticLog.Summary;
     }
 
     public void UpdateResponsiveLayout(double horizontalSpacing)
