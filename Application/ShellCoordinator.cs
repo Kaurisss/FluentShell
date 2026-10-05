@@ -110,10 +110,37 @@ public sealed class ShellCoordinator
 
     public bool HasSavedCredential(ServerProfile profile) => _localStore.TryGetSecret(profile) is not null;
 
+    internal string ResolveTestSecret(ServerProfile profile, string enteredSecret)
+    {
+        if (!string.IsNullOrEmpty(enteredSecret)) return enteredSecret;
+        var original = Profiles.FirstOrDefault(candidate => candidate.Id == profile.Id);
+        if (original is not null && original.Protocol == profile.Protocol &&
+            original.Authentication == profile.Authentication && original.Username == profile.Username &&
+            _localStore.TryGetSecret(profile) is string saved)
+            return saved;
+        if (profile.Authentication == AuthenticationMethod.PrivateKey &&
+            !SshConnectionService.RequiresPrivateKeyPassphrase(profile.PrivateKeyPath))
+            return string.Empty;
+        throw new InvalidOperationException($"请填写“{profile.Name}”的密码或私钥口令；跳板服务器需先保存凭据。");
+    }
+
+    public async Task TestConnectionAsync(
+        ServerProfile profile, string enteredSecret,
+        Func<HostFingerprintRequiredEventArgs, CancellationToken, Task<bool>> confirmFingerprint,
+        CancellationToken cancellationToken)
+    {
+        var secret = await Task.Run(() => ResolveTestSecret(profile, enteredSecret), cancellationToken);
+        var connection = await CreateConnectionAsync(profile, secret, cancellationToken,
+            jump => Task.Run<string?>(() => ResolveTestSecret(jump, string.Empty), cancellationToken));
+        if (connection is null) throw new OperationCanceledException(cancellationToken);
+        await ConnectionTest.RunAsync(connection, confirmFingerprint, cancellationToken);
+    }
+
     public async Task<ISshConnection?> CreateConnectionAsync(
         ServerProfile profile,
         string secret,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<ServerProfile, Task<string?>>? resolveJumpSecret = null)
     {
         if (!Enum.IsDefined(profile.Protocol))
             throw new InvalidOperationException("不支持的连接协议，请编辑服务器配置。");
@@ -127,7 +154,7 @@ public sealed class ShellCoordinator
         if (jump is null) return new SshConnectionService(profile, secret, _settings.Preferences);
 
         cancellationToken.ThrowIfCancellationRequested();
-        var jumpSecret = await ResolveHopSecretAsync(jump);
+        var jumpSecret = await (resolveJumpSecret ?? ResolveHopSecretAsync)(jump);
         cancellationToken.ThrowIfCancellationRequested();
         return jumpSecret is null
             ? null

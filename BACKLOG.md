@@ -16,7 +16,7 @@
 - 使用专用 Linux 测试机覆盖密码、私钥、无口令私钥、错误凭据和指纹变化场景。
 - 服务器表单完善（2026-09-27 按当前源码核对，发布版本待确认；本次未运行应用或测试）：
   - ~~增加私钥文件选择器。~~ ✓ 已实现：使用系统文件选择器，允许选择无扩展名文件，取消选择保留原路径。见 [PrivateKeyFilePicker.cs](Services/PrivateKeyFilePicker.cs)。
-  - ~~增加私钥文件即时校验。~~ ✓ 已实现：选择文件后立即校验，手动输入路径后防抖 500ms 校验；检查文件存在、可读性和格式/解析错误，提示是否需要口令。校验中或未通过时禁用保存与保存并连接，提交时强制重新校验。此校验不验证输入口令是否正确。见 [PrivateKeyValidator.cs](Services/PrivateKeyValidator.cs) 和 [ServerProfileDialog.cs](Views/Dialogs/ServerProfileDialog.cs)。
+  - ~~增加私钥文件即时校验。~~ ✓ 已实现：选择文件后立即校验，手动输入路径后防抖 500ms 校验；检查文件存在、可读性和格式/解析错误，提示是否需要口令。校验中或未通过时禁用保存与保存并连接，提交时强制重新校验。此校验不验证输入口令是否正确。见 [PrivateKeyValidator.cs](Services/PrivateKeyValidator.cs) 和 [ServerProfileWindow.xaml.cs](Views/Windows/ServerProfileWindow.xaml.cs)。
   - ~~增加重复配置提示。~~ ✓ 已实现：按主机、端口、用户名比较，忽略主机大小写、保留用户名大小写，编辑时排除自身；仅提示、不阻止保存，不区分认证方式。见 [ServerProfileValidator.cs](Services/ServerProfileValidator.cs)。
   - 待补齐：普通字段失焦或即时校验及字段旁错误提示；当前名称、主机、用户名仅在提交时检查非空，端口使用 NumberBox 的 1–65535 范围约束，尚无独立的端口错误提示。
   - 已有 [私钥校验测试](Tests/FluentShell.Tests/PrivateKeyValidatorTests.cs) 和 [重复配置测试](Tests/FluentShell.Tests/ServerProfileValidatorTests.cs)；仍需运行验证并完成表单交互验收。

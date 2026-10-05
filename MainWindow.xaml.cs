@@ -66,7 +66,7 @@ public sealed partial class MainWindow : Window
             fingerprint => ShellDialogService.ConfirmFingerprintAsync(Content.XamlRoot, fingerprint));
         _serverCatalogPage = new ServerCatalogPage(
             _windowHandle,
-            _shell.HasSavedCredential);
+            _shell.HasSavedCredential) { TestConnectionAsync = _shell.TestConnectionAsync };
         _settingsPage = new SettingsPage(_windowHandle);
 
         _transferView.SetCenter(_transfers);
@@ -98,6 +98,7 @@ public sealed partial class MainWindow : Window
         };
         RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
+        Closed += (_, _) => _serverCatalogPage.CloseEditorWindows();
     }
 
     private void ConfigureWindow()
@@ -141,7 +142,7 @@ public sealed partial class MainWindow : Window
         _overviewPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
         _overviewPage.ConnectServerRequested += async (_, _) => await OpenServerPickerAsync();
         _overviewPage.AddServerRequested += async (_, _) =>
-            await _serverCatalogPage.ShowAddDialogAsync(Content.XamlRoot);
+            await _serverCatalogPage.ShowAddWindowAsync(Content.XamlRoot);
 
         _serverCatalogPage.RefreshRequested += (_, _) => RenderServerCatalog();
         _serverCatalogPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);

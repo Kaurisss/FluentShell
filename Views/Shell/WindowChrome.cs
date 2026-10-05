@@ -23,7 +23,7 @@ public static class WindowChrome
         });
     }
 
-    private static void ApplyTitleBarColors(AppWindow appWindow, ElementTheme actualTheme, string theme)
+    public static void ApplyTitleBarColors(AppWindow appWindow, ElementTheme actualTheme, string theme)
     {
         var useDark = theme == "深色" || (theme == "系统" && actualTheme == ElementTheme.Dark);
         var foreground = useDark ? Colors.White : Colors.Black;

@@ -54,6 +54,11 @@ internal sealed class SmokeApp : App
     private Window? _window;
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        UnhandledException += (_, error) =>
+        {
+            error.Handled = true;
+            Program.Finish(error.Exception);
+        };
         try
         {
             _window = new Window { Title = "FluentShell offline theme regression" };
@@ -305,18 +310,58 @@ internal sealed class SmokeApp : App
                 await CaptureAsync(root, Program.ReportPath + "." + protocol + ".png");
                 root.Children.Remove(filesWorkspace);
             }
-            var profileDialogTask = ServerProfileDialog.ShowAsync(null, new ServerProfileDialogContext
+            var testAttempt = 0;
+            var canceledAttempt = 0;
+            var editedProfile = new ServerProfile { Name = "测试服务器", Host = "offline.invalid", Username = "fixture" };
+            var profileWindow = new ServerProfileWindow(editedProfile, new ServerProfileWindowContext
             {
-                XamlRoot = root.XamlRoot, WindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window),
-                MutedTextBrush = (Brush)Resources["MutedTextBrush"], HasSavedCredential = false, ExistingProfiles = []
+                OwnerXamlRoot = root.XamlRoot, OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window),
+                HasSavedCredential = false, ExistingProfiles = [],
+                TestConnectionAsync = async (draft, secret, confirm, token) =>
+                {
+                    if (ReferenceEquals(draft, editedProfile) || draft.Host != "changed.invalid")
+                        throw new InvalidOperationException("Test must use a detached current draft.");
+                    testAttempt++;
+                    if (testAttempt == 1)
+                    {
+                        if (!await Task.Run(() => confirm(new HostFingerprintRequiredEventArgs
+                        { Profile = draft, Fingerprint = "SYNTHETIC-FINGERPRINT", KeyType = "fixture" }, token)))
+                            throw new IOException("Trust rejected");
+                    }
+                    else if (testAttempt == 2) throw new IOException("离线模拟连接失败");
+                    else
+                    {
+                        try { await Task.Delay(Timeout.Infinite, token); }
+                        finally { if (token.IsCancellationRequested) canceledAttempt = testAttempt; }
+                    }
+                }
             });
+            profileWindow.Activate();
             await Task.Delay(250);
-            var profileDialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
-                .SelectMany(popup => new[] { popup.Child }.Concat(Descendants(popup.Child))).OfType<ContentDialog>().First();
-            var form = (StackPanel)((ScrollViewer)profileDialog.Content).Content;
+            var profileRoot = (Grid)profileWindow.Content;
+            var formScroller = Descendants(profileRoot).OfType<ScrollViewer>().First();
+            var form = (StackPanel)formScroller.Content;
+            if (WinRT.Interop.WindowNative.GetWindowHandle(profileWindow) == WinRT.Interop.WindowNative.GetWindowHandle(_window))
+                failures.Add("Profile editor must have a separate top-level window.");
             var protocolBox = form.Children.OfType<ComboBox>().Single(box => (string)box.Header == "连接协议");
             var portBox = form.Children.OfType<NumberBox>().Single();
-            var authenticationBox = form.Children.OfType<ComboBox>().Single(box => (string)box.Header == "认证方式");
+            var authenticationBox = Descendants(form).OfType<ComboBox>().Single(box => (string)box.Header == "认证方式");
+            var secretBox = Descendants(form).OfType<PasswordBox>().Single();
+            var keyPathBox = Descendants(form).OfType<TextBox>().Single(box => box.Header as string == "私钥文件");
+            formScroller.ChangeView(null, formScroller.ScrollableHeight, null, disableAnimation: true);
+            profileRoot.UpdateLayout();
+            double Top(FrameworkElement element) => element.TransformToVisual(profileRoot).TransformPoint(new Windows.Foundation.Point()).Y;
+            if (Math.Abs(Top(authenticationBox) - Top(secretBox)) > 1)
+                failures.Add("Password input must share a row with authentication selection.");
+            await CaptureAsync(profileRoot, Program.ReportPath + ".ProfileWindow.PasswordRow.png");
+            authenticationBox.SelectedIndex = 1;
+            profileRoot.UpdateLayout();
+            if (Math.Abs(Top(authenticationBox) - Top(keyPathBox)) > 1 || Top(secretBox) <= Top(keyPathBox))
+                failures.Add("Key path must share the authentication row, with passphrase below.");
+            await CaptureAsync(profileRoot, Program.ReportPath + ".ProfileWindow.PrivateKeyRow.png");
+            authenticationBox.SelectedIndex = 0;
+            formScroller.ChangeView(null, 0, null, disableAnimation: true);
+            profileRoot.UpdateLayout();
             protocolBox.SelectedIndex = 2;
             if (portBox.Value != 21 || authenticationBox.IsEnabled) failures.Add("FTP form defaults incorrect.");
             protocolBox.SelectedIndex = 1;
@@ -324,11 +369,124 @@ internal sealed class SmokeApp : App
             portBox.Value = 2121;
             protocolBox.SelectedIndex = 2;
             if (portBox.Value != 2121) failures.Add("Protocol switch overwrote custom port.");
-            profileDialog.UpdateLayout();
-            await CaptureAsync(profileDialog, Program.ReportPath + ".ProtocolDialog.png");
-            profileDialog.Hide();
-            await profileDialogTask;
-            Program.Results.Add(new { control = "FTP/SFTP file-only workspaces and protocol form", passed = failures.Count == 0 });
+            protocolBox.SelectedIndex = 0;
+            form.Children.OfType<TextBox>().Single(box => (string)box.Header == "主机地址").Text = "changed.invalid";
+            var testButton = Descendants(profileRoot).OfType<Button>().Single(button => button.Content as string == "测试连接");
+            var saveButton = Descendants(profileRoot).OfType<Button>().Single(button => button.Content as string == "保存修改");
+            var saveAndConnectButton = Descendants(profileRoot).OfType<Button>().Single(button => button.Content as string == "保存并连接");
+            var testInfoBar = Descendants(profileRoot).OfType<InfoBar>().Single();
+            if (Descendants(profileRoot).OfType<Button>().Any(button => button.Name == "CancelButton" || button.Content as string == "取消"))
+                failures.Add("Profile editor must not have a footer cancel action.");
+            profileRoot.UpdateLayout();
+            var initialActionY = testButton.TransformToVisual(profileRoot).TransformPoint(new Windows.Foundation.Point()).Y;
+            var initialFormHeight = formScroller.ActualHeight;
+            void Click(Button button) => ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button)
+                    .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            async Task WaitFor(Func<bool> condition, int timeoutSeconds = 5)
+            {
+                using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                while (!condition()) await Task.Delay(30, wait.Token);
+            }
+            Click(testButton);
+            await WaitFor(() => Descendants(profileRoot).OfType<TextBlock>().Any(block => block.Text.Contains("SYNTHETIC-FINGERPRINT")));
+            if (testButton.Content is not ProgressRing { IsActive: true } || testInfoBar.IsOpen)
+                failures.Add("Test action must show an active progress ring without a result notification while running.");
+            if (saveButton.IsEnabled || saveAndConnectButton.IsEnabled)
+                failures.Add("Save actions must be disabled during a connection test.");
+            Click(Descendants(profileRoot).OfType<Button>().Single(button => button.Content as string == "信任并测试"));
+            await WaitFor(() => testButton.Content as string == "测试连接");
+            if (!testInfoBar.IsOpen || testInfoBar.Severity != InfoBarSeverity.Success)
+                failures.Add("Connection test success is missing.");
+            profileRoot.UpdateLayout();
+            var toastBounds = testInfoBar.TransformToVisual(profileRoot).TransformBounds(new Windows.Foundation.Rect(0, 0, testInfoBar.ActualWidth, testInfoBar.ActualHeight));
+            var actionY = testButton.TransformToVisual(profileRoot).TransformPoint(new Windows.Foundation.Point()).Y;
+            var currentFormHeight = formScroller.ActualHeight;
+            if (Math.Abs(initialActionY - actionY) > 1 || Math.Abs(initialFormHeight - currentFormHeight) > 1 || toastBounds.Top > 80 || toastBounds.Right > profileRoot.ActualWidth)
+                failures.Add("Test result must float at the top without moving form actions.");
+            await CaptureAsync(profileRoot, Program.ReportPath + ".ProfileWindow.Success.png");
+            await WaitFor(() => !testInfoBar.IsOpen, 8);
+            if (editedProfile.Host != "offline.invalid") failures.Add("Test mutated saved profile.");
+            Click(testButton);
+            await WaitFor(() => testAttempt == 2 && testButton.Content as string == "测试连接");
+            if (!testInfoBar.IsOpen || testInfoBar.Severity != InfoBarSeverity.Error || testInfoBar.Message != "离线模拟连接失败")
+                failures.Add("Connection test failure is missing.");
+            profileRoot.UpdateLayout();
+            var toastCloseButton = Descendants(testInfoBar).OfType<Button>().Single(button => button.Name == "CloseButton");
+            if (toastCloseButton.Background is not SolidColorBrush { Color.A: 0 } || toastCloseButton.BorderThickness != new Thickness(0))
+                failures.Add("Toast close button must have a transparent background and no border.");
+            void VerifyToastCloseButtonTheme()
+            {
+                var toastMessage = Descendants(testInfoBar).OfType<TextBlock>().Single(block => block.Name == "Message");
+                var toastCloseGlyph = Descendants(toastCloseButton).OfType<SymbolIcon>().Single();
+                if (toastMessage.Foreground is not SolidColorBrush messageForeground
+                    || toastCloseButton.Foreground is not SolidColorBrush closeForeground
+                    || toastCloseGlyph.Foreground is not SolidColorBrush glyphForeground
+                    || closeForeground.Color != messageForeground.Color || glyphForeground.Color != messageForeground.Color)
+                    failures.Add("Toast close glyph must follow the notification text theme.");
+            }
+            VerifyToastCloseButtonTheme();
+            Click(toastCloseButton);
+            if (testInfoBar.IsOpen) failures.Add("Toast close action did not dismiss the notification.");
+            Click(testButton);
+            await WaitFor(() => testAttempt == 3);
+            Click(testButton);
+            await WaitFor(() => testButton.Content as string == "测试连接");
+            if (!saveButton.IsEnabled) failures.Add("Save action did not recover after cancellation.");
+            if (!testInfoBar.IsOpen || testInfoBar.Severity != InfoBarSeverity.Informational)
+                failures.Add("Connection test cancellation is missing.");
+            profileRoot.UpdateLayout();
+            await CaptureAsync(profileRoot, Program.ReportPath + ".ProfileWindow.png");
+            root.RequestedTheme = ElementTheme.Dark;
+            await WaitFor(() => profileRoot.ActualTheme == ElementTheme.Dark);
+            profileWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(
+                (int)(560 * root.XamlRoot.RasterizationScale), (int)(560 * root.XamlRoot.RasterizationScale)));
+            await Task.Delay(100);
+            profileRoot.UpdateLayout();
+            VerifyToastCloseButtonTheme();
+            foreach (var button in new[] { testButton, saveButton, saveAndConnectButton })
+            {
+                var bounds = button.TransformToVisual(profileRoot).TransformBounds(new Windows.Foundation.Rect(0, 0, button.ActualWidth, button.ActualHeight));
+                if (bounds.Bottom > profileRoot.ActualHeight || bounds.Right > profileRoot.ActualWidth || bounds.Top < 0)
+                    failures.Add("Profile action is outside the resized window.");
+            }
+            await CaptureAsync(profileRoot, Program.ReportPath + ".ProfileWindow.NarrowDark.png");
+            Click(testButton);
+            await WaitFor(() => testAttempt == 4);
+            profileWindow.Close();
+            await WaitFor(() => canceledAttempt == 4);
+            if (await profileWindow.Completion is not null) failures.Add("Closing editor must cancel unsaved changes.");
+            if (editedProfile.Host != "offline.invalid") failures.Add("Closing editor mutated saved profile.");
+            root.RequestedTheme = ElementTheme.Light;
+            foreach (var connectAfterSave in new[] { false, true })
+            {
+                var savedProfile = connectAfterSave ? null : new ServerProfile { Name = "原名称", Host = "offline.invalid", Username = "fixture" };
+                var editor = new ServerProfileWindow(savedProfile, new ServerProfileWindowContext
+                {
+                    OwnerXamlRoot = root.XamlRoot, OwnerWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window),
+                    HasSavedCredential = false, ExistingProfiles = []
+                });
+                editor.Activate();
+                await Task.Delay(100);
+                var editorRoot = (Grid)editor.Content;
+                Button Action(string label) => Descendants(editorRoot).OfType<Button>().Single(button => button.Content as string == label);
+                var save = Action(connectAfterSave ? "保存并连接" : "保存修改");
+                var editorForm = (StackPanel)Descendants(editorRoot).OfType<ScrollViewer>().First().Content;
+                if (connectAfterSave)
+                {
+                    Click(save);
+                    await WaitFor(() => Descendants(editorRoot).OfType<TextBlock>().Any(block => block.Text.Contains("不能为空")));
+                    if (editor.Completion.IsCompleted) failures.Add("Invalid profile closed the editor.");
+                }
+                editorForm.Children.OfType<TextBox>().Single(box => (string)box.Header == "显示名称").Text = "已修改";
+                editorForm.Children.OfType<TextBox>().Single(box => (string)box.Header == "主机地址").Text = "saved.invalid";
+                Descendants(editorForm).OfType<TextBox>().Single(box => box.Header as string == "用户名").Text = "fixture";
+                Click(save);
+                var result = await editor.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+                if (result is null || result.Profile.Name != "已修改" || result.Profile.Host != "saved.invalid" || result.ConnectAfterSave != connectAfterSave)
+                    failures.Add("Profile editor save result was incorrect.");
+            }
+            Program.Results.Add(new { control = "FTP/SFTP workspaces and independent profile editor", passed = failures.Count == 0 });
             if (failures.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
             Program.Finish();
         }

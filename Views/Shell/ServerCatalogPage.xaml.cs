@@ -1,6 +1,7 @@
 using FluentShell.Core;
 using FluentShell.Models;
-using FluentShell.Views.Dialogs;
+using FluentShell.Services;
+using FluentShell.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -11,7 +12,9 @@ public sealed partial class ServerCatalogPage : UserControl
 {
     private readonly IntPtr _windowHandle;
     private readonly Func<ServerProfile, bool> _hasSavedCredential;
+    public TestServerConnection? TestConnectionAsync { get; set; }
     private IReadOnlyList<ServerProfile> _profiles = [];
+    private readonly Dictionary<Guid, ServerProfileWindow> _profileWindows = [];
     private bool _initialized;
     private readonly Style _profileItemStyle;
 
@@ -58,7 +61,12 @@ public sealed partial class ServerCatalogPage : UserControl
     }
 
 
-    public Task ShowAddDialogAsync(XamlRoot xamlRoot) => ShowProfileDialogAsync(null, xamlRoot);
+    public Task ShowAddWindowAsync(XamlRoot xamlRoot) => ShowProfileWindowAsync(null, xamlRoot);
+
+    public void CloseEditorWindows()
+    {
+        foreach (var window in _profileWindows.Values.ToArray()) window.Close();
+    }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         RefreshRequested?.Invoke(this, EventArgs.Empty);
@@ -81,10 +89,10 @@ public sealed partial class ServerCatalogPage : UserControl
     private async void EditButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is ServerProfile profile)
-            await ShowProfileDialogAsync(profile, XamlRoot);
+            await ShowProfileWindowAsync(profile, XamlRoot);
     }
 
-    private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowProfileDialogAsync(null, XamlRoot);
+    private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowProfileWindowAsync(null, XamlRoot);
 
     private async void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
@@ -106,16 +114,26 @@ public sealed partial class ServerCatalogPage : UserControl
             DeleteRequested?.Invoke(this, profile);
     }
 
-    private async Task ShowProfileDialogAsync(ServerProfile? editing, XamlRoot xamlRoot)
+    private async Task ShowProfileWindowAsync(ServerProfile? editing, XamlRoot xamlRoot)
     {
-        var result = await ServerProfileDialog.ShowAsync(editing, new ServerProfileDialogContext
+        var key = editing?.Id ?? Guid.Empty;
+        if (_profileWindows.TryGetValue(key, out var existing))
         {
-            XamlRoot = xamlRoot,
-            WindowHandle = _windowHandle,
-            MutedTextBrush = (Brush)Application.Current.Resources["MutedTextBrush"],
+            existing.Activate();
+            return;
+        }
+        var window = new ServerProfileWindow(editing, new ServerProfileWindowContext
+        {
+            OwnerXamlRoot = xamlRoot,
+            OwnerWindowHandle = _windowHandle,
             HasSavedCredential = editing is not null && _hasSavedCredential(editing),
-            ExistingProfiles = _profiles
+            ExistingProfiles = _profiles,
+            TestConnectionAsync = TestConnectionAsync
         });
+        _profileWindows.Add(key, window);
+        window.Closed += (_, _) => _profileWindows.Remove(key);
+        window.Activate();
+        var result = await window.Completion;
         if (result is null) return;
 
         ProfileSaved?.Invoke(this, new ServerProfileUpdate(

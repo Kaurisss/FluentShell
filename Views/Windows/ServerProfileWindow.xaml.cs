@@ -1,21 +1,28 @@
 using FluentShell.Models;
 using FluentShell.Services;
+using FluentShell.Views.Shell;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.Graphics;
+using Windows.System;
+using WinRT.Interop;
 
-namespace FluentShell.Views.Dialogs;
+namespace FluentShell.Views;
 
-public sealed class ServerProfileDialogContext
+public sealed class ServerProfileWindowContext
 {
-    public required XamlRoot XamlRoot { get; init; }
-    public required IntPtr WindowHandle { get; init; }
-    public required Brush MutedTextBrush { get; init; }
+    public required XamlRoot OwnerXamlRoot { get; init; }
+    public required IntPtr OwnerWindowHandle { get; init; }
     public required bool HasSavedCredential { get; init; }
     public required IReadOnlyList<ServerProfile> ExistingProfiles { get; init; }
+    public TestServerConnection? TestConnectionAsync { get; init; }
 }
 
-public sealed class ServerProfileDialogResult
+public sealed class ServerProfileWindowResult
 {
     public required ServerProfile Profile { get; init; }
     public required bool SaveCredential { get; init; }
@@ -25,17 +32,37 @@ public sealed class ServerProfileDialogResult
     public string EnteredSecret { get; init; } = string.Empty;
 }
 
-public static class ServerProfileDialog
+public sealed partial class ServerProfileWindow : Window
 {
     private static readonly PrivateKeyValidator PrivateKeyValidator = new();
     private static readonly ServerProfileValidator ServerProfileValidator = new();
+    private readonly TaskCompletionSource<ServerProfileWindowResult?> _completion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task<ServerProfileWindowResult?> Completion => _completion.Task;
 
     internal static bool HasPrivateKeyPath(string? privateKeyPath) => !string.IsNullOrWhiteSpace(privateKeyPath);
 
-    public static async Task<ServerProfileDialogResult?> ShowAsync(
+    public ServerProfileWindow(
         ServerProfile? editing,
-        ServerProfileDialogContext context)
+        ServerProfileWindowContext context)
     {
+        InitializeComponent();
+        ToastSurface.Translation = new System.Numerics.Vector3(0, 0, 24);
+        Title = editing is null ? "添加服务器" : "编辑服务器";
+        WindowTitle.Text = Title;
+        EditorHeading.Text = Title;
+        SaveButton.Content = editing is null ? "保存" : "保存修改";
+        var ownerRoot = context.OwnerXamlRoot.Content as FrameworkElement;
+        void ApplyWindowTheme(FrameworkElement? _, object? args)
+        {
+            if (ownerRoot is not null) RootGrid.RequestedTheme = ownerRoot.ActualTheme;
+            WindowChrome.ApplyTitleBarColors(AppWindow, RootGrid.ActualTheme, "系统");
+        }
+        ApplyWindowTheme(null, null);
+        if (ownerRoot is not null) ownerRoot.ActualThemeChanged += ApplyWindowTheme;
+        RootGrid.ActualThemeChanged += (_, _) => WindowChrome.ApplyTitleBarColors(AppWindow, RootGrid.ActualTheme, "系统");
+        ConfigureWindow(context);
         var originalUsername = editing?.Username;
         var originalAuthentication = editing?.Authentication;
         var originalProtocol = editing?.Protocol;
@@ -48,7 +75,7 @@ public static class ServerProfileDialog
         {
             Text = "FTP 会明文传输密码和文件，请仅用于可信网络。需要加密时请选择 SFTP。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"]
+            Style = (Style)RootGrid.Resources["WarningTextStyle"]
         };
         var name = new TextBox
         {
@@ -77,7 +104,7 @@ public static class ServerProfileDialog
         };
         var duplicateWarning = new TextBlock
         {
-            Foreground = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"],
+            Style = (Style)RootGrid.Resources["WarningTextStyle"],
             TextWrapping = TextWrapping.Wrap,
             Visibility = Visibility.Collapsed
         };
@@ -117,26 +144,21 @@ public static class ServerProfileDialog
             }
             jumpHost.SelectedItem = selected;
         }
-        var jumpInfo = new TextBlock
-        {
-            Text = "先连接跳板服务器，再由跳板访问此服务器。首版支持单级跳板。",
-            FontSize = 12,
-            Foreground = context.MutedTextBrush,
-            TextWrapping = TextWrapping.Wrap
-        };
+
         var jumpSection = new StackPanel { Spacing = 4 };
         jumpSection.Children.Add(jumpHost);
-        jumpSection.Children.Add(jumpInfo);
 
         var authentication = new ComboBox
         {
             Header = "认证方式",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Top,
             SelectedIndex = editing?.Authentication == AuthenticationMethod.PrivateKey ? 1 : 0
         };
         authentication.Items.Add(new ComboBoxItem { Content = "密码" });
         authentication.Items.Add(new ComboBoxItem { Content = "私钥" });
 
-        var secret = new PasswordBox { PasswordRevealMode = PasswordRevealMode.Peek };
+        var secret = new PasswordBox { PasswordRevealMode = PasswordRevealMode.Peek, VerticalAlignment = VerticalAlignment.Top };
         var rememberCredential = new CheckBox
         {
             Content = "保存凭据到 Windows 凭据管理器",
@@ -146,7 +168,7 @@ public static class ServerProfileDialog
         {
             Text = "凭据不会写入服务器配置文件。留空会保留已有凭据；取消勾选会删除这台服务器已保存的凭据。",
             FontSize = 12,
-            Foreground = context.MutedTextBrush,
+            Style = (Style)RootGrid.Resources["MutedTextStyle"],
             TextWrapping = TextWrapping.Wrap
         };
         var keyPath = new TextBox
@@ -167,16 +189,25 @@ public static class ServerProfileDialog
         {
             Text = "支持 OpenSSH 格式私钥；PuTTY .ppk 需先转换。",
             FontSize = 12,
-            Foreground = context.MutedTextBrush,
+            Style = (Style)RootGrid.Resources["MutedTextStyle"],
             TextWrapping = TextWrapping.Wrap
         };
         var keyValidationMessage = new TextBlock
         {
-            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Style = (Style)RootGrid.Resources["ErrorTextStyle"],
             TextWrapping = TextWrapping.Wrap,
             Visibility = Visibility.Collapsed
         };
         var keyPickerSection = new StackPanel { Spacing = 4 };
+        var authenticationFields = new Grid { ColumnSpacing = 12 };
+        authenticationFields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+        authenticationFields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        authenticationFields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        authenticationFields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        authenticationFields.Children.Add(authentication);
+        Grid.SetColumn(keyPickerSection, 1);
+        authenticationFields.Children.Add(keyPickerSection);
+        authenticationFields.Children.Add(secret);
 
         var notes = new TextBox
         {
@@ -189,18 +220,84 @@ public static class ServerProfileDialog
         var form = new StackPanel
         {
             Spacing = 12,
-            MaxWidth = 560,
-            Margin = new Thickness(0, 0, 16, 0)
+            Margin = new Thickness(32, 0, 32, 24)
         };
-        var validationError = new TextBlock
+        var validationError = ValidationError;
+
+        var validationState = new PrivateKeyValidationState(PrivateKeyValidator);
+        CancellationTokenSource? testCancellation = null;
+        var isClosed = false;
+        var isSaving = false;
+        ServerProfileWindowResult? savedResult = null;
+        var testButton = TestButton;
+        var testProgress = new ProgressRing { Width = 20, Height = 20, MinWidth = 20, MinHeight = 20, IsActive = false };
+        var trustPanel = TrustPanel;
+        var trustMessage = TrustMessage;
+        var acceptTrust = AcceptTrustButton;
+        var rejectTrust = RejectTrustButton;
+        TaskCompletionSource<bool>? trustDecision = null;
+        acceptTrust.Click += (_, _) => trustDecision?.TrySetResult(true);
+        rejectTrust.Click += (_, _) => trustDecision?.TrySetResult(false);
+        var toastTimer = DispatcherQueue.CreateTimer();
+        toastTimer.Interval = TimeSpan.FromSeconds(5);
+        toastTimer.IsRepeating = false;
+        toastTimer.Tick += (_, _) =>
         {
-            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed
+            if (!isClosed) ConnectionTestInfoBar.IsOpen = false;
+        };
+        var toastIsHovered = false;
+        ConnectionTestInfoBar.PointerEntered += (_, _) => { toastIsHovered = true; toastTimer.Stop(); };
+        ConnectionTestInfoBar.PointerExited += (_, _) =>
+        {
+            toastIsHovered = false;
+            if (!isClosed && ConnectionTestInfoBar.IsOpen) toastTimer.Start();
+        };
+        ConnectionTestInfoBar.GotFocus += (_, _) => toastTimer.Stop();
+        ConnectionTestInfoBar.LostFocus += (_, _) =>
+        {
+            if (!isClosed && ConnectionTestInfoBar.IsOpen && !toastIsHovered) toastTimer.Start();
+        };
+        ConnectionTestInfoBar.Closed += (_, _) =>
+        {
+            toastTimer.Stop();
+            ToastSurface.Visibility = Visibility.Collapsed;
         };
 
-        using var validationState = new PrivateKeyValidationState(PrivateKeyValidator);
-        ContentDialog? dialog = null;
+        void ShowTestResult(InfoBarSeverity severity, string title, string message)
+        {
+            if (isClosed) return;
+            toastTimer.Stop();
+            ConnectionTestInfoBar.Severity = severity;
+            ConnectionTestInfoBar.Title = title;
+            ConnectionTestInfoBar.Message = message;
+            ToastSurface.Visibility = Visibility.Visible;
+            ConnectionTestInfoBar.IsOpen = true;
+            if (!toastIsHovered) toastTimer.Start();
+        }
+
+        async Task<bool> ConfirmTestFingerprintAsync(HostFingerprintRequiredEventArgs fingerprint, CancellationToken token)
+        {
+            var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!form.DispatcherQueue.TryEnqueue(() =>
+            {
+                if (isClosed || token.IsCancellationRequested) { decision.TrySetResult(false); return; }
+                trustDecision = decision;
+                trustMessage.Text = $"首次连接“{fingerprint.Profile?.Name}”，请核对可信来源的服务器指纹。\n算法：{fingerprint.KeyType}\n指纹：{fingerprint.Fingerprint}";
+                trustPanel.Visibility = Visibility.Visible;
+            })) return false;
+            try { return await decision.Task.WaitAsync(token).ConfigureAwait(false); }
+            finally
+            {
+                form.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!isClosed && ReferenceEquals(trustDecision, decision))
+                    {
+                        trustDecision = null;
+                        trustPanel.Visibility = Visibility.Collapsed;
+                    }
+                });
+            }
+        }
 
         bool UsesPrivateKey() => authentication.SelectedIndex == 1;
         ConnectionProtocol SelectedProtocol() => (ConnectionProtocol)protocol.SelectedIndex;
@@ -213,12 +310,13 @@ public static class ServerProfileDialog
 
         void UpdateActionButtons()
         {
-            if (dialog is null) return;
+            if (isClosed) return;
 
             var keyIsReady = !UsesPrivateKey() ||
                 (!validationState.IsValidating && validationState.Result?.IsValid == true);
-            dialog.IsPrimaryButtonEnabled = keyIsReady;
-            dialog.IsSecondaryButtonEnabled = keyIsReady;
+            SaveButton.IsEnabled = keyIsReady && !isSaving && testCancellation is null;
+            SaveAndConnectButton.IsEnabled = SaveButton.IsEnabled;
+            testButton.IsEnabled = !isSaving && (testCancellation is not null || (keyIsReady && context.TestConnectionAsync is not null));
         }
 
         void UpdateSecretField()
@@ -255,9 +353,8 @@ public static class ServerProfileDialog
             keyValidationMessage.Visibility = string.IsNullOrWhiteSpace(message)
                 ? Visibility.Collapsed
                 : Visibility.Visible;
-            keyValidationMessage.Foreground = validationState.Result?.RequiresPassphrase == true
-                ? (Brush)Application.Current.Resources["SystemFillColorCautionBrush"]
-                : (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+            keyValidationMessage.Style = (Style)RootGrid.Resources[validationState.Result?.RequiresPassphrase == true
+                ? "WarningTextStyle" : "ErrorTextStyle"];
 
             UpdateSecretField();
             UpdateActionButtons();
@@ -267,6 +364,10 @@ public static class ServerProfileDialog
         {
             var usesPrivateKey = UsesPrivateKey();
             keyPickerSection.Visibility = usesPrivateKey ? Visibility.Visible : Visibility.Collapsed;
+            Grid.SetColumn(secret, usesPrivateKey ? 0 : 1);
+            Grid.SetColumnSpan(secret, usesPrivateKey ? 2 : 1);
+            Grid.SetRow(secret, usesPrivateKey ? 1 : 0);
+            secret.Margin = usesPrivateKey ? new Thickness(0, 12, 0, 0) : new Thickness(0);
             if (!usesPrivateKey)
                 validationState.Reset();
 
@@ -350,15 +451,16 @@ public static class ServerProfileDialog
             validationError.Visibility = Visibility.Collapsed;
         }
 
-        async void CancelCloseWhenInvalid(ContentDialog _, ContentDialogButtonClickEventArgs args)
+        async Task SaveAsync(bool connectAfterSave)
         {
-            var deferral = args.GetDeferral();
+            if (isClosed || isSaving || testCancellation is not null) return;
+            isSaving = true;
+            UpdateActionButtons();
             try
             {
                 var error = ValidateFields();
                 if (error is not null)
                 {
-                    args.Cancel = true;
                     ShowValidationError(error);
                     return;
                 }
@@ -368,25 +470,53 @@ public static class ServerProfileDialog
                     var result = await validationState.ValidateAsync(keyPath.Text.Trim(), force: true);
                     if (result is null || !result.IsValid)
                     {
-                        args.Cancel = true;
+                        if (isClosed) return;
                         ShowValidationError(result?.ErrorMessage ?? "私钥文件验证未完成，请重试。");
                         return;
                     }
                 }
 
+                if (isClosed) return;
                 ClearValidationError();
+                var selectedAuthentication = UsesPrivateKey() ? AuthenticationMethod.PrivateKey : AuthenticationMethod.Password;
+                var newUsername = user.Text.Trim();
+                var profile = editing ?? new ServerProfile();
+                profile.Protocol = SelectedProtocol();
+                profile.Name = name.Text.Trim();
+                profile.Host = host.Text.Trim();
+                profile.Port = SelectedPort();
+                profile.Username = newUsername;
+                profile.JumpProfileId = SelectedJumpId();
+                profile.Authentication = selectedAuthentication;
+                profile.PrivateKeyPath = keyPath.Text.Trim();
+                profile.Notes = notes.Text.Trim();
+                savedResult = new ServerProfileWindowResult
+                {
+                    Profile = profile,
+                    SaveCredential = rememberCredential.IsChecked == true,
+                    CredentialIdentityChanged = editing is not null &&
+                        (!string.Equals(originalUsername, newUsername, StringComparison.Ordinal) ||
+                            originalAuthentication != selectedAuthentication || originalProtocol != SelectedProtocol()),
+                    OriginalUsername = originalUsername ?? string.Empty,
+                    ConnectAfterSave = connectAfterSave,
+                    EnteredSecret = secret.Password
+                };
+                Close();
             }
             finally
             {
-                deferral.Complete();
+                isSaving = false;
+                UpdateActionButtons();
             }
         }
 
         var keyPickerRow = BuildKeyPickerRow(
             keyPath,
-            context.WindowHandle,
+            WindowNative.GetWindowHandle(this),
             keyValidationProgress,
-            async () => { await validationState.ValidateAsync(keyPath.Text.Trim(), force: true); });
+            async () => { await validationState.ValidateAsync(keyPath.Text.Trim(), force: true); },
+            () => isClosed,
+            ShowValidationError);
         keyPickerSection.Children.Add(keyPickerRow);
         keyPickerSection.Children.Add(keyFormatGuidance);
         keyPickerSection.Children.Add(keyValidationMessage);
@@ -400,13 +530,10 @@ public static class ServerProfileDialog
             port,
             userSection,
             jumpSection,
-            authentication,
-            keyPickerSection,
-            secret,
+            authenticationFields,
             rememberCredential,
             credentialInfo,
-            notes,
-            validationError
+            notes
         })
         {
             form.Children.Add(child);
@@ -415,23 +542,87 @@ public static class ServerProfileDialog
         var formScrollViewer = new ScrollViewer
         {
             Content = form,
-            MaxHeight = 620,
-            Margin = new Thickness(0, 0, -24, 0)
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollMode = ScrollMode.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+        EditorHost.Children.Add(formScrollViewer);
+
+        testButton.Click += async (_, _) =>
+        {
+            if (testCancellation is not null) { testCancellation.Cancel(); return; }
+            var error = ValidateFields();
+            if (error is not null) { ShowTestResult(InfoBarSeverity.Warning, "无法测试连接", error); return; }
+            if (context.TestConnectionAsync is null) return;
+            // Never mutate the saved profile when testing unsaved edits.
+            var draft = new ServerProfile
+            {
+                Id = editing?.Id ?? Guid.NewGuid(), Name = name.Text.Trim(),
+                Protocol = SelectedProtocol(), Host = host.Text.Trim(), Port = SelectedPort(),
+                Username = user.Text.Trim(), JumpProfileId = SelectedJumpId(),
+                Authentication = UsesPrivateKey() ? AuthenticationMethod.PrivateKey : AuthenticationMethod.Password,
+                PrivateKeyPath = keyPath.Text.Trim(), HostFingerprint = editing?.HostFingerprint ?? string.Empty
+            };
+            using var cancellation = new CancellationTokenSource();
+            testCancellation = cancellation;
+            formScrollViewer.IsEnabled = false;
+            ConnectionTestInfoBar.IsOpen = false;
+            ClearValidationError();
+            testProgress.IsActive = true;
+            testButton.Content = testProgress;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(testButton, "取消测试连接");
+            ToolTipService.SetToolTip(testButton, "正在测试连接，点击取消");
+            UpdateActionButtons();
+            try
+            {
+                await context.TestConnectionAsync(draft, secret.Password, ConfirmTestFingerprintAsync, cancellation.Token);
+                ShowTestResult(InfoBarSeverity.Success, "连接成功", "已断开测试连接。配置尚未保存。");
+            }
+            catch (OperationCanceledException)
+            {
+                ShowTestResult(InfoBarSeverity.Informational, "测试已取消", "可以修改配置后重新测试。");
+            }
+            catch (Exception exception)
+            {
+                ShowTestResult(InfoBarSeverity.Error, "连接失败", exception.Message);
+            }
+            finally
+            {
+                testCancellation = null;
+                trustDecision?.TrySetResult(false);
+                if (!isClosed)
+                {
+                    trustPanel.Visibility = Visibility.Collapsed;
+                    formScrollViewer.IsEnabled = true;
+                    testProgress.IsActive = false;
+                    testButton.Content = "测试连接";
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(testButton, "测试连接");
+                    ToolTipService.SetToolTip(testButton, "测试连接");
+                    UpdateActionButtons();
+                }
+            }
         };
 
-        dialog = new ContentDialog
+        SaveButton.Click += async (_, _) => await SaveAsync(false);
+        SaveAndConnectButton.Click += async (_, _) => await SaveAsync(true);
+        var saveShortcut = new KeyboardAccelerator { Key = VirtualKey.S, Modifiers = VirtualKeyModifiers.Control };
+        saveShortcut.Invoked += async (_, args) => { args.Handled = true; if (SaveButton.IsEnabled) await SaveAsync(false); };
+        var closeShortcut = new KeyboardAccelerator { Key = VirtualKey.Escape };
+        closeShortcut.Invoked += (_, args) => { args.Handled = true; Close(); };
+        RootGrid.KeyboardAccelerators.Add(saveShortcut);
+        RootGrid.KeyboardAccelerators.Add(closeShortcut);
+        RootGrid.Loaded += (_, _) => name.Focus(FocusState.Programmatic);
+        Closed += (_, _) =>
         {
-            Title = editing is null ? "添加服务器" : "编辑服务器",
-            Content = formScrollViewer,
-            PrimaryButtonText = editing is null ? "保存" : "保存修改",
-            SecondaryButtonText = "保存并连接",
-            CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = context.XamlRoot
+            isClosed = true;
+            toastTimer.Stop();
+            testCancellation?.Cancel();
+            trustDecision?.TrySetResult(false);
+            validationState.Dispose();
+            if (ownerRoot is not null) ownerRoot.ActualThemeChanged -= ApplyWindowTheme;
+            secret.Password = string.Empty;
+            _completion.TrySetResult(savedResult);
         };
-        dialog.PrimaryButtonClick += CancelCloseWhenInvalid;
-        dialog.SecondaryButtonClick += CancelCloseWhenInvalid;
-        dialog.Closed += (_, _) => validationState.Dispose();
 
         validationState.Changed += (_, _) => UpdateKeyValidationPresentation();
         void UpdateProtocolFields()
@@ -482,51 +673,36 @@ public static class ServerProfileDialog
         if (UsesPrivateKey() && !string.IsNullOrWhiteSpace(keyPath.Text))
             _ = validationState.ValidateAsync(keyPath.Text.Trim());
 
-        ContentDialogResult dialogResult;
-        try
+    }
+
+    private void ConfigureWindow(ServerProfileWindowContext context)
+    {
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(EditorTitleBar);
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "FluentShell.ico");
+        if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
+        var owner = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(context.OwnerWindowHandle));
+        var area = DisplayArea.GetFromWindowId(owner.Id, DisplayAreaFallback.Primary).WorkArea;
+        var scale = context.OwnerXamlRoot.RasterizationScale;
+        var width = Math.Min((int)(680 * scale), area.Width);
+        var height = Math.Min((int)(860 * scale), area.Height);
+        var x = Math.Clamp(owner.Position.X + (owner.Size.Width - width) / 2, area.X, area.X + area.Width - width);
+        var y = Math.Clamp(owner.Position.Y + (owner.Size.Height - height) / 2, area.Y, area.Y + area.Height - height);
+        AppWindow.MoveAndResize(new RectInt32(x, y, width, height));
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
-            dialogResult = await dialog.ShowAsync();
+            presenter.PreferredMinimumWidth = Math.Min((int)(560 * scale), area.Width);
+            presenter.PreferredMinimumHeight = Math.Min((int)(480 * scale), area.Height);
         }
-        finally
-        {
-            validationState.Dispose();
-        }
-
-        if (dialogResult == ContentDialogResult.None) return null;
-
-        var selectedAuthentication = UsesPrivateKey()
-            ? AuthenticationMethod.PrivateKey
-            : AuthenticationMethod.Password;
-        var newUsername = user.Text.Trim();
-        var profile = editing ?? new ServerProfile();
-        profile.Protocol = SelectedProtocol();
-        profile.Name = name.Text.Trim();
-        profile.Host = host.Text.Trim();
-        profile.Port = SelectedPort();
-        profile.Username = newUsername;
-        profile.JumpProfileId = SelectedJumpId();
-        profile.Authentication = selectedAuthentication;
-        profile.PrivateKeyPath = keyPath.Text.Trim();
-        profile.Notes = notes.Text.Trim();
-
-        return new ServerProfileDialogResult
-        {
-            Profile = profile,
-            SaveCredential = rememberCredential.IsChecked == true,
-            CredentialIdentityChanged = editing is not null &&
-                (!string.Equals(originalUsername, newUsername, StringComparison.Ordinal) ||
-                    originalAuthentication != selectedAuthentication || originalProtocol != SelectedProtocol()),
-            OriginalUsername = originalUsername ?? string.Empty,
-            ConnectAfterSave = dialogResult == ContentDialogResult.Secondary,
-            EnteredSecret = secret.Password
-        };
     }
 
     private static Grid BuildKeyPickerRow(
         TextBox keyPath,
         IntPtr windowHandle,
         ProgressRing validationProgress,
-        Func<Task> validateKeyPathAsync)
+        Func<Task> validateKeyPathAsync,
+        Func<bool> isClosed,
+        Action<string> showError)
     {
         var chooseKeyButton = new Button
         {
@@ -538,11 +714,22 @@ public static class ServerProfileDialog
         ToolTipService.SetToolTip(chooseKeyButton, "选择 OpenSSH 格式私钥文件");
         chooseKeyButton.Click += async (_, _) =>
         {
-            var selectedPath = await PrivateKeyFilePicker.PickAsync(windowHandle);
-            if (selectedPath is null) return;
-
-            keyPath.Text = selectedPath;
-            await validateKeyPathAsync();
+            chooseKeyButton.IsEnabled = false;
+            try
+            {
+                var selectedPath = await PrivateKeyFilePicker.PickAsync(windowHandle);
+                if (isClosed() || selectedPath is null) return;
+                keyPath.Text = selectedPath;
+                await validateKeyPathAsync();
+            }
+            catch (Exception)
+            {
+                if (!isClosed()) showError("无法打开私钥文件选择器，请直接输入文件路径。");
+            }
+            finally
+            {
+                if (!isClosed()) chooseKeyButton.IsEnabled = true;
+            }
         };
 
         var row = new Grid { ColumnSpacing = 8 };

@@ -9,6 +9,26 @@ namespace FluentShell.Tests;
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
+    public void Test_credentials_use_entered_or_matching_saved_secret_without_saving()
+    {
+        var original = new ServerProfile { Username = "fixture", Host = "offline.invalid" };
+        var store = new InMemoryLocalStore([original]);
+        store.SaveSecret(original, "synthetic-saved");
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile), store: store);
+        var draft = new ServerProfile { Id = original.Id, Username = original.Username };
+        Assert.AreEqual("synthetic-entered", coordinator.ResolveTestSecret(draft, "synthetic-entered"));
+        Assert.AreEqual("synthetic-saved", coordinator.ResolveTestSecret(draft, ""));
+        draft.Protocol = ConnectionProtocol.Ftp;
+        Assert.Throws<InvalidOperationException>(() => coordinator.ResolveTestSecret(draft, ""));
+        draft.Protocol = original.Protocol;
+        draft.Username = "different-user";
+        Assert.Throws<InvalidOperationException>(() => coordinator.ResolveTestSecret(draft, ""));
+        Assert.AreEqual("synthetic-saved", store.TryGetSecret(original));
+        Assert.IsNull(original.LastConnectedAt);
+        Assert.AreEqual(0, coordinator.SessionCount);
+    }
+
+    [TestMethod]
     public async Task Connection_factory_routes_file_protocols_and_rejects_invalid_ftp_configuration()
     {
         var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile));
