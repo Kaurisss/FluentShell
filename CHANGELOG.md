@@ -1,5 +1,77 @@
 # Changelog
 
+## [0.2.0](https://github.com/Kaurisss/FluentShell/compare/v0.1.0...v0.2.0) (2026-10-05)
+
+
+### 新功能
+
+* **authentication:** 添加对未加密私钥的支持，优化连接逻辑 ([042d777](https://github.com/Kaurisss/FluentShell/commit/042d7770f2ec5c33a7049fa2730591ec5d04ed9a))
+* **connection:** 添加连接失败事件处理与通知机制 ([04e2662](https://github.com/Kaurisss/FluentShell/commit/04e266209c001c3408542a757f30feb451c5c727))
+* **metrics:** enhance CPU metrics handling and UI updates ([6307fa4](https://github.com/Kaurisss/FluentShell/commit/6307fa43fff53aef170c01f3e1d87fa909228056))
+* **overview:** enhance overview page functionality and layout ([efa31d8](https://github.com/Kaurisss/FluentShell/commit/efa31d83205b3d24f6ecab40c318f82214ff21bb))
+* **server:** 新增服务器配置校验与私钥验证能力 ([83f59aa](https://github.com/Kaurisss/FluentShell/commit/83f59aab181c84a0992bc714d2426b6b25a2b5fe))
+* **session tabs:** 实现可滚动的自定义会话标签页系统 ([9b95f9b](https://github.com/Kaurisss/FluentShell/commit/9b95f9b47be8ce2c36909da249a869bb7034f754))
+* **session:** add workspace splitter and improve layout responsiveness ([c0e814b](https://github.com/Kaurisss/FluentShell/commit/c0e814befefd42011d9ab5c52ae1e365501c85a3))
+* **session:** enhance SFTP workspace operation status management ([d29aed5](https://github.com/Kaurisss/FluentShell/commit/d29aed559bac97bf79842dd29685902803b33f26))
+* **session:** 优化会话选择与活动状态管理 ([cd3ec4e](https://github.com/Kaurisss/FluentShell/commit/cd3ec4e0f041cd2565ae077fe6bf913053a38dbc))
+* **session:** 添加会话重连功能并优化连接状态管理 ([f36c681](https://github.com/Kaurisss/FluentShell/commit/f36c6814d02bed444651aad36a939d7b7c6caab8))
+* **settings:** enhance download directory management and migration logic ([7213d86](https://github.com/Kaurisss/FluentShell/commit/7213d8641cd7b3c147c36f85758262cdae206c26))
+* **settings:** 为所有设置项添加 Fluent UI 图标并重构图标转换器 ([62c8f8c](https://github.com/Kaurisss/FluentShell/commit/62c8f8c22235d987ad027ff637076812b8fe11d0))
+* **settings:** 重构关于页面并更新版本号至0.1.0 ([6e943da](https://github.com/Kaurisss/FluentShell/commit/6e943dad08bbde0cfbaac8c37dee6a1c9f8c2444))
+* **sftp,ui:** 完善传输进度统计与连接校验逻辑 ([59163c0](https://github.com/Kaurisss/FluentShell/commit/59163c08022ea57c4d5ed4fc5112f85ad49a941b))
+* **sftp:** add file conflict resolution dialog with rounded corners ([f7a7cdc](https://github.com/Kaurisss/FluentShell/commit/f7a7cdc068a7f184c898643d1bf19f93f0e8ced0))
+* **sftp:** add transfer queue visualization with speed and time estimation ([e8ee739](https://github.com/Kaurisss/FluentShell/commit/e8ee7390c72e60748636d4af83af1bddb935b52d))
+* **sftp:** add transfer speed and remaining time display ([547ac10](https://github.com/Kaurisss/FluentShell/commit/547ac1065f9608348d21a7fd94d60f2142078c96))
+* **sftp:** add transfer status panel and update UI interactions ([cecd44a](https://github.com/Kaurisss/FluentShell/commit/cecd44a610e7e6bfa5c0962dd91116baf03d27c4))
+* **sftp:** implement byte counting stream for download progress tracking ([d8142e5](https://github.com/Kaurisss/FluentShell/commit/d8142e5bc7e57fc1cc6e42087572722c2c8f7ac9))
+* **sftp:** 为工作区提示流程建立接缝，修复取消上传后继续传剩余文件 ([73b8bf3](https://github.com/Kaurisss/FluentShell/commit/73b8bf35a21f377842f12defaebb535d477de539))
+* **sftp:** 为本地和远程文件列表添加右键刷新菜单 ([3bcac5d](https://github.com/Kaurisss/FluentShell/commit/3bcac5d0e49699c9103b27a10bd92a40ea0b7d64))
+* **sftp:** 实现传输与浏览分离的双SFTP通道 ([52e6903](https://github.com/Kaurisss/FluentShell/commit/52e690383e5c1d2586eb65b2798250effb7f9d9e))
+* **sftp:** 实现双列面板的本地文件管理和直接传输功能 ([4861aa0](https://github.com/Kaurisss/FluentShell/commit/4861aa0e16f81c4bae724cf2e4a5d80b0e75262c))
+* **sftp文件列表:** 替换表格组件为Syncfusion Grid.WinUI并添加许可证支持 ([53bc8bb](https://github.com/Kaurisss/FluentShell/commit/53bc8bb2102e630a13b3732a3a0fb96e3e72b2d4))
+* **ui:** 为主窗口和SFTP工作区添加响应式布局适配 ([a327276](https://github.com/Kaurisss/FluentShell/commit/a327276ec67b33ed61f67915557f7c168d53d6c8))
+* **ui:** 优化界面适配与添加页面切换动画 ([881c41a](https://github.com/Kaurisss/FluentShell/commit/881c41a7e4c9c9d5aa9975eefa47dc47388574da))
+* **ui:** 增强主窗口和SFTP工作区的按钮样式与响应式布局 ([1417243](https://github.com/Kaurisss/FluentShell/commit/1417243f58d1c028b6079e4963f881ad7d6dc06f))
+* **ui:** 替换旧的连接进度提示为弹窗组件 ([40e5321](https://github.com/Kaurisss/FluentShell/commit/40e532114487e45a4cfb977c09388db406459d4f))
+* 优化UI与功能，完善服务器连接与会话管理 ([4fad400](https://github.com/Kaurisss/FluentShell/commit/4fad4003f2f2997be5770a555fb74f54d578c204))
+* 实现单级跳板服务器功能 ([2dfa818](https://github.com/Kaurisss/FluentShell/commit/2dfa81879f33666c75ecb01dda2093b1056548ee))
+* 新增 FTP 协议支持，完善服务器连接协议体系 ([1f7d4a3](https://github.com/Kaurisss/FluentShell/commit/1f7d4a3b6b963ec4aaf1d7a3eac93ac411d24eb4))
+* 新增全局传输中心，重构传输管理逻辑 ([2d66b1b](https://github.com/Kaurisss/FluentShell/commit/2d66b1b5dc3cb3c5885ced57aefabec8ec26fca2))
+* 新增终端颜色、快捷键和自动重连等设置功能 ([3093fff](https://github.com/Kaurisss/FluentShell/commit/3093fffc28e3181e42f00bf56391def4b7114864))
+* 重构服务器编辑为独立窗口并新增连接测试功能 ([5acd2cd](https://github.com/Kaurisss/FluentShell/commit/5acd2cd0719239c1384660fb4ae988d9d326175b))
+
+
+### 问题修复
+
+* **session:** 修复主机指纹未正确更新的问题 ([b0ad825](https://github.com/Kaurisss/FluentShell/commit/b0ad8253103514fa34dd3544b4edae110ac5d769))
+* **sftp:** hide transfer button immediately on cancel ([7b63c87](https://github.com/Kaurisss/FluentShell/commit/7b63c8732a4134ee65c71b1da1e3d27c8318f202))
+* **sftp:** 刷新目录列表时不再重绑数据源，修复表头右侧大片空白 ([473f9bd](https://github.com/Kaurisss/FluentShell/commit/473f9bd3304bdee7ac6c87bdb530bb9dd28f94c2))
+* **sftp:** 统一目录列表状态出口 ([94827ee](https://github.com/Kaurisss/FluentShell/commit/94827ee53b719db3770e5f8b6692761d9c7e8b40))
+
+
+### 重构与优化
+
+* **ServerProfileWindow:** 移除冗余的标题文本绑定 ([33a830a](https://github.com/Kaurisss/FluentShell/commit/33a830ae8cf0e4e53205656a88c3026966dee9b8))
+* **SessionWorkspace:** 优化SFTP面板的UI布局与图标样式 ([cbab07e](https://github.com/Kaurisss/FluentShell/commit/cbab07e95bc2b9b5b8aa0a36beed862db8ad0523))
+* **SessionWorkspace:** 移除内置终端命令输入区域及关联功能 ([08eb233](https://github.com/Kaurisss/FluentShell/commit/08eb233c0f5dcff56ff64293addaff75f074ffe5))
+* **session:** 把连接职责从会话工作区控件中拆出 ([f9df9b6](https://github.com/Kaurisss/FluentShell/commit/f9df9b6138c066f13234d57906b19200c70a3479))
+* **sftp:** 把接缝移到 SFTP 客户端，折回两个单调用点策略 ([cf6510c](https://github.com/Kaurisss/FluentShell/commit/cf6510ce27cd855823e3f83cb976402ef1cca2e4))
+* **sftp:** 移除冗余的显示隐藏文件逻辑并简化SFTP会话控制器 ([8d0d8db](https://github.com/Kaurisss/FluentShell/commit/8d0d8db8a2d56539761a60efc2e179725c1c45f0))
+* **SFTP:** 重构会话标签和工作区UI，优化错误提示与布局 ([98315d3](https://github.com/Kaurisss/FluentShell/commit/98315d3a6e0f0ff5be722d026bf41bb3fbf3f7f7))
+* **shell:** 把响应式布局规则收敛进外壳布局模式模块 ([f87e2b0](https://github.com/Kaurisss/FluentShell/commit/f87e2b0b45a7e9c384f2300e41a617d8bfca4b22))
+* **shell:** 让会话宿主与标签栏以 IShellSession 为类型 ([e6b9a7a](https://github.com/Kaurisss/FluentShell/commit/e6b9a7a70d400af6b7bd61a1a1357c4db51e9b22))
+* **SshConnection:** 完善连接失败清理逻辑并添加测试 ([ad5a604](https://github.com/Kaurisss/FluentShell/commit/ad5a60442ec7c7bda25b5bb7efcacfee2c1d7ac2))
+* **store:** 为本机存储建立接缝，阻止测试清空已保存服务器 ([49a2c44](https://github.com/Kaurisss/FluentShell/commit/49a2c445f2dd418500fa05aa276325f80dd1585e))
+* **ui,connect:** 重构连接对话框与连接流程 ([9cbe0ab](https://github.com/Kaurisss/FluentShell/commit/9cbe0ab55b910abc026def663dcb8e8099a93af3))
+* **ui:** 优化窗口和标签页布局 ([10f305a](https://github.com/Kaurisss/FluentShell/commit/10f305a0d96480e13022b09034ce367bab3acbd6))
+* **ui:** 更新主窗口和会话工作区的布局与样式 ([779ffef](https://github.com/Kaurisss/FluentShell/commit/779ffef5551e7a92a0b2c7efcce849c305cca9bd))
+* **ui:** 重构页面布局并优化响应式展示 ([3d583fa](https://github.com/Kaurisss/FluentShell/commit/3d583fa082675f38861a634c6142087be2439c1d))
+* 优化主题适配逻辑并添加主题回归测试 ([fe3d546](https://github.com/Kaurisss/FluentShell/commit/fe3d546148c273489ebf030c900f3a991334d492))
+* 移除凭据记忆相关功能 ([e834e44](https://github.com/Kaurisss/FluentShell/commit/e834e44918d2d25e808686f4aee4e1cb3761739e))
+* 移除过时的队列统计相关代码及扩展方法 ([a44c898](https://github.com/Kaurisss/FluentShell/commit/a44c89869a92aa79922667972d3959490399783d))
+* 重构会话选择逻辑与传输中心文件列表展示 ([81cf8de](https://github.com/Kaurisss/FluentShell/commit/81cf8de258a390ea63734d507f2e94356fcdfb42))
+* 重构界面布局与样式，优化视觉一致性 ([9a0ffa9](https://github.com/Kaurisss/FluentShell/commit/9a0ffa9f40c257576ddfc50b5e3ee1652aaa031e))
+
 ## 0.1.0 (2026-10-05)
 
 
