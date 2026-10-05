@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "changelog-sections": [
+    { "type": "feat", "section": "新功能", "hidden": false },
+    { "type": "fix", "section": "问题修复", "hidden": false },
+    { "type": "refactor", "section": "重构与优化", "hidden": false }
+  ],
+  "packages": {
+    ".": {}
+  }
+}
