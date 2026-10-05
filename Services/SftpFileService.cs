@@ -101,6 +101,6 @@ public sealed class SftpFileService : ISftpFileService
         var client = _clientProvider();
         return client?.IsConnected == true
             ? client
-            : throw new InvalidOperationException("SFTP 尚未连接。");
+            : throw new InvalidOperationException("文件服务尚未连接。");
     }
 }

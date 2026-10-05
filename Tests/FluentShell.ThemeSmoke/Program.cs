@@ -287,6 +287,48 @@ internal sealed class SmokeApp : App
             if (updates != 2 || resetBackground != "rgb(254, 254, 254)") failures.Add("Reset did not restore the terminal's default background.");
             Program.Results.Add(new { control = "terminal color settings", customBackground, resetBackground, updates, passed = failures.Count == 0 });
             await workspace.DisposeAsync();
+            root.Children.Remove(workspace);
+            foreach (var protocol in new[] { ConnectionProtocol.Ftp, ConnectionProtocol.Sftp })
+            {
+                var fileProfile = new ServerProfile { Protocol = protocol, Name = "Offline files", Host = "offline.invalid", Username = "fixture" };
+                await using var filesWorkspace = new SessionWorkspace(fileProfile, WinRT.Interop.WindowNative.GetWindowHandle(_window),
+                    (_, _) => Task.FromResult<ISshConnection?>(null), _ => Task.FromResult(false), () => Task.FromResult<string?>(null));
+                Grid.SetColumn(filesWorkspace, 1);
+                root.Children.Add(filesWorkspace);
+                root.UpdateLayout();
+                filesWorkspace.ExecuteShortcut("files");
+                if (filesWorkspace.Content is not SftpWorkspaceView || Descendants(filesWorkspace).OfType<TerminalPane>().Any())
+                    failures.Add(protocol + " must show files without a terminal.");
+                sidebar.UpdateSession(fileProfile, SessionConnectionState.Connected);
+                if (((StackPanel)sidebar.FindName("MetricsSection")).Visibility != Visibility.Collapsed)
+                    failures.Add(protocol + " must hide SSH metrics.");
+                await CaptureAsync(root, Program.ReportPath + "." + protocol + ".png");
+                root.Children.Remove(filesWorkspace);
+            }
+            var profileDialogTask = ServerProfileDialog.ShowAsync(null, new ServerProfileDialogContext
+            {
+                XamlRoot = root.XamlRoot, WindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window),
+                MutedTextBrush = (Brush)Resources["MutedTextBrush"], HasSavedCredential = false, ExistingProfiles = []
+            });
+            await Task.Delay(250);
+            var profileDialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .SelectMany(popup => new[] { popup.Child }.Concat(Descendants(popup.Child))).OfType<ContentDialog>().First();
+            var form = (StackPanel)((ScrollViewer)profileDialog.Content).Content;
+            var protocolBox = form.Children.OfType<ComboBox>().Single(box => (string)box.Header == "连接协议");
+            var portBox = form.Children.OfType<NumberBox>().Single();
+            var authenticationBox = form.Children.OfType<ComboBox>().Single(box => (string)box.Header == "认证方式");
+            protocolBox.SelectedIndex = 2;
+            if (portBox.Value != 21 || authenticationBox.IsEnabled) failures.Add("FTP form defaults incorrect.");
+            protocolBox.SelectedIndex = 1;
+            if (portBox.Value != 22 || !authenticationBox.IsEnabled) failures.Add("SFTP form defaults incorrect.");
+            portBox.Value = 2121;
+            protocolBox.SelectedIndex = 2;
+            if (portBox.Value != 2121) failures.Add("Protocol switch overwrote custom port.");
+            profileDialog.UpdateLayout();
+            await CaptureAsync(profileDialog, Program.ReportPath + ".ProtocolDialog.png");
+            profileDialog.Hide();
+            await profileDialogTask;
+            Program.Results.Add(new { control = "FTP/SFTP file-only workspaces and protocol form", passed = failures.Count == 0 });
             if (failures.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
             Program.Finish();
         }

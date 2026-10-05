@@ -6,6 +6,7 @@ namespace FluentShell.Services;
 public static class JumpHostResolver
 {
     public static bool IsEligible(ServerProfile target, ServerProfile candidate) =>
+        target.Protocol != ConnectionProtocol.Ftp && candidate.Protocol == ConnectionProtocol.Ssh &&
         target.Id != candidate.Id && candidate.JumpProfileId is null;
 
     public static ServerProfile? Resolve(ServerProfile target, IEnumerable<ServerProfile> profiles)

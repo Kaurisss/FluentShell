@@ -30,6 +30,7 @@ public sealed class ServerProfileList
         var copy = new ServerProfile
         {
             Name = source.Name + " 副本",
+            Protocol = source.Protocol,
             Host = source.Host,
             Port = source.Port,
             Username = source.Username,

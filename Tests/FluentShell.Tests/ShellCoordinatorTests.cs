@@ -9,6 +9,23 @@ namespace FluentShell.Tests;
 public sealed class ShellCoordinatorTests
 {
     [TestMethod]
+    public async Task Connection_factory_routes_file_protocols_and_rejects_invalid_ftp_configuration()
+    {
+        var coordinator = CreateCoordinator((profile, _, _) => new FakeShellSession(profile));
+        var profile = new ServerProfile { Host = "127.0.0.1", Username = "fixture", Protocol = ConnectionProtocol.Ftp };
+        await using (var ftp = await coordinator.CreateConnectionAsync(profile, "synthetic", CancellationToken.None))
+            Assert.IsInstanceOfType<FtpConnectionService>(ftp);
+        profile.Authentication = AuthenticationMethod.PrivateKey;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CreateConnectionAsync(profile, "", CancellationToken.None));
+        profile.Authentication = AuthenticationMethod.Password;
+        profile.JumpProfileId = Guid.NewGuid();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CreateConnectionAsync(profile, "", CancellationToken.None));
+        profile.JumpProfileId = null;
+        profile.Protocol = ConnectionProtocol.Sftp;
+        await using var sftp = await coordinator.CreateConnectionAsync(profile, "synthetic", CancellationToken.None);
+        Assert.IsInstanceOfType<SshConnectionService>(sftp);
+    }
+    [TestMethod]
     public async Task Terminal_colors_apply_to_existing_and_new_sessions_and_reset()
     {
         var store = new InMemoryLocalStore();

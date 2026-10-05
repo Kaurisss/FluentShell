@@ -29,7 +29,7 @@ public sealed class ServerProfileValidator
             if (profile is null || (editingProfileId.HasValue && profile.Id == editingProfileId.Value))
                 continue;
 
-            if (profile.Port != candidate.Port ||
+            if (profile.Protocol != candidate.Protocol || profile.Port != candidate.Port ||
                 !string.Equals(profile.Host?.Trim(), host, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(profile.Username?.Trim(), username, StringComparison.Ordinal))
             {

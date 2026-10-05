@@ -29,7 +29,7 @@
                 <TextBlock x:Name="AddressText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
                 <TextBlock x:Name="UserText" Foreground="{ThemeResource MutedTextBrush}" FontSize="13" TextTrimming="CharacterEllipsis" />
             </StackPanel>
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="MetricsSection" Spacing="12">
                 <TextBlock Text="服务器状态" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
                 <StackPanel x:Name="MetricsPanel" Spacing="12" />
             </StackPanel>

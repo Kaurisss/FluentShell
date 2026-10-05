@@ -115,6 +115,14 @@ public sealed class ShellCoordinator
         string secret,
         CancellationToken cancellationToken)
     {
+        if (!Enum.IsDefined(profile.Protocol))
+            throw new InvalidOperationException("不支持的连接协议，请编辑服务器配置。");
+        if (profile.Protocol == ConnectionProtocol.Ftp)
+        {
+            if (profile.JumpProfileId is not null || profile.Authentication != AuthenticationMethod.Password)
+                throw new InvalidOperationException("FTP 仅支持直连和密码认证。");
+            return new FtpConnectionService(profile, secret, _settings.Preferences);
+        }
         var jump = JumpHostResolver.Resolve(profile, Profiles);
         if (jump is null) return new SshConnectionService(profile, secret, _settings.Preferences);
 
@@ -129,7 +137,10 @@ public sealed class ShellCoordinator
     public async Task SaveProfileAsync(ServerProfileUpdate update)
     {
         if (update.CredentialIdentityChanged)
+        {
             _localStore.RemoveSecret(update.Profile.Id, update.OriginalUsername);
+            _sessionSecrets.Remove(update.Profile.Id);
+        }
         if (update.SaveCredential)
         {
             if (!string.IsNullOrEmpty(update.EnteredSecret))

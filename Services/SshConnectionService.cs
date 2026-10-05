@@ -50,8 +50,8 @@ public sealed class SshConnectionService : ISshConnection
     public event EventHandler<HostFingerprintRequiredEventArgs>? HostFingerprintRequired;
     public event EventHandler? Disconnected;
 
-    public bool IsConnected => _sshClient?.IsConnected == true &&
-        _shell?.CanWrite == true &&
+    public bool IsConnected => (!_profile.SupportsTerminal ||
+        (_sshClient?.IsConnected == true && _shell?.CanWrite == true)) &&
         _sftpClient?.IsConnected == true &&
         _transferSftpClient?.IsConnected == true;
     public ISftpClient? SftpClient => _remoteFileClient;
@@ -71,21 +71,24 @@ public sealed class SshConnectionService : ISshConnection
         var privateKeyFiles = new List<PrivateKeyFile>();
         try
         {
-            sshClient = new SshClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
-            sshClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
-            sshClient.HostKeyReceived += OnHostKeyReceived;
-            sshConnectTask = sshClient.ConnectAsync(cancellationToken);
-            await AwaitOperationAsync(sshConnectTask, cancellationToken).ConfigureAwait(false);
-
-            if (!sshClient.IsConnected)
+            if (_profile.SupportsTerminal)
             {
-                throw new SshConnectionException("SSH 客户端报告已连接，但连接状态检查失败。");
-            }
+                sshClient = new SshClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
+                sshClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
+                sshClient.HostKeyReceived += OnHostKeyReceived;
+                sshConnectTask = sshClient.ConnectAsync(cancellationToken);
+                await AwaitOperationAsync(sshConnectTask, cancellationToken).ConfigureAwait(false);
 
-            shellTask = Task.Run(
-                () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
-                cancellationToken);
-            shell = await AwaitOperationAsync(shellTask, cancellationToken).ConfigureAwait(false);
+                if (!sshClient.IsConnected)
+                {
+                    throw new SshConnectionException("SSH 客户端报告已连接，但连接状态检查失败。");
+                }
+
+                shellTask = Task.Run(
+                    () => sshClient.CreateShellStream("xterm", 120, 32, 1200, 800, 4096),
+                    cancellationToken);
+                shell = await AwaitOperationAsync(shellTask, cancellationToken).ConfigureAwait(false);
+            }
 
             sftpClient = new SftpClient(CreateConnectionInfo(_profile, _secret, privateKeyFiles, _connectHost, _connectPort, _preferences.ConnectionTimeoutSeconds));
             sftpClient.KeepAliveInterval = _preferences.KeepAliveSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(_preferences.KeepAliveSeconds);
@@ -405,8 +408,8 @@ public sealed class SshConnectionService : ISshConnection
             try
             {
                 var shell = _shell;
-                if (shell is null || !IsConnected) break;
-                if (shell.DataAvailable)
+                if (!IsConnected) break;
+                if (shell?.DataAvailable == true)
                 {
                     var output = shell.Read();
                     if (!string.IsNullOrEmpty(output)) OutputReceived?.Invoke(this, output);

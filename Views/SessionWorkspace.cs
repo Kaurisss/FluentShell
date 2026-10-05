@@ -128,6 +128,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private UIElement BuildLayout()
     {
+        if (!_profile.SupportsTerminal) return _sftpView;
         _workspaceGrid.Background = null;
         _workspaceGrid.RowDefinitions.Add(new RowDefinition
         {
@@ -196,7 +197,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _sftpWorkspace.RefreshTransferCommands();
         await _sftpWorkspace.RefreshAsync();
-        _terminalPane.FocusTerminal();
+        if (_profile.SupportsTerminal) _terminalPane.FocusTerminal();
     }
 
     private void CancelSftpTransfer() => _sftpWorkspace.ConnectionLost();
@@ -219,6 +220,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
 
     private void ToggleSftp()
     {
+        if (!_profile.SupportsTerminal) return;
         if (_isSftpCollapsed)
             ExpandSftp();
         else

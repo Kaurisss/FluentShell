@@ -15,6 +15,7 @@
                         <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Address}" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Address}" />
                         <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock Text="{Binding ProtocolLabel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Text="{Binding Username}" MaxWidth="120" FontSize="12" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding AuthenticationLabel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>

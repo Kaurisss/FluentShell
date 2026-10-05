@@ -231,6 +231,7 @@ public sealed class SessionConnection : IAsyncDisposable
 
     private async Task RefreshMetricsLoopAsync(ISshConnection connection)
     {
+        if (!_profile.SupportsTerminal) return;
         var previous = _metricsCts;
         var current = new CancellationTokenSource();
         _metricsCts = current;

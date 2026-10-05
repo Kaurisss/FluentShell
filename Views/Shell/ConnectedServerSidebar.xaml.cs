@@ -13,6 +13,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
     private Guid? _currentProfileId;
     private SessionConnectionState _connectionState = SessionConnectionState.Disconnected;
     private bool _hasFreshMetrics;
+    private bool _supportsMetrics = true;
 
     public ConnectedServerSidebar()
     {
@@ -32,6 +33,8 @@ public sealed partial class ConnectedServerSidebar : UserControl
     {
         var profileChanged = _currentProfileId != profile.Id;
         _currentProfileId = profile.Id;
+        _supportsMetrics = profile.SupportsTerminal;
+        MetricsSection.Visibility = _supportsMetrics ? Visibility.Visible : Visibility.Collapsed;
         _connectionState = connectionState;
         if (profileChanged || connectionState != SessionConnectionState.Connected)
             ClearMetricPresentation();
@@ -46,7 +49,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
         ReconnectButton.Visibility = connectionState == SessionConnectionState.Disconnected
             ? Visibility.Visible
             : Visibility.Collapsed;
-        AddressText.Text = profile.Address;
+        AddressText.Text = $"{profile.ProtocolLabel} · {profile.Address}";
         UserText.Text = $"用户：{profile.Username}";
         AutomationProperties.SetName(CompactReconnectButton, $"重新连接 {profile.Name}");
         ToolTipService.SetToolTip(CompactReconnectButton, $"重新连接 {profile.Name}");
@@ -85,7 +88,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
         CompactReconnectPanel.Visibility = isDisconnected ? Visibility.Visible : Visibility.Collapsed;
         CompactConnectingPanel.Visibility = isConnecting ? Visibility.Visible : Visibility.Collapsed;
         CompactConnectionProgressRing.IsActive = isConnecting;
-        CompactMetricsPanel.Visibility = _connectionState == SessionConnectionState.Connected
+        CompactMetricsPanel.Visibility = _supportsMetrics && _connectionState == SessionConnectionState.Connected
             ? Visibility.Visible
             : Visibility.Collapsed;
 

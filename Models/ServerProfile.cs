@@ -9,9 +9,17 @@ public enum AuthenticationMethod
     PrivateKey
 }
 
+public enum ConnectionProtocol
+{
+    Ssh = 0,
+    Sftp = 1,
+    Ftp = 2
+}
+
 public sealed class ServerProfile : INotifyPropertyChanged
 {
     private string _name = string.Empty;
+    private ConnectionProtocol _protocol;
     private string _host = string.Empty;
     private int _port = 22;
     private string _username = string.Empty;
@@ -25,6 +33,10 @@ public sealed class ServerProfile : INotifyPropertyChanged
     public Guid Id { get; init; } = Guid.NewGuid();
 
     public string Name { get => _name; set => SetField(ref _name, value); }
+    public ConnectionProtocol Protocol { get => _protocol; set => SetField(ref _protocol, value); }
+    public bool SupportsTerminal => Protocol == ConnectionProtocol.Ssh;
+    public string ProtocolLabel => Protocol switch { ConnectionProtocol.Sftp => "SFTP", ConnectionProtocol.Ftp => "FTP", _ => "SSH" };
+    public static int DefaultPort(ConnectionProtocol protocol) => protocol == ConnectionProtocol.Ftp ? 21 : 22;
     public string Host { get => _host; set => SetField(ref _host, value); }
     public int Port { get => _port; set => SetField(ref _port, value); }
     public string Username { get => _username; set => SetField(ref _username, value); }
@@ -46,6 +58,11 @@ public sealed class ServerProfile : INotifyPropertyChanged
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        if (propertyName == nameof(Protocol))
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ProtocolLabel)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SupportsTerminal)));
+        }
         if (propertyName is nameof(Host) or nameof(Port)) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Address)));
         if (propertyName is nameof(Authentication)) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AuthenticationLabel)));
         if (propertyName is nameof(LastConnectedAt)) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastConnectedLabel)));

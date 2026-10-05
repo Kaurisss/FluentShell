@@ -8,6 +8,20 @@ namespace FluentShell.Tests;
 public sealed class SessionConnectionTests
 {
     [TestMethod]
+    [DataRow(ConnectionProtocol.Sftp)]
+    [DataRow(ConnectionProtocol.Ftp)]
+    public async Task File_only_sessions_do_not_poll_shell_metrics(ConnectionProtocol protocol)
+    {
+        var connection = new FakeSshConnection();
+        await using var session = CreateSession(connection, new ServerProfile { Protocol = protocol });
+        session.SetActive(true);
+        await session.ConnectAsync();
+        session.SetActive(false);
+        session.SetActive(true);
+        Assert.IsTrue(session.IsConnected);
+        Assert.IsFalse(connection.MetricsRequested.Task.IsCompleted);
+    }
+    [TestMethod]
     public async Task Automatic_reconnect_runs_after_disconnect_and_stops_on_dispose()
     {
         var first = new FakeSshConnection();

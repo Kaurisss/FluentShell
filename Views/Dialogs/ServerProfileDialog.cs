@@ -38,6 +38,18 @@ public static class ServerProfileDialog
     {
         var originalUsername = editing?.Username;
         var originalAuthentication = editing?.Authentication;
+        var originalProtocol = editing?.Protocol;
+        var protocol = new ComboBox { Header = "连接协议", HorizontalAlignment = HorizontalAlignment.Stretch };
+        protocol.Items.Add(new ComboBoxItem { Content = "SSH（终端和文件）" });
+        protocol.Items.Add(new ComboBoxItem { Content = "SFTP（仅文件）" });
+        protocol.Items.Add(new ComboBoxItem { Content = "FTP（仅文件，不加密）" });
+        protocol.SelectedIndex = (int)(editing?.Protocol ?? ConnectionProtocol.Ssh);
+        var ftpWarning = new TextBlock
+        {
+            Text = "FTP 会明文传输密码和文件，请仅用于可信网络。需要加密时请选择 SFTP。",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"]
+        };
         var name = new TextBox
         {
             Header = "显示名称",
@@ -80,7 +92,7 @@ public static class ServerProfileDialog
         };
         jumpHost.Items.Add(new ComboBoxItem { Content = "不使用（直连）" });
         foreach (var candidate in context.ExistingProfiles.Where(candidate =>
-                     candidate.JumpProfileId is null &&
+                     candidate.Protocol == ConnectionProtocol.Ssh && candidate.JumpProfileId is null &&
                      (editing is null || JumpHostResolver.IsEligible(editing, candidate))))
         {
             jumpHost.Items.Add(new ComboBoxItem
@@ -191,12 +203,13 @@ public static class ServerProfileDialog
         ContentDialog? dialog = null;
 
         bool UsesPrivateKey() => authentication.SelectedIndex == 1;
+        ConnectionProtocol SelectedProtocol() => (ConnectionProtocol)protocol.SelectedIndex;
 
         Guid? SelectedJumpId() => (jumpHost.SelectedItem as ComboBoxItem)?.Tag is Guid id ? id : null;
 
         int SelectedPort() => port.Value is double value && !double.IsNaN(value)
             ? (int)value
-            : 22;
+            : ServerProfile.DefaultPort(SelectedProtocol());
 
         void UpdateActionButtons()
         {
@@ -215,6 +228,7 @@ public static class ServerProfileDialog
                 ? AuthenticationMethod.PrivateKey
                 : AuthenticationMethod.Password;
             var canPreserveSavedCredential = context.HasSavedCredential &&
+                originalProtocol == SelectedProtocol() &&
                 originalAuthentication == selectedAuthentication &&
                 string.Equals(originalUsername, user.Text.Trim(), StringComparison.Ordinal);
             var requiresPassphrase = validationState.Result?.RequiresPassphrase == true;
@@ -264,6 +278,7 @@ public static class ServerProfileDialog
         {
             var candidate = new ServerProfile
             {
+                Protocol = SelectedProtocol(),
                 Host = host.Text,
                 Port = SelectedPort(),
                 Username = user.Text
@@ -295,6 +310,12 @@ public static class ServerProfileDialog
 
         string? ValidateFields()
         {
+            if (!Enum.IsDefined(SelectedProtocol())) return "请选择连接协议。";
+            if (!double.IsFinite(port.Value) || port.Value < 1 || port.Value > 65535 || port.Value != Math.Truncate(port.Value))
+                return "端口必须是 1 到 65535 之间的整数。";
+            if (editing is not null && SelectedProtocol() != ConnectionProtocol.Ssh &&
+                context.ExistingProfiles.Any(profile => profile.JumpProfileId == editing.Id))
+                return "这台服务器正被用作 SSH 跳板，不能改为仅文件协议。";
             if (string.IsNullOrWhiteSpace(name.Text) ||
                 string.IsNullOrWhiteSpace(host.Text) ||
                 string.IsNullOrWhiteSpace(user.Text))
@@ -373,6 +394,8 @@ public static class ServerProfileDialog
         foreach (var child in new UIElement[]
         {
             name,
+            protocol,
+            ftpWarning,
             host,
             port,
             userSection,
@@ -411,6 +434,29 @@ public static class ServerProfileDialog
         dialog.Closed += (_, _) => validationState.Dispose();
 
         validationState.Changed += (_, _) => UpdateKeyValidationPresentation();
+        void UpdateProtocolFields()
+        {
+            var isFtp = SelectedProtocol() == ConnectionProtocol.Ftp;
+            ftpWarning.Visibility = isFtp ? Visibility.Visible : Visibility.Collapsed;
+            jumpSection.Visibility = isFtp ? Visibility.Collapsed : Visibility.Visible;
+            authentication.IsEnabled = !isFtp;
+            if (isFtp)
+            {
+                authentication.SelectedIndex = 0;
+                jumpHost.SelectedIndex = 0;
+            }
+            UpdateAuthenticationFields();
+            UpdateDuplicateWarning();
+        }
+        var previousProtocol = SelectedProtocol();
+        protocol.SelectionChanged += (_, _) =>
+        {
+            if (port.Value == ServerProfile.DefaultPort(previousProtocol))
+                port.Value = ServerProfile.DefaultPort(SelectedProtocol());
+            previousProtocol = SelectedProtocol();
+            secret.Password = string.Empty;
+            UpdateProtocolFields();
+        };
         authentication.SelectionChanged += (_, _) =>
         {
             UpdateAuthenticationFields();
@@ -432,8 +478,7 @@ public static class ServerProfileDialog
         port.ValueChanged += (_, _) => UpdateDuplicateWarning();
         keyPath.TextChanged += (_, _) => ScheduleKeyPathValidation();
 
-        UpdateAuthenticationFields();
-        UpdateDuplicateWarning();
+        UpdateProtocolFields();
         if (UsesPrivateKey() && !string.IsNullOrWhiteSpace(keyPath.Text))
             _ = validationState.ValidateAsync(keyPath.Text.Trim());
 
@@ -454,6 +499,7 @@ public static class ServerProfileDialog
             : AuthenticationMethod.Password;
         var newUsername = user.Text.Trim();
         var profile = editing ?? new ServerProfile();
+        profile.Protocol = SelectedProtocol();
         profile.Name = name.Text.Trim();
         profile.Host = host.Text.Trim();
         profile.Port = SelectedPort();
@@ -469,7 +515,7 @@ public static class ServerProfileDialog
             SaveCredential = rememberCredential.IsChecked == true,
             CredentialIdentityChanged = editing is not null &&
                 (!string.Equals(originalUsername, newUsername, StringComparison.Ordinal) ||
-                    originalAuthentication != selectedAuthentication),
+                    originalAuthentication != selectedAuthentication || originalProtocol != SelectedProtocol()),
             OriginalUsername = originalUsername ?? string.Empty,
             ConnectAfterSave = dialogResult == ContentDialogResult.Secondary,
             EnteredSecret = secret.Password
