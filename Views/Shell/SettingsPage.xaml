@@ -25,7 +25,7 @@
                 <toolkit:SettingsCard Header="文件传输" Description="下载目录、隐藏文件、冲突处理与传输通知" IsClickEnabled="True" IsActionIconVisible="True" Tag="transfer" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Folder" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="快捷键" Description="自定义会话切换、终端查找和文件管理器快捷键" IsClickEnabled="True" IsActionIconVisible="True" Tag="shortcuts" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Edit" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="数据管理" Description="导入和导出应用设置、打开数据目录与恢复默认值" IsClickEnabled="True" IsActionIconVisible="True" Tag="data" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Save" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="关于与诊断" Description="版本信息、应用日志和诊断信息" IsClickEnabled="True" IsActionIconVisible="True" Tag="about" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Help" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="关于与诊断" Description="应用信息、GitHub 仓库、开源许可与诊断" IsClickEnabled="True" IsActionIconVisible="True" Tag="about" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Help" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="AppearancePage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
@@ -126,18 +126,56 @@
         </ScrollViewer>
         <ScrollViewer x:Name="AboutSettingsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <PathIcon Data="{Binding Source={StaticResource SettingsAboutIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" />
-                    <TextBlock Text="FluentShell" Style="{StaticResource PageHeadingStyle}" VerticalAlignment="Center" />
-                </StackPanel>
-                <TextBlock x:Name="VersionText" TextWrapping="Wrap" />
-                <toolkit:SettingsCard Header="日志目录" Description="查看应用运行日志。">
+                <Border Padding="24" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <TextBlock Text="FluentShell" Style="{StaticResource PageHeadingStyle}" />
+                            <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            <TextBlock Text="适用于 Windows 的 SSH 终端与 FTP/SFTP 文件管理工具。" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="项目与支持" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
+                <toolkit:SettingsCard Header="GitHub 仓库" Description="Kaurisss/FluentShell · 查看源码与参与贡献。">
+                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Link" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="RepositoryLink" Content="打开仓库" NavigateUri="https://github.com/Kaurisss/FluentShell" AutomationProperties.Name="在浏览器中打开 FluentShell GitHub 仓库" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="版本发布" Description="查看发布记录并下载新版本。">
+                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDownloadIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="ReleasesLink" Content="查看发布" NavigateUri="https://github.com/Kaurisss/FluentShell/releases" AutomationProperties.Name="在浏览器中查看 FluentShell 版本发布" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="问题反馈" Description="报告问题或提出功能建议，帮助改进 FluentShell。">
+                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Message" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="IssuesLink" Content="前往 Issues" NavigateUri="https://github.com/Kaurisss/FluentShell/issues" AutomationProperties.Name="在浏览器中打开 FluentShell GitHub Issues" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="使用文档" Description="了解安装步骤、主要功能和使用方法。">
+                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsLogsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="DocumentationLink" Content="阅读文档" NavigateUri="https://github.com/Kaurisss/FluentShell#readme" AutomationProperties.Name="在浏览器中阅读 FluentShell 使用文档" />
+                </toolkit:SettingsCard>
+
+                <TextBlock Text="开源与致谢" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
+                <toolkit:SettingsCard Header="MIT 许可证" Description="由 Kaurisss 开发，以 MIT 许可证开放源码。">
+                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsConfirmIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="LicenseLink" Content="查看许可" NavigateUri="https://github.com/Kaurisss/FluentShell/blob/main/LICENSE" AutomationProperties.Name="在浏览器中查看 FluentShell MIT 许可证" />
+                </toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="第三方组件" Description="感谢开源社区；查看图标、终端及其他第三方组件的许可说明。">
+                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="People" /></toolkit:SettingsCard.HeaderIcon>
+                    <HyperlinkButton x:Name="ThirdPartyNoticesLink" Content="许可与致谢" NavigateUri="https://github.com/Kaurisss/FluentShell/blob/main/THIRD-PARTY-NOTICES.md" AutomationProperties.Name="在浏览器中查看 FluentShell 第三方组件许可与致谢" />
+                </toolkit:SettingsCard>
+
+                <TextBlock Text="日志与诊断" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
+                <toolkit:SettingsCard Header="日志目录" Description="查看应用运行日志，协助排查问题。">
                     <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsLogsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="打开日志目录" Click="OpenLogsFolder_Click" /></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="诊断信息" Description="复制版本、操作系统和进程架构。">
+                <toolkit:SettingsCard Header="诊断信息">
                     <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDiagnosticsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.Description><TextBlock x:Name="DiagnosticSummaryText" TextWrapping="Wrap" IsTextSelectionEnabled="True" /></toolkit:SettingsCard.Description>
                     <Button Content="复制诊断信息" Click="CopyDiagnostics_Click" /></toolkit:SettingsCard>
-                <TextBlock Text="诊断信息仅包含版本、操作系统和进程架构；日志不记录凭据或终端内容。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
+                <TextBlock Text="诊断信息包含应用版本、操作系统、进程架构和 .NET 版本，可在反馈问题时附上。日志不记录凭据或终端内容。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock Text="© 2026 Kaurisss" FontSize="12" Margin="0,12,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </ScrollViewer>
     </Grid>
