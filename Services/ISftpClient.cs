@@ -22,6 +22,7 @@ public interface ISftpClient
     IReadOnlyList<RemoteDirectoryEntry> ListDirectory(string path);
     void CreateDirectory(string path);
     bool Exists(string path);
+    bool IsDirectory(string path);
     void DeleteDirectory(string path);
     void DeleteFile(string path);
 

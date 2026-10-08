@@ -2,8 +2,12 @@
 
 namespace FluentShell.Core;
 
-/// <summary>一个待上传的本地文件：远程侧使用的文件名，以及按需打开的读取流。</summary>
-public sealed record SftpUploadFile(string Name, Func<Task<Stream>> OpenRead);
+/// <summary>一个待上传的本地条目，名称是远程目标目录下的单个名称。</summary>
+public abstract record SftpUploadEntry(string Name);
+
+public sealed record SftpUploadFile(string Name, Func<Task<Stream>> OpenRead) : SftpUploadEntry(Name);
+
+public sealed record SftpUploadDirectory(string Name, string LocalPath) : SftpUploadEntry(Name);
 
 /// <summary>
 /// SFTP 工作区的呈现与提示出口：快照往这里渲染，用户的确认与选择从这里取回。
@@ -19,6 +23,7 @@ public interface ISftpWorkspaceView
     event EventHandler<string>? NavigateRequested;
     event EventHandler? NewFolderRequested;
     event EventHandler? UploadRequested;
+    event EventHandler? UploadFolderRequested;
     event EventHandler<RemoteFileItem>? DownloadRequested;
     event EventHandler<RemoteFileItem>? RenameRequested;
     event EventHandler<RemoteFileItem>? DeleteRequested;
@@ -31,6 +36,7 @@ public interface ISftpWorkspaceView
     Task<bool> ConfirmOverwriteAsync(string name);
     Task<bool> ConfirmDeleteAsync(RemoteFileItem item);
     Task<IReadOnlyList<SftpUploadFile>> PickUploadFilesAsync();
+    Task<SftpUploadDirectory?> PickUploadFolderAsync();
 
     /// <summary>返回 <c>null</c> 表示用户没有选择目录。</summary>
     Task<string?> PickDownloadDirectoryAsync();
@@ -39,7 +45,7 @@ public interface ISftpWorkspaceView
 /// <summary>双列面板直接传输入口；工具栏继续使用选择器。</summary>
 public interface ISftpPaneTransferView
 {
-    event EventHandler<IReadOnlyList<SftpUploadFile>>? UploadSelectionRequested;
+    event EventHandler<IReadOnlyList<SftpUploadEntry>>? UploadSelectionRequested;
     event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
     void RefreshLocalDirectory();
 }

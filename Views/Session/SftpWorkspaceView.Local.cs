@@ -14,7 +14,7 @@ public sealed partial class SftpWorkspaceView
     private string? _localPath;
     private int _localReadVersion;
     private bool _localLoaded;
-    public event EventHandler<IReadOnlyList<SftpUploadFile>>? UploadSelectionRequested;
+    public event EventHandler<IReadOnlyList<SftpUploadEntry>>? UploadSelectionRequested;
     public event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
 
     private void InitializeLocalPane()
@@ -155,15 +155,17 @@ public sealed partial class SftpWorkspaceView
         menu.Opened += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
-            upload.IsEnabled = _snapshot.CanTransfer && selected.Length > 0 && selected.All(file => !file.IsDirectory);
+            upload.IsEnabled = _snapshot.CanTransfer && selected.Length > 0 && selected.All(file => file.Name != "..");
         };
         upload.Click += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
-            if (!_snapshot.CanTransfer || selected.Length == 0 || selected.Any(file => file.IsDirectory)) return;
-            var files = selected.Select(file => new SftpUploadFile(file.Name,
-                () => Task.FromResult<Stream>(new FileStream(file.FullPath, FileMode.Open, FileAccess.Read,
-                    FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan)))).ToArray();
+            if (!_snapshot.CanTransfer || selected.Length == 0 || selected.Any(file => file.Name == "..")) return;
+            var files = selected.Select(file => file.IsDirectory
+                ? (SftpUploadEntry)new SftpUploadDirectory(file.Name, file.FullPath)
+                : new SftpUploadFile(file.Name,
+                    () => Task.Run<Stream>(() => new FileStream(file.FullPath, FileMode.Open, FileAccess.Read,
+                        FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan)))).ToArray();
             UploadSelectionRequested?.Invoke(this, files);
         };
         menu.Items.Add(upload);

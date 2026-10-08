@@ -60,6 +60,7 @@ public sealed class SftpWorkspace : IDisposable
         _view.NavigateRequested += View_NavigateRequested;
         _view.NewFolderRequested += View_NewFolderRequested;
         _view.UploadRequested += View_UploadRequested;
+        _view.UploadFolderRequested += View_UploadFolderRequested;
         _view.DownloadRequested += View_DownloadRequested;
         _view.RenameRequested += View_RenameRequested;
         _view.DeleteRequested += View_DeleteRequested;
@@ -86,29 +87,28 @@ public sealed class SftpWorkspace : IDisposable
         await _controller.CreateDirectoryAsync(name);
     }
 
-    public async Task UploadAsync(IReadOnlyList<SftpUploadFile>? selectedFiles = null)
+    public Task UploadAsync(IReadOnlyList<SftpUploadEntry>? selectedFiles = null) =>
+        PickAndUploadAsync(async () => (IReadOnlyList<SftpUploadEntry>?)selectedFiles?.ToArray()
+            ?? await _view.PickUploadFilesAsync());
+
+    public Task UploadFolderAsync() => PickAndUploadAsync(async () =>
+        await _view.PickUploadFolderAsync() is { } folder ? [folder] : []);
+
+    private async Task PickAndUploadAsync(Func<Task<IReadOnlyList<SftpUploadEntry>>> pick)
     {
         if (_disposed || _batchRunning || _picking) return;
         _picking = true;
         try
         {
-            var files = selectedFiles?.ToArray() ?? await _view.PickUploadFilesAsync();
+            var files = await pick();
             if (files.Count == 0 || _disposed) return;
             // Capture the target once: browsing another directory must not redirect later files.
             var target = _controller.Snapshot.DirectoryListing.Path;
             TransferTask? task = null;
-            async Task Run() => await RunBatchAsync(task!, async () =>
-            {
-                await _controller.BuildUploadQueueAsync(files);
-                foreach (var file in files)
-                {
-                    await _controller.WaitForTransferAsync();
-                    await _controller.UploadAsync(file.Name, file.OpenRead, ConfirmOverwriteAsync, target);
-                    if (_controller.Snapshot.Transfer.State == SftpTransferState.Cancelled) break;
-                }
-            });
+            async Task Run() => await RunBatchAsync(task!, () =>
+                _controller.UploadEntriesAsync(files, ConfirmOverwriteAsync, target));
             task = _transfers.Add(_connectionId, _connectionLabel, "上传",
-                files.Count == 1 ? files[0].Name : $"{files[0].Name} 等 {files.Count} 个文件",
+                files.Count == 1 ? files[0].Name : $"{files[0].Name} 等 {files.Count} 项",
                 target, Run, CanRetry);
             await Run();
         }
@@ -155,7 +155,7 @@ public sealed class SftpWorkspace : IDisposable
             task.Finish(snapshot.Queue.FailedCount > 0 ||
                 snapshot.Transfer.State is SftpTransferState.Failed or SftpTransferState.Cancelled,
                 snapshot.Queue.FailedCount > 0
-                    ? $"{snapshot.Queue.FailedCount} 个文件失败，请展开文件明细。重试会重新执行本批任务，并再次确认覆盖。"
+                    ? $"{snapshot.Queue.FailedCount} 项失败，请展开文件明细。重试会重新执行本批任务，并再次确认覆盖。"
                     : snapshot.Transfer.Message);
         }
         catch (OperationCanceledException)
@@ -233,6 +233,8 @@ public sealed class SftpWorkspace : IDisposable
 
     private async void View_UploadRequested(object? sender, EventArgs e) => await UploadAsync();
 
+    private async void View_UploadFolderRequested(object? sender, EventArgs e) => await UploadFolderAsync();
+
     private async void View_DownloadRequested(object? sender, RemoteFileItem item) =>
         await DownloadAsync(item);
 
@@ -240,7 +242,7 @@ public sealed class SftpWorkspace : IDisposable
 
     private async void View_DeleteRequested(object? sender, RemoteFileItem item) => await DeleteAsync(item);
 
-    private async void UploadSelectionRequested(object? sender, IReadOnlyList<SftpUploadFile> files) => await UploadAsync(files);
+    private async void UploadSelectionRequested(object? sender, IReadOnlyList<SftpUploadEntry> files) => await UploadAsync(files);
 
     private async void DownloadToLocalRequested(object? sender, SftpPaneDownload request) =>
         await DownloadAsync(request.Item, request.Destination);
@@ -259,6 +261,7 @@ public sealed class SftpWorkspace : IDisposable
         _view.NavigateRequested -= View_NavigateRequested;
         _view.NewFolderRequested -= View_NewFolderRequested;
         _view.UploadRequested -= View_UploadRequested;
+        _view.UploadFolderRequested -= View_UploadFolderRequested;
         _view.DownloadRequested -= View_DownloadRequested;
         _view.RenameRequested -= View_RenameRequested;
         _view.DeleteRequested -= View_DeleteRequested;

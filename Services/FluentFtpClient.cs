@@ -22,6 +22,7 @@ internal sealed class FluentFtpClient(AsyncFtpClient client) : ISftpClient
     public void CreateDirectory(string path) => client.CreateDirectory(ValidateArgument(path)).GetAwaiter().GetResult();
     public bool Exists(string path) => client.FileExists(ValidateArgument(path)).GetAwaiter().GetResult() ||
         client.DirectoryExists(path).GetAwaiter().GetResult();
+    public bool IsDirectory(string path) => client.DirectoryExists(ValidateArgument(path)).GetAwaiter().GetResult();
     public void DeleteFile(string path) => client.DeleteFile(ValidateArgument(path)).GetAwaiter().GetResult();
 
     public void DeleteDirectory(string path)

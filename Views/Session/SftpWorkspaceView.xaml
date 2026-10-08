@@ -101,7 +101,15 @@
                 Style="{StaticResource SftpPathInputStyle}"
                 KeyDown="PathBox_KeyDown" />
             <StackPanel x:Name="Toolbar" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="4,0,0,0">
-                <Button x:Name="UploadButton" Style="{StaticResource SftpToolbarButtonStyle}" Click="UploadButton_Click" ToolTipService.ToolTip="上传" AutomationProperties.Name="上传"><SymbolIcon Symbol="Upload" /></Button>
+                <Button x:Name="UploadButton" Style="{StaticResource SftpToolbarButtonStyle}" ToolTipService.ToolTip="上传" AutomationProperties.Name="上传">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="上传文件" FontFamily="Microsoft YaHei UI" Click="UploadButton_Click" />
+                            <MenuFlyoutItem Text="上传文件夹" FontFamily="Microsoft YaHei UI" Click="UploadFolder_Click" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <SymbolIcon Symbol="Upload" />
+                </Button>
                 <Button x:Name="DownloadButton" Style="{StaticResource SftpToolbarButtonStyle}" Click="DownloadButton_Click" ToolTipService.ToolTip="下载" AutomationProperties.Name="下载"><SymbolIcon Symbol="Download" /></Button>
             </StackPanel>
         </Grid>

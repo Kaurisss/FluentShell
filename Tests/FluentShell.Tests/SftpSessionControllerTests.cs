@@ -547,6 +547,8 @@ public sealed class SftpSessionControllerTests
         }
 
         public Task<bool> ExistsAsync(string path) => Task.FromResult(false);
+        public Task<bool> IsDirectoryAsync(string path) => Task.FromResult(
+            DirectoryItems.Any(item => item.FullPath == path && item.IsDirectory));
 
         public byte[]? UploadedBytes { get; private set; }
 

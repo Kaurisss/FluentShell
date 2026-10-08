@@ -50,6 +50,9 @@ public sealed class SftpFileService : ISftpFileService
     public Task<bool> ExistsAsync(string path) =>
         Task.Run(() => GetConnectedClient().Exists(path));
 
+    public Task<bool> IsDirectoryAsync(string path) =>
+        Task.Run(() => GetConnectedClient().IsDirectory(path));
+
     public Task UploadAsync(
         Stream input,
         string remotePath,

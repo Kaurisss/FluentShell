@@ -19,6 +19,66 @@ public sealed class SftpWorkspaceTests
     }
 
     [TestMethod]
+    public async Task Folder_picker_upload_registers_one_task_and_creates_an_empty_folder()
+    {
+        var path = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "FluentShell-folder-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var service = new FakeSftpFileService();
+            var view = new RecordingSftpWorkspaceView { UploadFolder = new("空文件夹", path) };
+            var center = new TransferCenter();
+            using var workspace = new SftpWorkspace(service, view, transfers: center);
+            await workspace.UploadFolderAsync();
+            Assert.AreEqual(1, service.CreateDirectoryCallCount);
+            Assert.AreEqual(0, view.UploadPickerCalls);
+            Assert.HasCount(1, center.Groups[0]);
+            Assert.AreEqual(TransferTaskState.Completed, center.Groups[0][0].State);
+            Assert.AreEqual(1, center.Groups[0][0].Queue.CompletedCount);
+        }
+        finally { Directory.Delete(path); }
+    }
+
+    [TestMethod]
+    public async Task Cancelling_folder_picker_does_not_register_a_task()
+    {
+        var service = new FakeSftpFileService();
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, new RecordingSftpWorkspaceView(), transfers: center);
+        await workspace.UploadFolderAsync();
+        Assert.HasCount(0, center.Groups);
+        Assert.AreEqual(0, service.CreateDirectoryCallCount);
+    }
+
+    [TestMethod]
+    public async Task Retrying_folder_upload_rebuilds_the_plan_and_keeps_one_task()
+    {
+        var path = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "FluentShell-retry-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(path, "原文件.txt"), "original");
+            var service = new FakeSftpFileService
+            {
+                UploadHandler = _ => Task.FromException(new IOException("临时失败"))
+            };
+            var center = new TransferCenter();
+            using var workspace = new SftpWorkspace(service, new RecordingSftpWorkspaceView(), transfers: center);
+            await workspace.UploadAsync([new SftpUploadDirectory("资料", path)]);
+            var task = center.Groups[0][0];
+            Assert.IsTrue(task.CanRetry);
+            service.UploadHandler = null;
+            File.WriteAllText(Path.Combine(path, "新文件.txt"), "new");
+
+            await task.RetryAsync();
+
+            Assert.HasCount(1, center.Groups[0]);
+            Assert.AreEqual(TransferTaskState.Completed, task.State);
+            Assert.AreEqual(3, task.Queue.CompletedCount);
+            Assert.AreEqual(3, service.UploadCallCount);
+        }
+        finally { Directory.Delete(path, recursive: true); }
+    }
+
+    [TestMethod]
     public async Task Pane_download_uses_local_path_without_opening_picker()
     {
         var service = new FakeSftpFileService();
@@ -181,7 +241,7 @@ public sealed class SftpWorkspaceTests
     }
 
     [TestMethod]
-    public void Each_view_request_drives_its_flow()
+    public async Task Each_view_request_drives_its_flow()
     {
         var item = new RemoteFileItem { Name = "文件.txt", FullPath = "/文件.txt" };
         var fileService = new FakeSftpFileService();
@@ -196,14 +256,21 @@ public sealed class SftpWorkspaceTests
             view,
             localFileExists: _ => false,
             createLocalOutput: _ => new MemoryStream());
+        var uploaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        view.OnRender = snapshot =>
+        {
+            if (snapshot.Transfer.State == SftpTransferState.Completed && snapshot.Transfer.Message.StartsWith("已上传"))
+                uploaded.TrySetResult();
+        };
 
         view.RaiseRefreshRequested();
         view.RaiseNavigateRequested("/日志");
         view.RaiseNewFolderRequested();
-        view.RaiseUploadRequested();
         view.RaiseDownloadRequested(item);
         view.RaiseRenameRequested(item);
         view.RaiseDeleteRequested(item);
+        view.RaiseUploadRequested();
+        await uploaded.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.AreEqual("/日志", view.LastSnapshot.DirectoryListing.Path);
         Assert.AreEqual(1, fileService.CreateDirectoryCallCount);
@@ -222,21 +289,24 @@ public sealed class SftpWorkspaceTests
         public bool OverwriteAnswer { get; set; } = true;
         public bool DeleteAnswer { get; set; } = true;
         public IReadOnlyList<SftpUploadFile> UploadFiles { get; set; } = [];
+        public SftpUploadDirectory? UploadFolder { get; set; }
         public string? DownloadDirectory { get; set; } = "C:\\下载";
         public int DeleteConfirmations { get; private set; }
         public int UploadPickerCalls { get; private set; }
         public int DownloadPickerCalls { get; private set; }
         public SftpSessionSnapshot LastSnapshot { get; private set; } = null!;
+        public Action<SftpSessionSnapshot>? OnRender { get; set; }
 
         public event EventHandler? RefreshRequested;
         public event EventHandler<string>? NavigateRequested;
         public event EventHandler? NewFolderRequested;
         public event EventHandler? UploadRequested;
+        public event EventHandler? UploadFolderRequested;
         public event EventHandler<RemoteFileItem>? DownloadRequested;
         public event EventHandler<RemoteFileItem>? RenameRequested;
         public event EventHandler<RemoteFileItem>? DeleteRequested;
 
-        public void Render(SftpSessionSnapshot snapshot) => LastSnapshot = snapshot;
+        public void Render(SftpSessionSnapshot snapshot) { LastSnapshot = snapshot; OnRender?.Invoke(snapshot); }
 
         public string? LastPromptInitialText { get; private set; }
 
@@ -256,6 +326,7 @@ public sealed class SftpWorkspaceTests
         }
 
         public Task<IReadOnlyList<SftpUploadFile>> PickUploadFilesAsync() { UploadPickerCalls++; return Task.FromResult(UploadFiles); }
+        public Task<SftpUploadDirectory?> PickUploadFolderAsync() => Task.FromResult(UploadFolder);
 
         public Task<string?> PickDownloadDirectoryAsync() { DownloadPickerCalls++; return Task.FromResult(DownloadDirectory); }
 
@@ -263,6 +334,7 @@ public sealed class SftpWorkspaceTests
         public void RaiseNavigateRequested(string path) => NavigateRequested?.Invoke(this, path);
         public void RaiseNewFolderRequested() => NewFolderRequested?.Invoke(this, EventArgs.Empty);
         public void RaiseUploadRequested() => UploadRequested?.Invoke(this, EventArgs.Empty);
+        public void RaiseUploadFolderRequested() => UploadFolderRequested?.Invoke(this, EventArgs.Empty);
         public void RaiseDownloadRequested(RemoteFileItem item) => DownloadRequested?.Invoke(this, item);
         public void RaiseRenameRequested(RemoteFileItem item) => RenameRequested?.Invoke(this, item);
         public void RaiseDeleteRequested(RemoteFileItem item) => DeleteRequested?.Invoke(this, item);
@@ -290,6 +362,8 @@ public sealed class SftpWorkspaceTests
         }
 
         public Task<bool> ExistsAsync(string path) => Task.FromResult(FileExists);
+        public Task<bool> IsDirectoryAsync(string path) => Task.FromResult(
+            DirectoryItems.Any(item => item.FullPath == path && item.IsDirectory));
 
         public Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken)
         {

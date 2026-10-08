@@ -9,6 +9,7 @@ public interface ISftpFileService
     Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path);
     Task CreateDirectoryAsync(string path);
     Task<bool> ExistsAsync(string path);
+    Task<bool> IsDirectoryAsync(string path);
     Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken);
     Task DownloadAsync(string remotePath, Stream output, CancellationToken cancellationToken);
     Task RenameAsync(string sourcePath, string destinationPath);

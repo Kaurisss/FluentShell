@@ -42,6 +42,7 @@ public static class SftpPathValidator
         }
 
         if (name is "." or ".." ||
+            name.Contains('\0') ||
             name.Contains('/') ||
             name.Contains('\\') ||
             Path.IsPathRooted(name))
@@ -50,6 +51,15 @@ public static class SftpPathValidator
             return false;
         }
 
+        error = string.Empty;
+        return true;
+    }
+
+    /// <summary>上传目录内的相对路径，每段都必须是合法名称，不能归一化掉越界段。</summary>
+    public static bool TryValidateUploadRelativePath(string path, out string error)
+    {
+        foreach (var segment in path.Split('/'))
+            if (!TryValidateRemoteName(segment, out error)) return false;
         error = string.Empty;
         return true;
     }

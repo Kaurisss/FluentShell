@@ -52,6 +52,8 @@ public sealed class FtpConnectionTests
         await browse.RenameAsync("/test.txt", "/renamed.txt");
         Assert.IsTrue(await browse.ExistsAsync("/renamed.txt"));
         await browse.CreateDirectoryAsync("/folder");
+        Assert.IsTrue(await transfer.IsDirectoryAsync("/folder"));
+        Assert.IsFalse(await transfer.IsDirectoryAsync("/renamed.txt"));
         await Assert.ThrowsAsync<IOException>(() => browse.DeleteAsync(new RemoteFileItem { IsDirectory = true, FullPath = "/folder" }));
         Assert.IsTrue(server.Commands.Contains("RMD"));
         Assert.IsFalse(server.Commands.Contains("DELE"), "Nonempty directory deletion must not delete child files.");

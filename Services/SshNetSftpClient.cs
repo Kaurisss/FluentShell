@@ -28,6 +28,8 @@ public sealed class SshNetSftpClient : ISftpClient
 
     public bool Exists(string path) => _client.Exists(path);
 
+    public bool IsDirectory(string path) => _client.GetAttributes(path).IsDirectory;
+
     public void DeleteDirectory(string path) => _client.DeleteDirectory(path);
 
     public void DeleteFile(string path) => _client.DeleteFile(path);

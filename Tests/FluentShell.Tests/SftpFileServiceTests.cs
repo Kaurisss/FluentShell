@@ -7,6 +7,18 @@ namespace FluentShell.Tests;
 public sealed class SftpFileServiceTests
 {
     [TestMethod]
+    public async Task Directory_type_check_uses_metadata_without_listing_contents()
+    {
+        var client = new FakeSftpClient();
+        client.AddDirectory("资料", "/资料");
+        client.AddFile("文件.txt", "/文件.txt");
+        var service = new SftpFileService(() => client);
+        Assert.IsTrue(await service.IsDirectoryAsync("/资料"));
+        Assert.IsFalse(await service.IsDirectoryAsync("/文件.txt"));
+        Assert.IsNull(client.LastListedPath);
+    }
+
+    [TestMethod]
     public async Task Non_root_directory_gets_a_parent_entry_pointing_at_the_parent_path()
     {
         var client = new FakeSftpClient();

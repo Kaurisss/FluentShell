@@ -275,42 +275,123 @@ public sealed class SftpSessionController : IDisposable
         RunTransferAsync("上传", async cancellationToken =>
         {
             if (!SftpPathValidator.TryValidateRemoteName(localFileName, out var error))
-            {
-                _queueManager.FailTransfer(localFileName, error);
                 return OperationOutcome.Failure(error);
-            }
-
-            var remotePath = RemotePath.Combine(destinationDirectory ?? _directoryListing.Path, localFileName);
-
-            if (!_queueManager.CreateSnapshot().Items.Any(i => i.RelativePath == localFileName))
-                _queueManager.AddPendingItem(localFileName, localFileName, 0);
-            _queueManager.StartTransfer(localFileName);
-            SnapshotChanged?.Invoke(this, CreateSnapshot());
-
-            if (await _transferService.ExistsAsync(remotePath) && !await confirmOverwrite(localFileName))
-            {
-                _queueManager.SkipTransfer(localFileName);
-                SnapshotChanged?.Invoke(this, CreateSnapshot());
-                return OperationOutcome.Failure("已跳过现有文件。");
-            }
-
-            await WaitForTransferAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            using var input = await openInput();
-            var reporter = new TransferProgressReporter(this, input.CanSeek ? input.Length : 0);
-            using var countingStream = new ByteCountingStream(input, bytesRead =>
-            {
-                reporter.OnCurrentFileBytes(bytesRead);
-                _queueManager.UpdateProgress(localFileName, bytesRead, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
-            }, _batchControl, cancellationToken);
-
-            await _transferService.UploadAsync(countingStream, remotePath, cancellationToken);
-
-            _queueManager.CompleteTransfer(localFileName);
-            SnapshotChanged?.Invoke(this, CreateSnapshot());
-
-            return OperationOutcome.Success($"已上传 {localFileName}。");
+            return await UploadFileAsync(localFileName, openInput, confirmOverwrite,
+                destinationDirectory ?? _directoryListing.Path, null, cancellationToken);
         }, refreshDirectory: true);
+
+    /// <summary>一批文件和目录在同一传输轴上统计、创建目录并上传；浏览不会改变目标。</summary>
+    public Task UploadEntriesAsync(IReadOnlyList<SftpUploadEntry> entries,
+        Func<string, Task<bool>> confirmOverwrite, string? destinationDirectory = null) =>
+        RunTransferAsync("上传", async cancellationToken =>
+        {
+            var target = destinationDirectory ?? _directoryListing.Path;
+            _queueManager.Clear();
+            TransitionTransfer(SftpTransferState.Transferring, "正在统计待上传的文件和文件夹…");
+            var plan = await SftpUploadPlanner.BuildAsync(entries, WaitForTransferAsync, cancellationToken);
+            _queueManager.AddPendingItems(plan.Select(item => (item.Name, item.RelativePath, item.SizeBytes)));
+            SnapshotChanged?.Invoke(this, CreateSnapshot());
+            var reporter = new TransferProgressReporter(this, plan.Sum(item => item.SizeBytes));
+            var failedDirectories = new List<string>();
+            var files = 0;
+            var folders = 0;
+            OperationOutcome? lastResult = null;
+            foreach (var item in plan)
+            {
+                await WaitForTransferAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    if (item.Error is not null) throw new IOException(item.Error);
+                    if (failedDirectories.Any(path => item.RelativePath.StartsWith(path + "/", StringComparison.Ordinal)))
+                        throw new IOException("父文件夹上传失败。");
+                    if (item.IsDirectory)
+                    {
+                        _queueManager.StartTransfer(item.RelativePath);
+                        TransitionTransfer(SftpTransferState.Transferring, $"正在创建文件夹 {item.RelativePath}…");
+                        var remotePath = RemotePath.Combine(target, item.RelativePath);
+                        if (await _transferService.ExistsAsync(remotePath))
+                        {
+                            // 合并已有文件夹；同名文件不能被当成文件夹，也不删除远程条目。
+                            if (!await _transferService.IsDirectoryAsync(remotePath))
+                                throw new IOException("远程同名条目是文件，无法合并文件夹。");
+                        }
+                        else
+                        {
+                            await WaitForTransferAsync(cancellationToken);
+                            cancellationToken.ThrowIfCancellationRequested();
+                            await _transferService.CreateDirectoryAsync(remotePath);
+                        }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _queueManager.CompleteTransfer(item.RelativePath);
+                        folders++;
+                    }
+                    else
+                    {
+                        lastResult = await UploadFileAsync(item.RelativePath, item.File!.OpenRead,
+                            confirmOverwrite, target, reporter, cancellationToken);
+                        if (lastResult.Succeeded) { reporter.CompleteFile(item.SizeBytes); files++; }
+                        else reporter.RemoveFromTotal(item.SizeBytes);
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception)
+                {
+                    _queueManager.FailTransfer(item.RelativePath, DescribeError(exception));
+                    reporter.RemoveFromTotal(item.SizeBytes);
+                    if (item.IsDirectory) failedDirectories.Add(item.RelativePath);
+                }
+                SnapshotChanged?.Invoke(this, CreateSnapshot());
+            }
+
+            var queue = _queueManager.CreateSnapshot();
+            if (queue.FailedCount > 0)
+                return OperationOutcome.Error($"上传完成，{queue.FailedCount} 项失败，请查看文件明细。");
+            if (plan.Count == 1 && !plan[0].IsDirectory && lastResult is not null) return lastResult;
+            return OperationOutcome.Success($"已上传 {files} 个文件、{folders} 个文件夹，跳过 {queue.SkippedCount} 个文件。");
+        }, refreshDirectory: true, refreshDirectoryOnFailure: true);
+
+    private async Task<OperationOutcome> UploadFileAsync(string relativePath, Func<Task<Stream>> openInput,
+        Func<string, Task<bool>> confirmOverwrite, string destinationDirectory,
+        TransferProgressReporter? reporter, CancellationToken cancellationToken)
+    {
+        if (!_queueManager.CreateSnapshot().Items.Any(i => i.RelativePath == relativePath))
+            _queueManager.AddPendingItem(relativePath.Split('/').Last(), relativePath, 0);
+        if (!SftpPathValidator.TryValidateUploadRelativePath(relativePath, out var error))
+        {
+            _queueManager.FailTransfer(relativePath, error);
+            return OperationOutcome.Failure(error);
+        }
+
+        var remotePath = RemotePath.Combine(destinationDirectory, relativePath);
+
+        _queueManager.StartTransfer(relativePath);
+        TransitionTransfer(SftpTransferState.Transferring, $"正在上传 {relativePath}…");
+
+        if (await _transferService.ExistsAsync(remotePath) && !await confirmOverwrite(relativePath))
+        {
+            _queueManager.SkipTransfer(relativePath);
+            SnapshotChanged?.Invoke(this, CreateSnapshot());
+            return OperationOutcome.Failure("已跳过现有文件。");
+        }
+
+        await WaitForTransferAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var input = await openInput();
+        reporter ??= new TransferProgressReporter(this, input.CanSeek ? input.Length : 0);
+        using var countingStream = new ByteCountingStream(input, bytesRead =>
+        {
+            reporter.OnCurrentFileBytes(bytesRead);
+            _queueManager.UpdateProgress(relativePath, bytesRead, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
+        }, _batchControl, cancellationToken);
+
+        await _transferService.UploadAsync(countingStream, remotePath, cancellationToken);
+
+        _queueManager.CompleteTransfer(relativePath);
+        SnapshotChanged?.Invoke(this, CreateSnapshot());
+
+        return OperationOutcome.Success($"已上传 {relativePath}。");
+    }
 
     public Task DownloadAsync(
         RemoteFileItem item,
@@ -557,7 +638,8 @@ public sealed class SftpSessionController : IDisposable
     private async Task RunTransferAsync(
         string action,
         Func<CancellationToken, Task<OperationOutcome>> operation,
-        bool refreshDirectory)
+        bool refreshDirectory,
+        bool refreshDirectoryOnFailure = false)
     {
         if (_disposed || !CanStartTransfer())
         {
@@ -605,6 +687,10 @@ public sealed class SftpSessionController : IDisposable
         }
         finally
         {
+            // 批量上传可能已创建部分目录/文件，失败或取消后也要让当前浏览目录看到结果。
+            if (refreshDirectoryOnFailure && (_transfer.State is SftpTransferState.Failed or SftpTransferState.Cancelled)
+                && _fileService.IsConnected && CanNavigate())
+                await RefreshDirectoryAsync(_directoryListing.Path, _transfer.Message);
             _transferCts.Dispose();
             _transferCts = null;
             _transferGate.Release();

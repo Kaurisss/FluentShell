@@ -53,6 +53,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     public event EventHandler<string>? NavigateRequested;
     public event EventHandler? NewFolderRequested;
     public event EventHandler? UploadRequested;
+    public event EventHandler? UploadFolderRequested;
     public event EventHandler<RemoteFileItem>? DownloadRequested;
     public event EventHandler<RemoteFileItem>? RenameRequested;
     public event EventHandler<RemoteFileItem>? DeleteRequested;
@@ -172,6 +173,15 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         return files.Select(file => new SftpUploadFile(file.Name, file.OpenStreamForReadAsync)).ToList();
     }
 
+    public async Task<SftpUploadDirectory?> PickUploadFolderAsync()
+    {
+        var picker = new FolderPicker();
+        picker.FileTypeFilter.Add("*");
+        InitializeWithWindow.Initialize(picker, _windowHandle);
+        var folder = await picker.PickSingleFolderAsync();
+        return folder is null ? null : new SftpUploadDirectory(folder.Name, folder.Path);
+    }
+
     public async Task<string?> PickDownloadDirectoryAsync()
     {
         if (_preferences.UseDefaultDownloadDirectory) return _downloadDirectory;
@@ -278,19 +288,23 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         var menu = new MenuFlyout();
         var refresh = new MenuFlyoutItem { Text = "刷新" };
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
-        var upload = new MenuFlyoutItem { Text = "上传" };
+        var upload = new MenuFlyoutItem { Text = "上传文件" };
         upload.Click += (_, _) => UploadRequested?.Invoke(this, EventArgs.Empty);
+        var uploadFolder = new MenuFlyoutItem { Text = "上传文件夹" };
+        uploadFolder.Click += (_, _) => UploadFolderRequested?.Invoke(this, EventArgs.Empty);
         var newFolder = new MenuFlyoutItem { Text = "新建文件夹" };
         newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(upload);
+        menu.Items.Add(uploadFolder);
         menu.Items.Add(newFolder);
         ApplyChineseMenuFont(menu);
         menu.Opened += (_, _) =>
         {
             refresh.IsEnabled = _snapshot.CanNavigate;
             upload.IsEnabled = _snapshot.CanTransfer;
+            uploadFolder.IsEnabled = _snapshot.CanTransfer;
             newFolder.IsEnabled = _snapshot.CanModifyRemoteFiles;
         };
         return menu;
@@ -335,6 +349,9 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     private void UploadButton_Click(object sender, RoutedEventArgs e) =>
         UploadRequested?.Invoke(this, EventArgs.Empty);
+
+    private void UploadFolder_Click(object sender, RoutedEventArgs e) =>
+        UploadFolderRequested?.Invoke(this, EventArgs.Empty);
 
     private void DownloadButton_Click(object sender, RoutedEventArgs e) => RequestDownload();
 

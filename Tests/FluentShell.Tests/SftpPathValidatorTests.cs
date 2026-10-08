@@ -59,4 +59,23 @@ public sealed class SftpPathValidatorTests
     {
         Assert.IsTrue(SftpPathValidator.TryValidateRemoteName("资料库", out _));
     }
+
+    [TestMethod]
+    [DataRow("../文件.txt")]
+    [DataRow("资料/../../文件.txt")]
+    [DataRow("/资料/文件.txt")]
+    [DataRow("资料//文件.txt")]
+    [DataRow("资料/./文件.txt")]
+    [DataRow("资料/..\\文件.txt")]
+    [DataRow("资料/文件\0.txt")]
+    public void Upload_relative_path_rejects_traversal_rooted_and_invalid_segments(string path)
+    {
+        Assert.IsFalse(SftpPathValidator.TryValidateUploadRelativePath(path, out _));
+    }
+
+    [TestMethod]
+    public void Upload_relative_path_preserves_unicode_directory_segments()
+    {
+        Assert.IsTrue(SftpPathValidator.TryValidateUploadRelativePath("资料库/子目录/报表.xlsx", out _));
+    }
 }

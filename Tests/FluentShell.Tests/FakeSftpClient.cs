@@ -24,6 +24,8 @@ internal sealed class FakeSftpClient : ISftpClient
 
     public bool Exists(string path) => ExistsAnswer;
 
+    public bool IsDirectory(string path) => Entries.Any(entry => entry.FullPath == path && entry.IsDirectory);
+
     public void DeleteDirectory(string path) => DeletedDirectories.Add(path);
 
     public void DeleteFile(string path) => DeletedFiles.Add(path);
