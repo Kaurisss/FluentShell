@@ -141,6 +141,82 @@ public sealed class SftpSessionControllerTests
     }
 
     [TestMethod]
+    public async Task Delete_keeps_the_browse_channel_busy_and_blocks_duplicate_operations_until_completion()
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new FakeSftpFileService { DeleteHandler = _ => completion.Task };
+        using var controller = new SftpSessionController(service);
+        var item = new RemoteFileItem { Name = "Mod", FullPath = "/Mod", IsDirectory = true };
+
+        var deletion = controller.DeleteAsync(item);
+        Assert.AreEqual(SftpSessionState.Deleting, controller.Snapshot.State);
+        Assert.IsFalse(controller.Snapshot.CanNavigate);
+        Assert.IsFalse(controller.Snapshot.CanModifyRemoteFiles);
+        await controller.RefreshAsync();
+        await controller.NavigateToAsync("/other");
+        await controller.DeleteAsync(item);
+        await controller.CreateDirectoryAsync("new");
+        await controller.RenameAsync(item, "renamed");
+        Assert.AreEqual(SftpSessionState.Deleting, controller.Snapshot.State);
+        Assert.AreEqual(1, service.DeleteCallCount);
+        Assert.AreEqual(0, service.ListCallCount);
+        Assert.AreEqual(0, service.RenameCallCount);
+        Assert.IsEmpty(service.DirectoryItems);
+
+        completion.SetResult();
+        await deletion;
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
+        Assert.IsTrue(controller.Snapshot.CanModifyRemoteFiles);
+        Assert.AreEqual("删除完成。", controller.Snapshot.StatusMessage);
+        Assert.AreEqual(1, service.ListCallCount);
+    }
+
+    [TestMethod]
+    public async Task Failed_delete_restores_controls_and_surfaces_an_operation_error()
+    {
+        var service = new FakeSftpFileService
+        {
+            DeleteHandler = _ => Task.FromException(new IOException("Permission denied"))
+        };
+        using var controller = new SftpSessionController(service);
+
+        await controller.DeleteAsync(new RemoteFileItem { Name = "Mod", FullPath = "/Mod", IsDirectory = true });
+
+        Assert.AreEqual(SftpSessionState.Failed, controller.Snapshot.State);
+        Assert.AreEqual(SftpFailureKind.Operation, controller.Snapshot.FailureKind);
+        Assert.IsNotNull(controller.Snapshot.ErrorMessage);
+        Assert.Contains("Permission denied", controller.Snapshot.ErrorMessage);
+        Assert.IsTrue(controller.Snapshot.CanNavigate);
+        Assert.IsTrue(controller.Snapshot.CanModifyRemoteFiles);
+    }
+
+    [TestMethod]
+    public async Task Finishing_an_independent_transfer_does_not_refresh_or_unlock_a_directory_being_deleted()
+    {
+        var deleteRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var uploadRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var browse = new FakeSftpFileService { DeleteHandler = _ => deleteRelease.Task };
+        var transfer = new FakeSftpFileService { UploadHandler = _ => uploadRelease.Task };
+        using var controller = new SftpSessionController(browse, transfer);
+        var upload = controller.UploadEntriesAsync(
+            [new SftpUploadFile("file.txt", () => Task.FromResult<Stream>(new MemoryStream([1])))],
+            _ => Task.FromResult(true));
+        var deletion = controller.DeleteAsync(new RemoteFileItem { Name = "Mod", FullPath = "/Mod", IsDirectory = true });
+
+        uploadRelease.SetResult();
+        await upload;
+        Assert.AreEqual(SftpTransferState.Completed, controller.Snapshot.Transfer.State);
+        Assert.AreEqual(SftpSessionState.Deleting, controller.Snapshot.State);
+        Assert.IsFalse(controller.Snapshot.CanNavigate);
+        Assert.AreEqual(0, browse.ListCallCount);
+
+        deleteRelease.SetResult();
+        await deletion;
+        Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State);
+        Assert.AreEqual(1, browse.ListCallCount);
+    }
+
+    [TestMethod]
     public async Task Upload_refreshes_directory_listing()
     {
         var fileService = new FakeSftpFileService();
@@ -546,12 +622,16 @@ public sealed class SftpSessionControllerTests
         public Dictionary<string, List<RemoteFileItem>> ListingsByPath { get; } = [];
         public Exception? ListException { get; set; }
         public Func<CancellationToken, Task>? UploadHandler { get; set; }
+        public Func<RemoteFileItem, Task>? DeleteHandler { get; set; }
+        public int DeleteCallCount { get; private set; }
+        public int ListCallCount { get; private set; }
         public int RenameCallCount { get; private set; }
         public int DownloadCallCount { get; private set; }
         public int UploadCallCount { get; private set; }
 
         public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
         {
+            ListCallCount++;
             if (ListException is not null) return Task.FromException<IReadOnlyList<RemoteFileItem>>(ListException);
             if (ListingsByPath.TryGetValue(path, out var listing))
                 return Task.FromResult<IReadOnlyList<RemoteFileItem>>(listing.ToList());
@@ -609,6 +689,8 @@ public sealed class SftpSessionControllerTests
 
         public Task DeleteAsync(RemoteFileItem item)
         {
+            DeleteCallCount++;
+            if (DeleteHandler is not null) return DeleteHandler(item);
             DirectoryItems.RemoveAll(current => current.FullPath == item.FullPath);
             return Task.CompletedTask;
         }

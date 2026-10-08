@@ -28,7 +28,7 @@ public sealed class FtpConnectionTests
     }
 
     [TestMethod]
-    public async Task Ftp_connects_two_channels_and_roundtrips_files_without_recursive_delete()
+    public async Task Ftp_connects_two_channels_roundtrips_files_and_recursively_deletes_directories()
     {
         await using var server = new FtpFixture();
         await using var connection = new FtpConnectionService(new ServerProfile
@@ -52,12 +52,20 @@ public sealed class FtpConnectionTests
         await browse.RenameAsync("/test.txt", "/renamed.txt");
         Assert.IsTrue(await browse.ExistsAsync("/renamed.txt"));
         await browse.CreateDirectoryAsync("/folder");
+        await browse.CreateDirectoryAsync("/folder/nested");
+        await browse.CreateDirectoryAsync("/folder/empty");
+        using var childUpload = new MemoryStream(bytes);
+        await transfer.UploadAsync(childUpload, "/folder/nested/child.txt", timeout.Token);
         Assert.IsTrue(await transfer.IsDirectoryAsync("/folder"));
         Assert.IsFalse(await transfer.IsDirectoryAsync("/renamed.txt"));
-        await Assert.ThrowsAsync<IOException>(() => browse.DeleteAsync(new RemoteFileItem { IsDirectory = true, FullPath = "/folder" }));
+        Assert.Throws<IOException>(() => connection.SftpClient!.DeleteDirectory("/folder"));
         Assert.IsTrue(server.Commands.Contains("RMD"));
-        Assert.IsFalse(server.Commands.Contains("DELE"), "Nonempty directory deletion must not delete child files.");
-        await browse.DeleteAsync(new RemoteFileItem { FullPath = "/renamed.txt" });
+        Assert.IsFalse(server.Commands.Contains("DELE"), "The low-level directory call must only issue RMD.");
+        await browse.DeleteAsync(new RemoteFileItem { Name = "folder", IsDirectory = true, FullPath = "/folder" });
+        Assert.IsFalse(await transfer.IsDirectoryAsync("/folder"));
+        Assert.IsFalse(await browse.ExistsAsync("/folder/nested/child.txt"));
+        Assert.IsTrue(await browse.ExistsAsync("/renamed.txt"), "Recursive deletion must preserve siblings.");
+        await browse.DeleteAsync(new RemoteFileItem { Name = "renamed.txt", FullPath = "/renamed.txt" });
         Assert.IsFalse(await browse.ExistsAsync("/renamed.txt"));
         await connection.DisposeAsync();
         Assert.IsFalse(connection.IsConnected);
@@ -69,6 +77,7 @@ public sealed class FtpConnectionTests
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource _stop = new();
         private readonly ConcurrentDictionary<string, byte[]> _files = new();
+        private readonly ConcurrentDictionary<string, byte> _directories = new();
         private readonly List<Task> _clients = [];
         private readonly Task _accept;
         private int _connections;
@@ -80,6 +89,7 @@ public sealed class FtpConnectionTests
         public FtpFixture(bool rejectSecondLogin = false)
         {
             _rejectSecondLogin = rejectSecondLogin;
+            _directories["/"] = 0;
             _listener.Start();
             _accept = AcceptAsync();
         }
@@ -106,6 +116,7 @@ public sealed class FtpConnectionTests
             using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\r\n" };
             TcpListener? passive = null;
             string? rename = null;
+            var currentDirectory = "/";
             try
             {
                 await writer.WriteLineAsync("220 FTP fixture");
@@ -121,9 +132,12 @@ public sealed class FtpConnectionTests
                         case "PASS": await writer.WriteLineAsync(rejectLogin ? "530 Login rejected" : "230 Logged in"); break;
                         case "SYST": await writer.WriteLineAsync("215 UNIX Type: L8"); break;
                         case "FEAT": await writer.WriteLineAsync("211-Features\r\n UTF8\r\n SIZE\r\n MDTM\r\n211 End"); break;
-                        case "PWD": await writer.WriteLineAsync("257 \"/\" is current directory"); break;
+                        case "PWD": await writer.WriteLineAsync($"257 \"{currentDirectory}\" is current directory"); break;
                         case "TYPE": case "OPTS": case "NOOP": await writer.WriteLineAsync("200 OK"); break;
-                        case "CWD": await writer.WriteLineAsync(path is "/" or "/folder" ? "250 OK" : "550 Not found"); break;
+                        case "CWD":
+                            if (_directories.ContainsKey(path)) { currentDirectory = path; await writer.WriteLineAsync("250 OK"); }
+                            else await writer.WriteLineAsync("550 Not found");
+                            break;
                         case "SIZE": await writer.WriteLineAsync(_files.TryGetValue(path, out var sized) ? $"213 {sized.Length}" : "550 Not found"); break;
                         case "MDTM": await writer.WriteLineAsync("213 20260101000000"); break;
                         case "EPSV": case "PASV":
@@ -146,8 +160,14 @@ public sealed class FtpConnectionTests
                                 else if (command == "RETR") await data.GetStream().WriteAsync(_files[path], _stop.Token);
                                 else
                                 {
-                                    var listing = string.Concat(_files.Select(pair => command == "NLST" ? pair.Key + "\r\n" :
-                                        $"-rw-r--r-- 1 fixture group {pair.Value.Length} Jan 01 2026 {pair.Key.TrimStart('/')}\r\n"));
+                                    var directory = path.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                        .LastOrDefault(argument => !argument.StartsWith('-')) ?? currentDirectory;
+                                    var listing = string.Concat(_files.Where(pair => RemotePath.Parent(pair.Key) == directory)
+                                        .Select(pair => command == "NLST" ? pair.Key + "\r\n" :
+                                        $"-rw-r--r-- 1 fixture group {pair.Value.Length} Jan 01 2026 {pair.Key.Split('/').Last()}\r\n"));
+                                    listing += string.Concat(_directories.Keys.Where(key => key != "/" && RemotePath.Parent(key) == directory)
+                                        .Select(key => command == "NLST" ? key + "\r\n" :
+                                        $"drwxr-xr-x 1 fixture group 0 Jan 01 2026 {key.Split('/').Last()}\r\n"));
                                     await data.GetStream().WriteAsync(Encoding.UTF8.GetBytes(listing), _stop.Token);
                                 }
                             }
@@ -158,8 +178,13 @@ public sealed class FtpConnectionTests
                         case "RNTO":
                             if (_files.TryRemove(rename!, out var renamed)) _files[path] = renamed;
                             await writer.WriteLineAsync("250 Renamed"); break;
-                        case "MKD": await writer.WriteLineAsync("257 Directory created"); break;
-                        case "RMD": await writer.WriteLineAsync("550 Directory not empty"); break;
+                        case "MKD": _directories[path] = 0; await writer.WriteLineAsync("257 Directory created"); break;
+                        case "RMD":
+                            if (_files.Keys.Any(key => RemotePath.Parent(key) == path) ||
+                                _directories.Keys.Any(key => key != path && RemotePath.Parent(key) == path))
+                                await writer.WriteLineAsync("550 Directory not empty");
+                            else { _directories.TryRemove(path, out _); await writer.WriteLineAsync("250 Deleted"); }
+                            break;
                         case "DELE": _files.TryRemove(path, out _); await writer.WriteLineAsync("250 Deleted"); break;
                         case "QUIT": await writer.WriteLineAsync("221 Goodbye"); return;
                         default: await writer.WriteLineAsync("502 Unsupported"); break;

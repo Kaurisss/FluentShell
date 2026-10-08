@@ -10,6 +10,12 @@ internal sealed class FakeSftpClient : ISftpClient
     public List<string> CreatedDirectories { get; } = [];
     public List<string> DeletedDirectories { get; } = [];
     public List<string> DeletedFiles { get; } = [];
+    public List<(bool IsDirectory, string Path)> Deletions { get; } = [];
+    public List<string> ListedPaths { get; } = [];
+    public Dictionary<string, Exception> DeleteExceptions { get; } = [];
+    public Dictionary<string, IReadOnlyList<RemoteDirectoryEntry>> ListingsByPath { get; } = [];
+    public Func<string, Task<bool>>? RecursiveDeleteHandler { get; set; }
+    public List<string> RecursiveDeletes { get; } = [];
     public List<(string Source, string Destination)> Renames { get; } = [];
     public string? LastListedPath { get; private set; }
     public bool ExistsAnswer { get; set; }
@@ -17,7 +23,9 @@ internal sealed class FakeSftpClient : ISftpClient
     public IReadOnlyList<RemoteDirectoryEntry> ListDirectory(string path)
     {
         LastListedPath = path;
-        return Entries.ToList();
+        ListedPaths.Add(path);
+        if (ListingsByPath.TryGetValue(path, out var listing)) return listing;
+        return Entries.Where(entry => entry.Name is "." or ".." || RemotePath.Parent(entry.FullPath) == path).ToList();
     }
 
     public void CreateDirectory(string path) => CreatedDirectories.Add(path);
@@ -26,9 +34,23 @@ internal sealed class FakeSftpClient : ISftpClient
 
     public bool IsDirectory(string path) => Entries.Any(entry => entry.FullPath == path && entry.IsDirectory);
 
-    public void DeleteDirectory(string path) => DeletedDirectories.Add(path);
+    public void DeleteDirectory(string path)
+    {
+        if (DeleteExceptions.TryGetValue(path, out var exception)) throw exception;
+        if (Entries.Any(entry => entry.Name is not "." and not ".." && RemotePath.Parent(entry.FullPath) == path))
+            throw new IOException("Directory is not empty.");
+        DeletedDirectories.Add(path);
+        Deletions.Add((true, path));
+        Entries.RemoveAll(entry => entry.FullPath == path);
+    }
 
-    public void DeleteFile(string path) => DeletedFiles.Add(path);
+    public void DeleteFile(string path)
+    {
+        if (DeleteExceptions.TryGetValue(path, out var exception)) throw exception;
+        DeletedFiles.Add(path);
+        Deletions.Add((false, path));
+        Entries.RemoveAll(entry => entry.FullPath == path);
+    }
 
     public Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken) =>
         Task.CompletedTask;
@@ -40,6 +62,12 @@ internal sealed class FakeSftpClient : ISftpClient
     {
         Renames.Add((sourcePath, destinationPath));
         return Task.CompletedTask;
+    }
+
+    public Task<bool> TryDeleteDirectoryRecursivelyAsync(string path)
+    {
+        RecursiveDeletes.Add(path);
+        return RecursiveDeleteHandler?.Invoke(path) ?? Task.FromResult(false);
     }
 
     public void AddDirectory(string name, string fullPath) =>

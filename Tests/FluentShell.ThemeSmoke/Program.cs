@@ -22,10 +22,12 @@ internal static class Program
 {
     internal static readonly List<object> Results = [];
     internal static string ReportPath = Path.GetFullPath("theme-smoke.json");
+    internal static bool SftpDeleteOnly;
     [STAThread]
     private static void Main(string[] args)
     {
         if (args.Length > 0) ReportPath = Path.GetFullPath(args[0]);
+        SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -61,6 +63,11 @@ internal sealed class SmokeApp : App
         };
         try
         {
+            if (Program.SftpDeleteOnly)
+            {
+                await VerifySftpDeleteAsync();
+                return;
+            }
             _window = new Window { Title = "FluentShell offline theme regression" };
             _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 1050));
             var root = new Grid { RequestedTheme = ElementTheme.Light, Background = new SolidColorBrush(Microsoft.UI.Colors.WhiteSmoke) };
@@ -768,6 +775,62 @@ internal sealed class SmokeApp : App
             });
         var right = bar.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(bar.ActualWidth, 0)).X;
         if (Math.Abs(right - root.ActualWidth) > 2) failures.Add($"{name} scrollbar ends at {right}, expected {root.ActualWidth}.");
+    }
+
+    private async Task VerifySftpDeleteAsync()
+    {
+        _window = new Window { Title = "FluentShell offline deletion regression" };
+        _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 750));
+        var root = new Grid { RequestedTheme = ElementTheme.Light };
+        var view = new SftpWorkspaceView(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+        root.Children.Add(view);
+        _window.Content = root;
+        _window.Activate();
+        var folder = new RemoteFileItem { Name = "Mod", FullPath = "/Mod", IsDirectory = true };
+        var listing = new SftpDirectoryListing("/", [folder]);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            view.Render(new SftpSessionSnapshot(SftpSessionState.Deleting, listing, false, false, true,
+                "正在删除“Mod”…", null));
+            await Task.Delay(200, timeout.Token);
+            root.UpdateLayout();
+            if (((Grid)view.FindName("DirectoryLoadingOverlay")).Visibility != Visibility.Visible ||
+                ((TextBlock)view.FindName("DirectoryLoadingText")).Text != "正在删除…" ||
+                ((TextBox)view.FindName("PathBox")).IsEnabled)
+                throw new InvalidOperationException("Deletion must show a busy indicator and disable browsing.");
+            await CaptureAsync(root, Program.ReportPath + $".busy.{theme}.png");
+            view.Render(new SftpSessionSnapshot(SftpSessionState.Idle, listing, true, true, true, "删除完成。", null));
+            if (((Grid)view.FindName("DirectoryLoadingOverlay")).Visibility != Visibility.Collapsed ||
+                !((TextBox)view.FindName("PathBox")).IsEnabled)
+                throw new InvalidOperationException("Deletion completion must restore browsing.");
+
+            foreach (var link in new[] { false, true })
+            {
+                var item = link
+                    ? new RemoteFileItem { Name = "link", FullPath = "/link", IsDirectory = true, IsSymbolicLink = true }
+                    : folder;
+                var confirmation = view.ConfirmDeleteAsync(item);
+                await Task.Delay(200, timeout.Token);
+                var dialog = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                    .SelectMany(p => new[] { p.Child }.Concat(Descendants(p.Child))).OfType<ContentDialog>().Single();
+                var content = (string)dialog.Content;
+                if (!content.Contains(link ? "链接指向的内容不会被删除" : "及其全部内容") ||
+                    dialog.DefaultButton != ContentDialogButton.Close || dialog.ActualWidth <= 0 ||
+                    dialog.ActualTheme != view.ActualTheme)
+                    throw new InvalidOperationException("Delete confirmation must explain its scope, default to cancel and follow the theme.");
+                Program.Results.Add(new { control = "SFTP delete confirmation", theme = theme.ToString(), link, content,
+                    width = dialog.ActualWidth, height = dialog.ActualHeight, passed = true });
+                await CaptureAsync(dialog, Program.ReportPath + $".dialog.{theme}.{link}.png");
+                dialog.Hide();
+                if (await confirmation.WaitAsync(timeout.Token))
+                    throw new InvalidOperationException("Cancelling delete confirmation must return false.");
+            }
+            Program.Results.Add(new { control = "SFTP deletion busy state and completion", theme = theme.ToString(), passed = true });
+        }
+        _window.Close();
+        Program.Finish();
     }
 
     private static T Field<T>(object owner, string name) =>

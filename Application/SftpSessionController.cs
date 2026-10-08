@@ -9,7 +9,8 @@ public enum SftpSessionState
 {
     Idle,
     ListingDirectory,
-    Failed
+    Failed,
+    Deleting
 }
 
 /// <summary>传输轴的状态。终态（完成/取消/失败）连同消息保留到下一次传输开始。</summary>
@@ -158,7 +159,7 @@ public sealed class SftpSessionController : IDisposable
         }
         if (!CanNavigate())
         {
-            FailDirectoryRead("当前操作尚未完成。");
+            PublishOperationStatus("当前操作尚未完成。");
             return;
         }
 
@@ -229,6 +230,7 @@ public sealed class SftpSessionController : IDisposable
 
         try
         {
+            Transition(SftpSessionState.Deleting, $"正在删除“{item.Name}”…");
             await _fileService.DeleteAsync(item);
             await RefreshDirectoryAsync(_directoryListing.Path, "删除完成。");
         }
@@ -487,7 +489,7 @@ public sealed class SftpSessionController : IDisposable
         }
         if (!CanNavigate())
         {
-            FailDirectoryRead("当前操作尚未完成。");
+            PublishOperationStatus("当前操作尚未完成。");
             return;
         }
 
@@ -541,7 +543,7 @@ public sealed class SftpSessionController : IDisposable
             }
 
             TransitionTransfer(SftpTransferState.Completed, result.Message);
-            if (refreshDirectory)
+            if (refreshDirectory && CanNavigate())
                 await RefreshDirectoryAsync(_directoryListing.Path, result.Message);
             else
                 PublishOperationStatus(result.Message);
@@ -589,7 +591,7 @@ public sealed class SftpSessionController : IDisposable
     private void PublishOperationStatus(string message) =>
         Transition(_state, message);
 
-    private bool CanNavigate() => _state != SftpSessionState.ListingDirectory;
+    private bool CanNavigate() => _state is not (SftpSessionState.ListingDirectory or SftpSessionState.Deleting);
     private bool CanModifyRemoteFiles() => CanNavigate() && _fileService.IsConnected;
     private bool CanStartTransfer() => !_transfer.IsActive && _transferService.IsConnected;
 

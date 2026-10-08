@@ -28,7 +28,7 @@ internal sealed class FluentFtpClient(AsyncFtpClient client) : ISftpClient
 
     public void DeleteDirectory(string path)
     {
-        // DeleteDirectory in FluentFTP is recursive; preserve the application's empty-directory-only semantics.
+        // SftpFileService has already removed children; RMD only removes this empty directory.
         var reply = client.Execute("RMD " + ValidateArgument(path)).GetAwaiter().GetResult();
         if (!reply.Success) throw new IOException("无法删除 FTP 目录，请确认目录为空且具有删除权限。");
     }

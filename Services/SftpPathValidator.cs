@@ -55,6 +55,16 @@ public static class SftpPathValidator
         return true;
     }
 
+    /// <summary>删除必须使用明确的非根绝对路径，不能归一化掉父目录或当前目录段。</summary>
+    internal static string ValidateRemoteDeletePath(string path)
+    {
+        var target = path.TrimEnd('/');
+        if (!target.StartsWith('/') ||
+            target[1..].Split('/').Any(segment => !TryValidateRemoteName(segment, out _)))
+            throw new IOException("不能删除根目录、父目录或无效的远程路径。");
+        return target;
+    }
+
     /// <summary>在创建目录、打开或清理文件前，检查落地路径及已有祖先，拒绝链接和目录联接。</summary>
     public static void EnsureSafeDownloadPath(string destinationDirectory, string localPath)
     {

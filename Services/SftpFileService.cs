@@ -68,11 +68,51 @@ public sealed class SftpFileService : ISftpFileService
     public Task RenameAsync(string sourcePath, string destinationPath) =>
         GetConnectedClient().RenameAsync(sourcePath, destinationPath, CancellationToken.None);
 
-    public Task DeleteAsync(RemoteFileItem item) => Task.Run(() =>
+    public Task DeleteAsync(RemoteFileItem item) => Task.Run(async () =>
     {
+        var path = SftpPathValidator.ValidateRemoteDeletePath(item.FullPath);
+        if (!SftpPathValidator.TryValidateRemoteName(item.Name, out _) || path.Split('/').Last() != item.Name)
+            throw new IOException("不能删除根目录、父目录或无效的远程路径。");
+
         var client = GetConnectedClient();
-        if (item.IsDirectory) client.DeleteDirectory(item.FullPath);
-        else client.DeleteFile(item.FullPath);
+        // 重新读取父目录中的元数据，避免确认期间条目已变成符号链接。
+        var selected = client.ListDirectory(RemotePath.Parent(path))
+            .SingleOrDefault(entry => entry.Name == item.Name)
+            ?? throw new IOException("待删除的远程项目已不存在。");
+        if (selected.IsDirectory && !selected.IsSymbolicLink && (!item.IsDirectory || item.IsSymbolicLink))
+            throw new IOException("远程项目类型已改变，请刷新目录后重试。");
+        if (selected.IsDirectory && !selected.IsSymbolicLink &&
+            await client.TryDeleteDirectoryRecursivelyAsync(path).ConfigureAwait(false))
+            return;
+
+        var pending = new Stack<(string Path, bool IsDirectory, bool Expanded)>();
+        pending.Push((path, selected.IsDirectory && !selected.IsSymbolicLink, false));
+        while (pending.TryPop(out var current))
+        {
+            if (!current.IsDirectory)
+            {
+                client.DeleteFile(current.Path);
+                continue;
+            }
+            if (current.Expanded)
+            {
+                client.DeleteDirectory(current.Path);
+                continue;
+            }
+
+            var children = client.ListDirectory(current.Path)
+                .Where(entry => entry.Name is not "." and not "..")
+                .ToList();
+            foreach (var child in children)
+                if (!SftpPathValidator.TryValidateRemoteName(child.Name, out _))
+                    throw new IOException("远程目录包含无效的条目名称，已停止删除。");
+
+            // 后序遍历：先移除内容，最后移除空目录；不信任远程返回的 FullPath。
+            pending.Push((current.Path, true, true));
+            foreach (var child in children.AsEnumerable().Reverse())
+                pending.Push((RemotePath.Combine(current.Path, child.Name),
+                    child.IsDirectory && !child.IsSymbolicLink, false));
+        }
     });
 
     private static RemoteFileItem ToRemoteFileItem(RemoteDirectoryEntry entry)

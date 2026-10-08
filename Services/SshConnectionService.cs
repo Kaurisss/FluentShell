@@ -107,7 +107,8 @@ public sealed class SshConnectionService : ISshConnection
             _shell = shell;
             _sftpClient = sftpClient;
             _transferSftpClient = transferSftpClient;
-            _remoteFileClient = new SshNetSftpClient(sftpClient);
+            _remoteFileClient = new SshNetSftpClient(sftpClient,
+                sshClient is null ? null : path => DeleteRemoteDirectoryAsync(sshClient, path));
             _transferFileClient = new SshNetSftpClient(transferSftpClient);
             _privateKeyFiles = privateKeyFiles;
             _readCts = new CancellationTokenSource();
@@ -452,6 +453,26 @@ public sealed class SshConnectionService : ISshConnection
         var pixelWidth = (uint)Math.Clamp(columns * 8, 1, 4000);
         var pixelHeight = (uint)Math.Clamp(rows * 16, 1, 4000);
         return Task.Run(() => shell.ChangeWindowSize(safeColumns, safeRows, pixelWidth, pixelHeight));
+    }
+
+    private async Task DeleteRemoteDirectoryAsync(SshClient sshClient, string path)
+    {
+        // 与指标命令共用执行门，使用独立 exec 通道，不向交互终端写入命令。
+        await _metricsCommandGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!sshClient.IsConnected) throw new IOException("SSH 尚未连接。");
+            await SshDirectoryDeletion.DeleteAsync(path, async text =>
+            {
+                using var command = sshClient.CreateCommand(text);
+                await Task.Run(() => command.ExecuteAsync()).ConfigureAwait(false);
+                return (command.ExitStatus, command.Error);
+            }).ConfigureAwait(false);
+        }
+        finally
+        {
+            _metricsCommandGate.Release();
+        }
     }
 
     public async Task<ServerMetrics?> ReadLinuxMetricsAsync(CancellationToken cancellationToken = default)

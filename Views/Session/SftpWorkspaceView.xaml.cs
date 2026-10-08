@@ -66,9 +66,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         else if (snapshot.State == SftpSessionState.Failed)
             PathBox.Text = snapshot.DirectoryListing.Path;
 
-        var isListing = snapshot.State == SftpSessionState.ListingDirectory;
-        DirectoryLoadingProgress.IsIndeterminate = isListing;
-        DirectoryLoadingOverlay.Visibility = isListing ? Visibility.Visible : Visibility.Collapsed;
+        var isDeleting = snapshot.State == SftpSessionState.Deleting;
+        var isBusy = snapshot.State == SftpSessionState.ListingDirectory || isDeleting;
+        DirectoryLoadingText.Text = isDeleting ? "正在删除…" : "正在读取文件夹…";
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(DirectoryLoadingProgress, DirectoryLoadingText.Text);
+        DirectoryLoadingProgress.IsIndeterminate = isBusy;
+        DirectoryLoadingOverlay.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         PathBox.IsEnabled = snapshot.CanNavigate;
         RemoteTable.IsEnabled = snapshot.CanNavigate;
         foreach (var button in Toolbar.Children.OfType<Button>()) button.IsEnabled = snapshot.CanNavigate;
@@ -150,12 +153,15 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         var dialog = new ContentDialog
         {
             Title = "确认删除",
-            Content = item.IsDirectory
-                ? $"确定删除文件夹“{item.Name}”吗？仅允许删除空文件夹。"
+            Content = item.IsSymbolicLink
+                ? $"确定删除符号链接“{item.Name}”吗？链接指向的内容不会被删除。"
+                : item.IsDirectory
+                ? $"确定删除文件夹“{item.Name}”及其全部内容吗？此操作无法撤销。"
                 : $"确定删除文件“{item.Name}”吗？",
             PrimaryButtonText = "删除",
             CloseButtonText = "取消",
-            DefaultButton = ContentDialogButton.Primary,
+            DefaultButton = ContentDialogButton.Close,
+            RequestedTheme = ActualTheme,
             XamlRoot = XamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;

@@ -140,7 +140,7 @@
             <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" Opacity="0.8" />
             <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Center"
                         MaxWidth="280" Margin="24" Spacing="12">
-                <TextBlock Text="正在读取文件夹…" HorizontalAlignment="Center"
+                  <TextBlock x:Name="DirectoryLoadingText" Text="正在读取文件夹…" HorizontalAlignment="Center"
                            AutomationProperties.LiveSetting="Polite" />
                 <ProgressBar x:Name="DirectoryLoadingProgress" IsIndeterminate="False"
                              AutomationProperties.Name="正在读取文件夹" />

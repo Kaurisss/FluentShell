@@ -27,6 +27,9 @@ public interface ISftpClient
     void DeleteDirectory(string path);
     void DeleteFile(string path);
 
+    /// <summary>在服务器本地递归删除目录。仅在没有此能力时返回 false；执行失败必须抛出异常。</summary>
+    Task<bool> TryDeleteDirectoryRecursivelyAsync(string path) => Task.FromResult(false);
+
     Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken);
     Task DownloadAsync(string remotePath, Stream output, CancellationToken cancellationToken);
     Task RenameAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken);
