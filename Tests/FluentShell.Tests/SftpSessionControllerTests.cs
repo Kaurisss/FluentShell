@@ -8,6 +8,56 @@ namespace FluentShell.Tests;
 public sealed class SftpSessionControllerTests
 {
     [TestMethod]
+    public async Task Directory_size_query_does_not_change_browsing_or_transfer_state()
+    {
+        var service = new FakeSftpFileService();
+        service.DirectorySizeHandler = (path, token) =>
+        {
+            Assert.AreEqual("/data", path);
+            return Task.FromResult(4096L);
+        };
+        using var controller = new SftpSessionController(service);
+        var before = controller.Snapshot;
+        var snapshots = 0;
+        controller.SnapshotChanged += (_, _) => snapshots++;
+
+        var bytes = await controller.GetDirectorySizeAsync(
+            new RemoteFileItem { Name = "data", FullPath = "/data", IsDirectory = true }, CancellationToken.None);
+
+        Assert.AreEqual(4096L, bytes);
+        Assert.AreEqual(before.State, controller.Snapshot.State);
+        Assert.AreSame(before.DirectoryListing, controller.Snapshot.DirectoryListing);
+        Assert.AreSame(before.Transfer, controller.Snapshot.Transfer);
+        Assert.AreEqual(0, snapshots);
+    }
+
+    [TestMethod]
+    [DataRow(false, false, "file")]
+    [DataRow(true, true, "link")]
+    [DataRow(true, false, "..")]
+    public async Task Directory_size_query_rejects_files_links_and_parent_entry(bool directory, bool link, string name)
+    {
+        var service = new FakeSftpFileService();
+        using var controller = new SftpSessionController(service);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.GetDirectorySizeAsync(
+            new RemoteFileItem { Name = name, FullPath = "/data", IsDirectory = directory, IsSymbolicLink = link },
+            CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task Disposing_controller_cancels_in_flight_directory_size_query()
+    {
+        var service = new FakeSftpFileService
+        {
+            DirectorySizeHandler = async (_, token) => { await Task.Delay(Timeout.Infinite, token); return 0; }
+        };
+        var controller = new SftpSessionController(service);
+        var calculation = controller.GetDirectorySizeAsync(
+            new RemoteFileItem { Name = "data", FullPath = "/data", IsDirectory = true }, CancellationToken.None);
+        controller.Dispose();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => calculation.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+    [TestMethod]
     public async Task Refresh_publishes_directory_listing_with_listing_and_idle_states()
     {
         var fileService = new FakeSftpFileService();
@@ -617,6 +667,9 @@ public sealed class SftpSessionControllerTests
 
     private sealed class FakeSftpFileService : ISftpFileService
     {
+        public Func<string, CancellationToken, Task<long>>? DirectorySizeHandler { get; set; }
+        public Task<long> GetDirectorySizeAsync(string path, CancellationToken token) =>
+            DirectorySizeHandler?.Invoke(path, token) ?? throw new NotSupportedException();
         public bool IsConnected { get; set; } = true;
         public List<RemoteFileItem> DirectoryItems { get; } = [];
         public Dictionary<string, List<RemoteFileItem>> ListingsByPath { get; } = [];

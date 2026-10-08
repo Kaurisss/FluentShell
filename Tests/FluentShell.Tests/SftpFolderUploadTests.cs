@@ -259,6 +259,7 @@ public sealed class SftpFolderUploadTests
 
     private sealed class MemoryFileService : ISftpFileService
     {
+        public Task<long> GetDirectorySizeAsync(string path, CancellationToken token) => throw new NotSupportedException();
         public bool IsConnected => true;
         public HashSet<string> Directories { get; } = ["/"];
         public HashSet<string> DeniedListings { get; } = [];

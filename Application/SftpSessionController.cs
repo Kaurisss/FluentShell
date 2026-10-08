@@ -92,6 +92,7 @@ public sealed class SftpSessionController : IDisposable
     private readonly TransferQueueManager _queueManager;
     private SftpDirectoryListing _directoryListing = SftpDirectoryListing.Empty("/");
     private CancellationTokenSource? _transferCts;
+    private CancellationTokenSource? _directorySizeCts;
     private TransferControl? _batchControl;
     private bool _disposed;
 
@@ -149,6 +150,27 @@ public sealed class SftpSessionController : IDisposable
     }
 
     public Task RefreshAsync() => RefreshCurrentDirectoryAsync();
+
+    public async Task<long> GetDirectorySizeAsync(RemoteFileItem item, CancellationToken cancellationToken)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(SftpSessionController));
+        if (!item.IsDirectory || item.IsSymbolicLink || item.Name is "." or "..")
+            throw new InvalidOperationException("请选择普通目录计算大小。");
+
+        CancelDirectorySizeCalculation();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _directorySizeCts = cancellation;
+        try
+        {
+            return await _fileService.GetDirectorySizeAsync(item.FullPath, cancellation.Token);
+        }
+        finally
+        {
+            if (ReferenceEquals(_directorySizeCts, cancellation)) _directorySizeCts = null;
+        }
+    }
+
+    public void CancelDirectorySizeCalculation() => _directorySizeCts?.Cancel();
 
     public async Task NavigateToAsync(string path)
     {
@@ -634,6 +656,7 @@ public sealed class SftpSessionController : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        CancelDirectorySizeCalculation();
         CancelTransfer();
         // An in-flight operation owns CTS disposal and releases its gate in finally.
         // Disposing either here races paused/cancelled continuations.

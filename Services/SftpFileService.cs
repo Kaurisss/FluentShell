@@ -5,6 +5,9 @@ namespace FluentShell.Services;
 public sealed class SftpFileService : ISftpFileService
 {
     private readonly Func<ISftpClient?> _clientProvider;
+    // 属性统计可能在窗口关闭后仍等待一次远程读取；同一客户端不能并发操作。
+    // 浏览、传输的 SftpFileService 实例各自持有独立的门闩。
+    private readonly SemaphoreSlim _clientGate = new(1, 1);
 
     public SftpFileService(Func<ISftpClient?> clientProvider)
     {
@@ -13,10 +16,8 @@ public sealed class SftpFileService : ISftpFileService
 
     public bool IsConnected => _clientProvider()?.IsConnected == true;
 
-    public async Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
-    {
-        var client = GetConnectedClient();
-        return await Task.Run(() =>
+    public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path) =>
+        ExecuteAsync(client =>
         {
             var items = client.ListDirectory(path)
                 .Where(entry => entry.Name is not "." and not "..")
@@ -42,39 +43,81 @@ public sealed class SftpFileService : ISftpFileService
 
             return (IReadOnlyList<RemoteFileItem>)items;
         });
-    }
+
+    public Task<long> GetDirectorySizeAsync(string path, CancellationToken cancellationToken) =>
+        ExecuteAsync(client =>
+        {
+            var target = path == "/" ? path : path.TrimEnd('/');
+            if (!target.StartsWith('/') || (target != "/" &&
+                target[1..].Split('/').Any(segment => !SftpPathValidator.TryValidateRemoteName(segment, out _))))
+                throw new IOException("远程目录路径无效。");
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (target != "/")
+            {
+                // 列表里的选中项可能已变成链接；不要统计链接目标。
+                var name = target[(target.LastIndexOf('/') + 1)..];
+                var selected = client.ListDirectory(RemotePath.Parent(target))
+                    .SingleOrDefault(entry => entry.Name == name);
+                if (selected is not { IsDirectory: true, IsSymbolicLink: false })
+                    throw new IOException("远程目录已不存在或类型已改变，请刷新后重试。");
+            }
+
+            long total = 0;
+            var pending = new Stack<string>();
+            pending.Push(target);
+            while (pending.TryPop(out var directory))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var entry in client.ListDirectory(directory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (entry.Name is "." or ".." || entry.IsSymbolicLink) continue;
+                    if (!SftpPathValidator.TryValidateRemoteName(entry.Name, out _))
+                        throw new IOException("远程目录包含无效的条目名称，无法完整计算大小。");
+                    if (entry.IsDirectory)
+                        pending.Push(RemotePath.Combine(directory, entry.Name));
+                    else
+                    {
+                        if (entry.Length < 0) throw new IOException("服务器未提供文件大小，无法完整计算目录大小。");
+                        total = checked(total + entry.Length);
+                    }
+                }
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return total;
+        }, cancellationToken);
 
     public Task CreateDirectoryAsync(string path) =>
-        Task.Run(() => GetConnectedClient().CreateDirectory(path));
+        ExecuteAsync(client => { client.CreateDirectory(path); return Task.CompletedTask; });
 
     public Task<bool> ExistsAsync(string path) =>
-        Task.Run(() => GetConnectedClient().Exists(path));
+        ExecuteAsync(client => client.Exists(path));
 
     public Task<bool> IsDirectoryAsync(string path) =>
-        Task.Run(() => GetConnectedClient().IsDirectory(path));
+        ExecuteAsync(client => client.IsDirectory(path));
 
     public Task UploadAsync(
         Stream input,
         string remotePath,
         CancellationToken cancellationToken) =>
-        Task.Run(() => GetConnectedClient().UploadAsync(input, remotePath, cancellationToken), cancellationToken);
+        ExecuteAsync(client => client.UploadAsync(input, remotePath, cancellationToken), cancellationToken);
 
     public Task DownloadAsync(
         string remotePath,
         Stream output,
         CancellationToken cancellationToken) =>
-        Task.Run(() => GetConnectedClient().DownloadAsync(remotePath, output, cancellationToken), cancellationToken);
+        ExecuteAsync(client => client.DownloadAsync(remotePath, output, cancellationToken), cancellationToken);
 
     public Task RenameAsync(string sourcePath, string destinationPath) =>
-        GetConnectedClient().RenameAsync(sourcePath, destinationPath, CancellationToken.None);
+        ExecuteAsync(client => client.RenameAsync(sourcePath, destinationPath, CancellationToken.None));
 
-    public Task DeleteAsync(RemoteFileItem item) => Task.Run(async () =>
+    public Task DeleteAsync(RemoteFileItem item) => ExecuteAsync(async client =>
     {
         var path = SftpPathValidator.ValidateRemoteDeletePath(item.FullPath);
         if (!SftpPathValidator.TryValidateRemoteName(item.Name, out _) || path.Split('/').Last() != item.Name)
             throw new IOException("不能删除根目录、父目录或无效的远程路径。");
 
-        var client = GetConnectedClient();
         // 重新读取父目录中的元数据，避免确认期间条目已变成符号链接。
         var selected = client.ListDirectory(RemotePath.Parent(path))
             .SingleOrDefault(entry => entry.Name == item.Name)
@@ -132,13 +175,35 @@ public sealed class SftpFileService : ISftpFileService
         };
     }
 
-    private static string FormatSize(long length) => length switch
+    internal static string FormatSize(long length) => length switch
     {
         < 1024 => $"{length} B",
         < 1024 * 1024 => $"{length / 1024d:0.0} KB",
         < 1024L * 1024 * 1024 => $"{length / 1024d / 1024d:0.0} MB",
         _ => $"{length / 1024d / 1024d / 1024d:0.0} GB"
     };
+
+    private async Task<T> ExecuteAsync<T>(Func<ISftpClient, T> operation, CancellationToken cancellationToken = default)
+    {
+        await _clientGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = GetConnectedClient();
+            return await Task.Run(() => operation(client), cancellationToken).ConfigureAwait(false);
+        }
+        finally { _clientGate.Release(); }
+    }
+
+    private async Task ExecuteAsync(Func<ISftpClient, Task> operation, CancellationToken cancellationToken = default)
+    {
+        await _clientGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var client = GetConnectedClient();
+            await Task.Run(() => operation(client), cancellationToken).ConfigureAwait(false);
+        }
+        finally { _clientGate.Release(); }
+    }
 
     private ISftpClient GetConnectedClient()
     {

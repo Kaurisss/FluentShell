@@ -8,6 +8,39 @@ namespace FluentShell.Tests;
 public sealed class SftpWorkspaceTests
 {
     [TestMethod]
+    public async Task Workspace_connects_directory_properties_to_browsing_service_and_detaches_on_dispose()
+    {
+        var service = new FakeSftpFileService();
+        var transfer = new FakeSftpFileService();
+        var view = new RecordingSftpWorkspaceView();
+        using var workspace = new SftpWorkspace(service, view, transferFileService: transfer);
+        Assert.IsNotNull(view.DirectorySizeProvider);
+
+        var result = await view.DirectorySizeProvider(
+            new RemoteFileItem { Name = "data", FullPath = "/data", IsDirectory = true }, CancellationToken.None);
+
+        Assert.AreEqual(1024L, result);
+        Assert.AreEqual(1, service.DirectorySizeCalls);
+        Assert.AreEqual(0, transfer.DirectorySizeCalls);
+        workspace.Dispose();
+        Assert.IsNull(view.DirectorySizeProvider);
+    }
+
+    [TestMethod]
+    public async Task Connection_loss_cancels_directory_properties_calculation()
+    {
+        var service = new FakeSftpFileService
+        {
+            DirectorySizeHandler = async token => { await Task.Delay(Timeout.Infinite, token); return 0; }
+        };
+        var view = new RecordingSftpWorkspaceView();
+        using var workspace = new SftpWorkspace(service, view);
+        var calculation = view.DirectorySizeProvider!(
+            new RemoteFileItem { Name = "data", FullPath = "/data", IsDirectory = true }, CancellationToken.None);
+        workspace.ConnectionLost();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => calculation.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+    [TestMethod]
     public async Task Pane_upload_uses_selected_files_without_opening_picker()
     {
         var service = new FakeSftpFileService();
@@ -423,8 +456,10 @@ public sealed class SftpWorkspaceTests
     private static SftpUploadFile CreateUploadFile(string name) =>
         new(name, () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])));
 
-    private sealed class RecordingSftpWorkspaceView : ISftpWorkspaceView
+    private sealed class RecordingSftpWorkspaceView : ISftpWorkspaceView, ISftpPropertiesView
     {
+        public Func<RemoteFileItem, CancellationToken, Task<long>>? DirectorySizeProvider { get; private set; }
+        public void SetDirectorySizeProvider(Func<RemoteFileItem, CancellationToken, Task<long>>? provider) => DirectorySizeProvider = provider;
         public string PromptAnswer { get; set; } = string.Empty;
         public bool OverwriteAnswer { get; set; } = true;
         public bool DeleteAnswer { get; set; } = true;
@@ -482,6 +517,13 @@ public sealed class SftpWorkspaceTests
 
     private sealed class FakeSftpFileService : ISftpFileService
     {
+        public int DirectorySizeCalls { get; private set; }
+        public Func<CancellationToken, Task<long>>? DirectorySizeHandler { get; set; }
+        public Task<long> GetDirectorySizeAsync(string path, CancellationToken token)
+        {
+            DirectorySizeCalls++;
+            return DirectorySizeHandler?.Invoke(token) ?? Task.FromResult(1024L);
+        }
         public bool IsConnected { get; set; } = true;
         public bool FileExists { get; set; }
         public List<RemoteFileItem> DirectoryItems { get; } = [];

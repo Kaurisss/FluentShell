@@ -1,5 +1,6 @@
 ﻿using FluentShell.Core;
 using FluentShell.Models;
+using FluentShell.Services;
 using FluentShell.Views.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,7 +15,7 @@ using WinRT.Interop;
 
 namespace FluentShell.Views.Session;
 
-public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView
+public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView, ISftpPropertiesView
 {
     private UserPreferences _preferences = new();
     public void SetPreferences(UserPreferences preferences)
@@ -27,6 +28,9 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     private readonly ObservableCollection<RemoteFileItem> _remoteFiles = [];
     private bool _isFailureDialogOpen;
     private MenuFlyout? _emptyAreaMenu;
+    private Func<RemoteFileItem, CancellationToken, Task<long>>? _directorySizeProvider;
+    private CancellationTokenSource? _directorySizeCancellation;
+    private ContentDialog? _propertiesDialog;
     private SftpSessionSnapshot _snapshot = new(
         SftpSessionState.Idle,
         SftpDirectoryListing.Empty("/"),
@@ -42,6 +46,21 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         InitializeComponent();
         ConfigureRemoteTable();
         InitializeLocalPane();
+        Unloaded += (_, _) =>
+        {
+            _directorySizeCancellation?.Cancel();
+            _propertiesDialog?.Hide();
+        };
+    }
+
+    public void SetDirectorySizeProvider(Func<RemoteFileItem, CancellationToken, Task<long>>? provider)
+    {
+        _directorySizeProvider = provider;
+        if (provider is null)
+        {
+            _directorySizeCancellation?.Cancel();
+            _propertiesDialog?.Hide();
+        }
     }
 
     public RemoteFileItem? SelectedItem => RemoteTable.SelectedItem as RemoteFileItem;
@@ -462,26 +481,61 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     private async Task ShowSelectedItemPropertiesAsync()
     {
-        if (SelectedItem is not { Name: not ".." } item || XamlRoot is null) return;
+        if (SelectedItem is not { Name: not ".." } item || XamlRoot is null || _propertiesDialog is not null) return;
 
+        using var cancellation = new CancellationTokenSource();
         var dialog = new ContentDialog
         {
             Title = $"“{item.Name}”属性",
-            Content = BuildPropertiesPanel(item),
+            Content = BuildPropertiesPanel(item, out var sizeText),
             CloseButtonText = "关闭",
             DefaultButton = ContentDialogButton.Close,
+            RequestedTheme = ActualTheme,
             XamlRoot = XamlRoot
         };
-        await dialog.ShowAsync();
+        _propertiesDialog = dialog;
+        _directorySizeCancellation = cancellation;
+        dialog.Closed += (_, _) => cancellation.Cancel();
+        if (item.IsDirectory && !item.IsSymbolicLink)
+            dialog.Opened += (_, _) => _ = UpdateDirectorySizeAsync(item, sizeText, cancellation.Token);
+        try
+        {
+            await dialog.ShowAsync();
+        }
+        finally
+        {
+            cancellation.Cancel();
+            _directorySizeCancellation = null;
+            _propertiesDialog = null;
+        }
     }
 
-    private static Grid BuildPropertiesPanel(RemoteFileItem item)
+    private async Task UpdateDirectorySizeAsync(RemoteFileItem item, TextBlock sizeText, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var provider = _directorySizeProvider ?? throw new InvalidOperationException("文件服务尚未连接。");
+            var bytes = await provider(item, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested)
+                sizeText.Text = $"{SftpFileService.FormatSize(bytes)}（{bytes:N0} 字节）";
+        }
+        catch (OperationCanceledException)
+        {
+            if (!cancellationToken.IsCancellationRequested) sizeText.Text = "计算已取消。";
+        }
+        catch (Exception exception)
+        {
+            if (!cancellationToken.IsCancellationRequested) sizeText.Text = $"计算失败：{exception.Message}";
+        }
+    }
+
+    private static Grid BuildPropertiesPanel(RemoteFileItem item, out TextBlock sizeText)
     {
         var panel = new Grid { ColumnSpacing = 16, RowSpacing = 8, MinWidth = 360 };
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        void AddRow(string label, string value)
+        TextBlock AddRow(string label, string value)
         {
             var row = panel.RowDefinitions.Count;
             panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -497,12 +551,15 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
             Grid.SetColumn(valueBlock, 1);
             panel.Children.Add(labelBlock);
             panel.Children.Add(valueBlock);
+            return valueBlock;
         }
 
         AddRow("名称", item.Name);
         AddRow("类型", item.TypeLabel);
         AddRow("远程路径", item.FullPath);
-        AddRow("大小", item.IsDirectory ? "—" : $"{item.SizeLabel}（{item.SizeBytes:N0} 字节）");
+        sizeText = AddRow("大小", item.IsDirectory
+            ? item.IsSymbolicLink ? "不统计符号链接目标" : "正在计算…"
+            : $"{item.SizeLabel}（{item.SizeBytes:N0} 字节）");
         AddRow("修改时间", item.ModifiedLabel);
         return panel;
     }

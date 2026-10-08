@@ -14,6 +14,8 @@ internal sealed class FakeSftpClient : ISftpClient
     public List<string> ListedPaths { get; } = [];
     public Dictionary<string, Exception> DeleteExceptions { get; } = [];
     public Dictionary<string, IReadOnlyList<RemoteDirectoryEntry>> ListingsByPath { get; } = [];
+    public Dictionary<string, Exception> ListExceptions { get; } = [];
+    public Action<string>? OnList { get; set; }
     public Func<string, Task<bool>>? RecursiveDeleteHandler { get; set; }
     public List<string> RecursiveDeletes { get; } = [];
     public List<(string Source, string Destination)> Renames { get; } = [];
@@ -24,6 +26,8 @@ internal sealed class FakeSftpClient : ISftpClient
     {
         LastListedPath = path;
         ListedPaths.Add(path);
+        OnList?.Invoke(path);
+        if (ListExceptions.TryGetValue(path, out var exception)) throw exception;
         if (ListingsByPath.TryGetValue(path, out var listing)) return listing;
         return Entries.Where(entry => entry.Name is "." or ".." || RemotePath.Parent(entry.FullPath) == path).ToList();
     }

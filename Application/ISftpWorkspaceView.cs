@@ -52,3 +52,9 @@ public interface ISftpPaneTransferView
 }
 
 public sealed record SftpPaneDownload(IReadOnlyList<RemoteFileItem> Items, string Destination);
+
+/// <summary>属性窗口按需计算目录大小；窗口关闭时由视图取消请求。</summary>
+public interface ISftpPropertiesView
+{
+    void SetDirectorySizeProvider(Func<RemoteFileItem, CancellationToken, Task<long>>? provider);
+}

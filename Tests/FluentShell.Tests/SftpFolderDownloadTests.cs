@@ -282,6 +282,7 @@ public sealed class SftpFolderDownloadTests
 
     private sealed class RemoteTree : ISftpFileService
     {
+        public Task<long> GetDirectorySizeAsync(string path, CancellationToken token) => throw new NotSupportedException();
         public bool IsConnected => true;
         public Dictionary<string, IReadOnlyList<RemoteFileItem>> Listings { get; } = [];
         public Dictionary<string, byte[]> Bytes { get; } = [];

@@ -23,11 +23,13 @@ internal static class Program
     internal static readonly List<object> Results = [];
     internal static string ReportPath = Path.GetFullPath("theme-smoke.json");
     internal static bool SftpDeleteOnly;
+    internal static bool SftpPropertiesOnly;
     [STAThread]
     private static void Main(string[] args)
     {
         if (args.Length > 0) ReportPath = Path.GetFullPath(args[0]);
         SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
+        SftpPropertiesOnly = args.Contains("--sftp-properties-smoke");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -63,6 +65,11 @@ internal sealed class SmokeApp : App
         };
         try
         {
+            if (Program.SftpPropertiesOnly)
+            {
+                await VerifySftpPropertiesAsync();
+                return;
+            }
             if (Program.SftpDeleteOnly)
             {
                 await VerifySftpDeleteAsync();
@@ -775,6 +782,105 @@ internal sealed class SmokeApp : App
             });
         var right = bar.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(bar.ActualWidth, 0)).X;
         if (Math.Abs(right - root.ActualWidth) > 2) failures.Add($"{name} scrollbar ends at {right}, expected {root.ActualWidth}.");
+    }
+
+    private async Task VerifySftpPropertiesAsync()
+    {
+        _window = new Window { Title = "FluentShell offline directory properties regression" };
+        _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 750));
+        var root = new Grid { RequestedTheme = ElementTheme.Light };
+        var view = new SftpWorkspaceView(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+        root.Children.Add(view);
+        _window.Content = root;
+        _window.Activate();
+        var folder = new RemoteFileItem { Name = "data", FullPath = "/data", IsDirectory = true, TypeLabel = "目录" };
+        var link = new RemoteFileItem { Name = "link", FullPath = "/link", IsDirectory = true, IsSymbolicLink = true, TypeLabel = "目录" };
+        var file = new RemoteFileItem { Name = "file", FullPath = "/file", SizeBytes = 12, SizeLabel = "12 B", TypeLabel = "文件" };
+        view.Render(new SftpSessionSnapshot(SftpSessionState.Idle, new("/", [folder, link, file]), true, true, true, "", null));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        var table = (Syncfusion.UI.Xaml.DataGrid.SfDataGrid)view.FindName("RemoteTable");
+        Task Show(RemoteFileItem item)
+        {
+            table.SelectedItem = item;
+            return (Task)typeof(SftpWorkspaceView).GetMethod("ShowSelectedItemPropertiesAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, null)!;
+        }
+        ContentDialog Dialog() => VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+            .SelectMany(p => new[] { p.Child }.Concat(Descendants(p.Child))).OfType<ContentDialog>().Single();
+        TextBlock SizeText(ContentDialog dialog) => ((Grid)dialog.Content).Children.OfType<TextBlock>()
+            .Single(block => Grid.GetRow(block) == 3 && Grid.GetColumn(block) == 1);
+        async Task WaitFor(Func<bool> condition)
+        {
+            while (!condition()) await Task.Delay(20, timeout.Token);
+        }
+        await WaitFor(() => view.XamlRoot is not null && table.IsLoaded);
+        root.UpdateLayout();
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            var complete = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationToken requestToken = default;
+            view.SetDirectorySizeProvider((item, token) =>
+            {
+                if (!ReferenceEquals(item, folder)) throw new InvalidOperationException("Wrong property selection.");
+                requestToken = token;
+                return complete.Task;
+            });
+            var showing = Show(folder);
+            await Task.Delay(200, timeout.Token);
+            var dialog = Dialog();
+            var sizeText = SizeText(dialog);
+            if (sizeText.Text != "正在计算…" || dialog.ActualWidth <= 0 || dialog.ActualTheme != theme ||
+                dialog.DefaultButton != ContentDialogButton.Close || !sizeText.IsTextSelectionEnabled)
+                throw new InvalidOperationException("Properties must open responsively with loading text and follow the theme.");
+            complete.SetResult(5L * 1024 * 1024 * 1024 + 82);
+            await WaitFor(() => sizeText.Text != "正在计算…");
+            if (!sizeText.Text.Contains((5L * 1024 * 1024 * 1024 + 82).ToString("N0")) || !sizeText.Text.Contains("GB"))
+                throw new InvalidOperationException("Directory properties must show the calculated 64-bit total.");
+            await CaptureAsync(dialog, Program.ReportPath + $".size.{theme}.png");
+            Program.Results.Add(new { control = "SFTP directory properties loading and total", theme = theme.ToString(), text = sizeText.Text, passed = true });
+            dialog.Hide();
+            await showing.WaitAsync(timeout.Token);
+            if (!requestToken.IsCancellationRequested) throw new InvalidOperationException("Closing properties must cancel the request.");
+
+            complete = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            showing = Show(folder);
+            await Task.Delay(200, timeout.Token);
+            dialog = Dialog();
+            var cancelledText = SizeText(dialog);
+            dialog.Hide();
+            await showing.WaitAsync(timeout.Token);
+            if (!requestToken.IsCancellationRequested) throw new InvalidOperationException("An in-flight request was not cancelled.");
+            complete.SetResult(999);
+            await Task.Delay(50, timeout.Token);
+            if (cancelledText.Text != "正在计算…") throw new InvalidOperationException("Late results must not update a closed dialog.");
+            Program.Results.Add(new { control = "SFTP directory properties cancellation and late result", theme = theme.ToString(), passed = true });
+
+            view.SetDirectorySizeProvider((_, _) => Task.FromException<long>(new IOException("没有读取权限。")));
+            showing = Show(folder);
+            await Task.Delay(200, timeout.Token);
+            dialog = Dialog();
+            if (!SizeText(dialog).Text.Contains("计算失败：没有读取权限。"))
+                throw new InvalidOperationException("Directory size failures must remain visible in the properties dialog.");
+            dialog.Hide();
+            await showing.WaitAsync(timeout.Token);
+            Program.Results.Add(new { control = "SFTP directory properties read failure", theme = theme.ToString(), passed = true });
+
+            view.SetDirectorySizeProvider((_, _) => throw new InvalidOperationException("Files and links must not trigger recursion."));
+            foreach (var item in new[] { file, link })
+            {
+                showing = Show(item);
+                await Task.Delay(200, timeout.Token);
+                dialog = Dialog();
+                if (SizeText(dialog).Text != (item.IsSymbolicLink ? "不统计符号链接目标" : "12 B（12 字节）"))
+                    throw new InvalidOperationException("File and link properties must preserve their size semantics.");
+                dialog.Hide();
+                await showing.WaitAsync(timeout.Token);
+            }
+            Program.Results.Add(new { control = "SFTP file and symbolic link properties", theme = theme.ToString(), passed = true });
+        }
+        view.SetDirectorySizeProvider(null);
+        _window.Close();
+        Program.Finish();
     }
 
     private async Task VerifySftpDeleteAsync()

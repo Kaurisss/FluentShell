@@ -20,6 +20,15 @@ connects to a server or deletes files:
 
 The scenario creates a session in light mode, detaches it as when navigating to settings, changes the root theme, and reattaches it for Light → Dark → Light. Checks include the effective themes of the workspace/terminal/SFTP grids/path inputs, actual sidebar metric foreground colors, and the WebView page's actual computed background and color scheme.
 
+For remote directory properties, use `--sftp-properties-smoke`. It checks asynchronous
+loading, totals above 4 GB, cancellation and late results, read errors, and file/link
+properties in light and dark themes. It uses synthetic results and never connects
+to a server:
+
+```powershell
+& Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe .tmp/sftp-properties-smoke.json --sftp-properties-smoke
+```
+
 The scenario also opens the secondary terminal-color settings page and its real
 ColorDialog, checks cancel/confirm and back navigation, then verifies applying
 and resetting a custom background on the cached terminal. It uses only in-memory

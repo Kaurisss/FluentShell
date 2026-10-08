@@ -61,6 +61,8 @@ public sealed class SftpWorkspace : IDisposable
             deleteLocalFile ?? File.Delete);
 
         _controller.SnapshotChanged += Controller_SnapshotChanged;
+        if (_view is ISftpPropertiesView properties)
+            properties.SetDirectorySizeProvider(_controller.GetDirectorySizeAsync);
         _view.RefreshRequested += View_RefreshRequested;
         _view.NavigateRequested += View_NavigateRequested;
         _view.NewFolderRequested += View_NewFolderRequested;
@@ -209,6 +211,7 @@ public sealed class SftpWorkspace : IDisposable
 
     public void ConnectionLost()
     {
+        _controller.CancelDirectorySizeCalculation();
         _currentTask?.Disconnect();
         _controller.CancelTransfer();
         _transfers.RefreshCommands();
@@ -264,6 +267,8 @@ public sealed class SftpWorkspace : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        if (_view is ISftpPropertiesView properties)
+            properties.SetDirectorySizeProvider(null);
         if (_view is ISftpPaneTransferView panes)
         {
             panes.UploadSelectionRequested -= UploadSelectionRequested;
