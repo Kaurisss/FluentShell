@@ -18,6 +18,21 @@ to a server or loads saved profiles:
 & Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe .tmp/multi-session-smoke.json --multi-session-smoke
 ```
 
+For tab overflow, pass `--tab-overflow-smoke`. This exercises 20 synthetic tabs,
+both scroll buttons, selection at both ends, the adjacent add button, keyboard focus,
+and closing tabs until they fit. It uses the production caption/input regions in
+an extended title bar and injects vertical/horizontal wheel input into its own
+foreground window, including fractional/rapid input and input over close buttons.
+The cursor is briefly positioned over each target and restored unless the user
+has moved it. It also checks both scroll boundaries,
+add-button placement with one/two tabs and caret edges at 100%, 125%, and 150%
+render scales. It captures light/dark title bars at 800, 1200, and 1700 DIPs
+without opening SSH connections:
+
+```powershell
+Start-Process -FilePath Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe -ArgumentList '.tmp/tab-overflow-smoke.json', '--tab-overflow-smoke' -WindowStyle Hidden -Wait
+```
+
 For the SFTP deletion flow only, pass `--sftp-delete-smoke` after the report path.
 This checks busy/completed states and directory/link confirmation dialogs in light
 and dark themes, including cancellation. It uses synthetic entries and never

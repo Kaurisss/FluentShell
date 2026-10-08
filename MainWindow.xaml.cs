@@ -87,6 +87,7 @@ public sealed partial class MainWindow : Window
                 $"传输任务，{count} 项进行中，{_transfers.FailedCount} 项失败");
         };
         WireModules();
+        WindowChrome.EnableTitleBarInputRegions(this, RootGrid, AppTitleBar, PaneToggleButton, _sessionTabStrip.TitleBarInputElement);
         Grid.SetRow(_transferNotice, 1);
         Canvas.SetZIndex(_transferNotice, 50);
         RootGrid.Children.Add(_transferNotice);
@@ -115,7 +116,6 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
-        SetTitleBar(AppTitleBar);
     }
 
     private Task<ISshConnection?> CreateConnectionAsync(

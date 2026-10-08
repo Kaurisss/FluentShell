@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\FluentShell.csproj" />
+    <Compile Include="..\FluentShell.Tests\FakeShellSession.cs" Link="FakeShellSession.cs" />
     <Content Include="..\..\Assets\Square150x150Logo.scale-200.png" Link="Assets\Square150x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

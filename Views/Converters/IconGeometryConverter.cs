@@ -15,15 +15,17 @@ public sealed class IconGeometryConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>
         DependencyProperty.UnsetValue;
 
-    public static Geometry Parse(string data)
+    public static Geometry Parse(string data) => Parse(data, 20);
+
+    public static Geometry Parse(string data, double viewportSize)
     {
         var artwork = (Geometry)XamlBindingHelper.ConvertValue(typeof(Geometry), data);
 
-        // Preserve the SVG's full 0..20 viewport, including its transparent inset.
+        // Preserve the SVG's full viewport, including its transparent inset.
         // The zero-area line extends the geometry bounds without painting a frame.
         // This keeps antialiasing coverage away from PathIcon's tight render bounds.
         var viewport = new GeometryGroup { FillRule = FillRule.Nonzero };
-        viewport.Children.Add(new LineGeometry { StartPoint = new Point(0, 0), EndPoint = new Point(20, 20) });
+        viewport.Children.Add(new LineGeometry { StartPoint = new Point(0, 0), EndPoint = new Point(viewportSize, viewportSize) });
         viewport.Children.Add(artwork);
         return viewport;
     }

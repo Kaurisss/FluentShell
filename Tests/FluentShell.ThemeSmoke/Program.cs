@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using FluentShell.Core;
+using FluentShell.Tests;
 using FluentShell.Models;
 using FluentShell.Services;
 using FluentShell.Views;
@@ -25,6 +26,7 @@ internal static class Program
     internal static bool SftpDeleteOnly;
     internal static bool SftpPropertiesOnly;
     internal static bool MultiSessionOnly;
+    internal static bool TabOverflowOnly;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -32,6 +34,7 @@ internal static class Program
         SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
         SftpPropertiesOnly = args.Contains("--sftp-properties-smoke");
         MultiSessionOnly = args.Contains("--multi-session-smoke");
+        TabOverflowOnly = args.Contains("--tab-overflow-smoke");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -67,6 +70,11 @@ internal sealed class SmokeApp : App
         };
         try
         {
+            if (Program.TabOverflowOnly)
+            {
+                await VerifyTabOverflowAsync();
+                return;
+            }
             if (Program.MultiSessionOnly)
             {
                 await VerifyMultiSessionAsync();
@@ -946,6 +954,226 @@ internal sealed class SmokeApp : App
         Program.Finish();
     }
 
+    private async Task VerifyTabOverflowAsync()
+    {
+        _window = new Window { Title = "FluentShell offline tab overflow regression" };
+        var root = new Grid { RequestedTheme = ElementTheme.Light };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
+        var titleBar = (Grid)Microsoft.UI.Xaml.Markup.XamlReader.Load("""
+            <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                  Height="40" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+            """);
+        var strip = new SessionTabStrip();
+        var titleHost = new ContentPresenter { Content = strip, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(64, 0, 180, 0) };
+        titleBar.Children.Add(titleHost);
+        root.Children.Add(titleBar);
+        _window.Content = root;
+        _window.ExtendsContentIntoTitleBar = true;
+        WindowChrome.EnableTitleBarInputRegions(_window, root, titleBar, (Grid)strip.FindName("TabStripLayout"));
+        _window.Activate();
+        _window.AppWindow.Show();
+        var host = new SessionHost(strip);
+        host.SessionSelected += (_, session) => host.Select(session);
+        host.SessionCloseRequested += (_, session) => host.Remove(session);
+        var newRequests = 0;
+        host.NewSessionRequested += (_, _) => newRequests++;
+        var profile = new ServerProfile { Name = "腾讯云", Host = "offline.invalid", Username = "fixture" };
+        var sessions = Enumerable.Range(0, 20).Select(_ => new FakeShellSession(profile)).ToArray();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        async Task WaitFor(Func<bool> condition)
+        {
+            while (!condition()) await Task.Delay(30, timeout.Token);
+        }
+        await WaitFor(() => strip.IsLoaded);
+        var scroll = (ScrollViewer)strip.FindName("TabScrollViewer");
+        var panel = (StackPanel)strip.FindName("TabPanel");
+        var left = (Button)strip.FindName("ScrollLeftButton");
+        var right = (Button)strip.FindName("ScrollRightButton");
+        var add = (Button)strip.FindName("NewSessionButton");
+        var wheelEvents = 0;
+        var wheelHandled = false;
+        string? wheelSource = null;
+        string? wheelInput = null;
+        Microsoft.UI.Input.InputPointerSource.GetForIsland(root.XamlRoot.ContentIsland).PointerWheelChanged += (_, args) =>
+        {
+            wheelEvents++;
+            wheelHandled = args.Handled;
+            var position = root.XamlRoot.CoordinateConverter.ConvertScreenToLocal(
+                root.XamlRoot.ContentIsland.CoordinateConverter.ConvertLocalToScreen(args.CurrentPoint.Position));
+            wheelSource = $"ContentIsland at {args.CurrentPoint.Position.X},{args.CurrentPoint.Position.Y}, XAML={position.X},{position.Y}, delta={args.CurrentPoint.Properties.MouseWheelDelta}";
+        };
+        Microsoft.UI.Xaml.Controls.Primitives.ToggleButton VisibleTab() => panel.Children.OfType<Grid>()
+            .SelectMany(grid => grid.Children.OfType<Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>())
+            .First(button => FullyVisible((IShellSession)button.Tag));
+        async Task Wheel(int delta, bool horizontal = false, bool overClose = false, int repeat = 1)
+        {
+            var tab = VisibleTab();
+            var target = overClose
+                ? (FrameworkElement)((Grid)tab.Parent).Children.OfType<Button>().Single()
+                : (FrameworkElement)tab.Content;
+            if (!tab.Focus(FocusState.Programmatic))
+                throw new InvalidOperationException("Cannot focus a visible tab for wheel input.");
+            var beforeInput = wheelEvents;
+            wheelInput = await SendWheelInputAsync(_window, root, target, delta, horizontal, repeat, () => wheelEvents > beforeInput);
+        }
+        void Click(Button button) => ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+            new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button)
+                .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        bool FullyVisible(IShellSession session)
+        {
+            var container = panel.Children.OfType<Grid>().Single(grid => grid.Children
+                .OfType<Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>().Any(button => ReferenceEquals(button.Tag, session)));
+            var x = container.TransformToVisual(scroll).TransformPoint(new Windows.Foundation.Point()).X;
+            return container.ActualWidth > 0 && x >= -1 && x + container.ActualWidth <= scroll.ViewportWidth + 1;
+        }
+        bool TabContentMeasured() => Math.Abs(panel.ActualWidth -
+            (panel.Children.OfType<FrameworkElement>().Sum(tab => tab.ActualWidth) +
+             Math.Max(0, panel.Children.Count - 1) * panel.Spacing)) <= 1;
+        void VerifyAddButton()
+        {
+            var x = add.TransformToVisual(strip).TransformPoint(new Windows.Foundation.Point()).X;
+            if (add.ActualWidth <= 0 || x < 0 || x + add.ActualWidth > strip.ActualWidth + 1 ||
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(add) != "新建标签页")
+                throw new InvalidOperationException("The new-tab command must remain visible and accessible during overflow.");
+            if (scroll.ScrollableWidth <= 1 && panel.Children.Count > 0)
+            {
+                var last = (FrameworkElement)panel.Children[^1];
+                var lastRight = last.TransformToVisual(strip).TransformPoint(new Windows.Foundation.Point()).X + last.ActualWidth;
+                if (Math.Abs(x - lastRight - add.Margin.Left) > 1)
+                    throw new InvalidOperationException($"The new-tab command must follow the last tab when all tabs fit: add={x}, lastRight={lastRight}, viewport={scroll.ViewportWidth}, offset={scroll.HorizontalOffset}.");
+            }
+        }
+        host.Add(sessions[0]);
+        await WaitFor(() => FullyVisible(sessions[0]) && scroll.ScrollableWidth <= 1);
+        VerifyAddButton();
+        if (left.Visibility != Visibility.Collapsed || right.Visibility != Visibility.Collapsed)
+            throw new InvalidOperationException("A single tab must not show overflow controls.");
+        await CaptureAsync(titleBar, Program.ReportPath + ".Light.single.png");
+        foreach (var session in sessions.Skip(1)) host.Add(session);
+        await WaitFor(() => scroll.ScrollableWidth > 0 && FullyVisible(sessions[^1]));
+        if (left.Visibility != Visibility.Visible || right.Visibility != Visibility.Visible || !left.IsEnabled || right.IsEnabled)
+            throw new InvalidOperationException("Overflow arrows must indicate that the viewport is at the last tab.");
+        VerifyAddButton();
+        Click(add);
+        if (newRequests != 1 || panel.Children.Count != 20)
+            throw new InvalidOperationException("The add button must request a new session without dropping tabs.");
+
+        var end = scroll.HorizontalOffset;
+        Click(left);
+        await WaitFor(() => scroll.HorizontalOffset < end - 1);
+        if (!ReferenceEquals(host.Selected, sessions[^1]))
+            throw new InvalidOperationException("Scrolling must preserve the selected session.");
+        host.Select(sessions[0]);
+        await WaitFor(() => FullyVisible(sessions[0]) && !left.IsEnabled);
+        var eventsBeforeWheel = wheelEvents;
+        await Wheel(-120);
+        await Task.Delay(100, timeout.Token);
+        if (scroll.HorizontalOffset <= 1)
+            throw new InvalidOperationException($"Wheel failed in the extended title bar: delivered={wheelEvents - eventsBeforeWheel}, handled={wheelHandled}, source={wheelSource}, offset={scroll.HorizontalOffset}, scrollable={scroll.ScrollableWidth}, input={wheelInput}.");
+        await WaitFor(() => scroll.HorizontalOffset > 1);
+        var wheelStep = scroll.HorizontalOffset;
+        if (wheelEvents <= eventsBeforeWheel || !wheelHandled || !ReferenceEquals(host.Selected, sessions[0]))
+            throw new InvalidOperationException("Mouse wheel events must reach the tab content, scroll once and preserve selection.");
+        await Wheel(120, overClose: true);
+        await WaitFor(() => scroll.HorizontalOffset <= 1);
+        await Wheel(120, horizontal: true);
+        await WaitFor(() => scroll.HorizontalOffset > 1);
+        await Wheel(-120, horizontal: true, overClose: true);
+        await WaitFor(() => scroll.HorizontalOffset <= 1);
+        await Wheel(-30);
+        await WaitFor(() => scroll.HorizontalOffset > 1);
+        if (scroll.HorizontalOffset >= wheelStep)
+            throw new InvalidOperationException("High-resolution wheel input must preserve fractional wheel increments.");
+        await Wheel(30, overClose: true);
+        await WaitFor(() => scroll.HorizontalOffset <= 1);
+        await Wheel(-120, repeat: 3);
+        await WaitFor(() => scroll.HorizontalOffset >= wheelStep * 2.5);
+        if (!ReferenceEquals(host.Selected, sessions[0]) || panel.Children.Count != 20)
+            throw new InvalidOperationException("Rapid wheel input must accumulate without selecting or closing tabs.");
+        host.Select(sessions[0]);
+        await WaitFor(() => scroll.HorizontalOffset <= 1);
+        await Wheel(120);
+        await Task.Delay(50, timeout.Token);
+        if (scroll.HorizontalOffset > 1)
+            throw new InvalidOperationException("Wheel scrolling must stop at the left boundary.");
+        Program.Results.Add(new { control = "vertical/horizontal wheel, fractional and rapid input, close-button routing and left boundary", passed = true });
+        Click(right);
+        await WaitFor(() => scroll.HorizontalOffset > 1);
+        host.Select(sessions[^1]);
+        await WaitFor(() => FullyVisible(sessions[^1]));
+        var rightBoundary = scroll.HorizontalOffset;
+        await Wheel(-120, overClose: true);
+        await Task.Delay(50, timeout.Token);
+        if (Math.Abs(scroll.HorizontalOffset - rightBoundary) > 1)
+            throw new InvalidOperationException("Wheel scrolling must stop at the right boundary.");
+
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            foreach (var width in new[] { 800, 1200, 1700 })
+            {
+                _window.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * root.XamlRoot.RasterizationScale), 500));
+                await Task.Delay(150, timeout.Token);
+                await WaitFor(() => FullyVisible(sessions[^1]));
+                VerifyAddButton();
+                if (strip.ActualTheme != theme || left.ActualTheme != theme || right.ActualTheme != theme ||
+                    !add.Focus(FocusState.Keyboard))
+                    throw new InvalidOperationException("Tab commands must follow the current theme and support keyboard focus.");
+                panel.Children.OfType<Grid>().SelectMany(grid => grid.Children
+                    .OfType<Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>())
+                    .Single(button => ReferenceEquals(button.Tag, sessions[^1])).Focus(FocusState.Programmatic);
+                await CaptureAsync(titleBar, Program.ReportPath + $".{theme}.{width}.png");
+                Program.Results.Add(new { control = "20 overflowing tabs, selected-tab visibility and adjacent add button",
+                    theme = theme.ToString(), width, viewport = scroll.ViewportWidth, passed = true });
+            }
+        }
+        foreach (var icon in new[] { (PathIcon)left.Content, (PathIcon)right.Content })
+        {
+            foreach (var scale in new[] { 1d, 1.25d, 1.5d })
+            {
+                var bitmap = new RenderTargetBitmap();
+                await bitmap.RenderAsync(icon, (int)(12 * scale), (int)(12 * scale));
+                var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+                var hasArtwork = false;
+                var clearEdges = true;
+                for (var y = 0; y < bitmap.PixelHeight; y++)
+                    for (var x = 0; x < bitmap.PixelWidth; x++)
+                    {
+                        var alpha = pixels[(y * bitmap.PixelWidth + x) * 4 + 3];
+                        hasArtwork |= alpha > 0;
+                        if (x == 0 || y == 0 || x == bitmap.PixelWidth - 1 || y == bitmap.PixelHeight - 1)
+                            clearEdges &= alpha == 0;
+                    }
+                if (!hasArtwork || !clearEdges || icon.ActualWidth != 12 || icon.ActualHeight != 12)
+                    throw new InvalidOperationException("Caret artwork must preserve the full 12px canvas and clear antialiased edges.");
+                Program.Results.Add(new { control = icon.Name, scale, hasArtwork, clearEdges, passed = true });
+            }
+        }
+        foreach (var session in sessions.Skip(2)) host.Remove(session);
+        host.Select(sessions[1]);
+        await WaitFor(() => TabContentMeasured() && scroll.ScrollableWidth <= 1 && scroll.ViewportWidth <= panel.ActualWidth + 1 &&
+            left.Visibility == Visibility.Collapsed && right.Visibility == Visibility.Collapsed && FullyVisible(sessions[1]));
+        VerifyAddButton();
+        if (panel.Children.Count != 2 || !FullyVisible(sessions[1]))
+            throw new InvalidOperationException("Removing overflow must preserve the remaining tabs and hide navigation arrows.");
+        await CaptureAsync(titleBar, Program.ReportPath + ".Dark.two.png");
+        host.Remove(sessions[1]);
+        host.Select(sessions[0]);
+        await WaitFor(() => panel.Children.Count == 1 && TabContentMeasured() &&
+            scroll.ViewportWidth <= panel.ActualWidth + 1 && FullyVisible(sessions[0]));
+        VerifyAddButton();
+        await CaptureAsync(titleBar, Program.ReportPath + ".Dark.single.png");
+        await Wheel(-120);
+        await Task.Delay(50, timeout.Token);
+        if (scroll.HorizontalOffset > 1 || panel.Children.Count != 1)
+            throw new InvalidOperationException("Wheel input must leave a non-overflowing tab strip unchanged.");
+        Program.Results.Add(new { control = "scroll commands, keyboard focus, closing tabs and add-button placement for one/two tabs", passed = true });
+        _window.Close();
+        Program.Finish();
+    }
+
     private async Task VerifyMultiSessionAsync()
     {
         _window = new Window { Title = "FluentShell offline multi-session regression" };
@@ -1040,6 +1268,98 @@ internal sealed class SmokeApp : App
         await second.DisposeAsync();
         _window.Close();
         Program.Finish();
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MouseMessagePoint { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(MouseMessagePoint point);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out MouseMessagePoint point);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeMouseInput
+    {
+        public int X;
+        public int Y;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public uint Type;
+        public NativeMouseInput Mouse;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint count, NativeInput[] inputs, int size);
+
+    private static async Task<string> SendWheelInputAsync(Window window, FrameworkElement root, FrameworkElement target, int delta, bool horizontal, int repeat, Func<bool> received)
+    {
+        var position = target.TransformToVisual(root).TransformPoint(
+            new Windows.Foundation.Point(target.ActualWidth / 2, target.ActualHeight / 2));
+        var screen = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(position);
+        var point = new MouseMessagePoint { X = screen.X, Y = screen.Y };
+        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        var rects = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(window.AppWindow.Id)
+            .GetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough);
+        SetForegroundWindow(windowHandle);
+        if (!GetCursorPos(out var originalCursor) || !SetCursorPos(point.X, point.Y))
+            throw new InvalidOperationException("Cannot establish native pointer hover for the wheel regression.");
+        try
+        {
+            await Task.Delay(50);
+            if (GetForegroundWindow() != windowHandle || GetAncestor(WindowFromPoint(point), 2) != windowHandle)
+                throw new InvalidOperationException($"The wheel target is not the foreground smoke window: foreground={GetForegroundWindow()}, expected={windowHandle}, pointerRoot={GetAncestor(WindowFromPoint(point), 2)}, scale={root.XamlRoot.RasterizationScale}, window={window.AppWindow.Position.X},{window.AppWindow.Position.Y}, point={point.X},{point.Y}.");
+            var inputs = Enumerable.Repeat(new NativeInput
+            {
+                Mouse = new NativeMouseInput
+                {
+                    X = (int)Math.Round((point.X - GetSystemMetrics(76)) * 65535d / (GetSystemMetrics(78) - 1)),
+                    Y = (int)Math.Round((point.Y - GetSystemMetrics(77)) * 65535d / (GetSystemMetrics(79) - 1)),
+                    MouseData = unchecked((uint)delta),
+                    Flags = 0xC001u | (horizontal ? 0x1000u : 0x0800u)
+                }
+            }, repeat).ToArray();
+            if (SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf<NativeInput>()) != inputs.Length)
+                throw new InvalidOperationException($"Cannot inject wheel input: {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}.");
+            using var receiptTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            while (!received()) await Task.Delay(10, receiptTimeout.Token);
+            await Task.Delay(30);
+        }
+        finally
+        {
+            if (GetCursorPos(out var currentCursor) && Math.Abs(currentCursor.X - point.X) <= 1 && Math.Abs(currentCursor.Y - point.Y) <= 1)
+                SetCursorPos(originalCursor.X, originalCursor.Y);
+        }
+        var hit = SendMessage(windowHandle, 0x0084u, IntPtr.Zero,
+            new IntPtr(unchecked((int)((uint)(ushort)point.Y << 16 | (ushort)point.X))));
+        return $"hit={hit}, point={point.X},{point.Y}, regions=" +
+            string.Join(";", rects.Select(rect => $"{rect.X},{rect.Y},{rect.Width},{rect.Height}"));
     }
 
     private static T Field<T>(object owner, string name) =>
