@@ -14,7 +14,7 @@ public sealed class SessionCoordinator<TSession> where TSession : class
 
     public int Count => _sessions.Count;
     public TSession? Selected { get; private set; }
-    public IReadOnlyCollection<TSession> Sessions => _sessions.Values;
+    public IReadOnlyCollection<TSession> Sessions => _order.AsReadOnly();
 
     public bool TryGet(Guid key, out TSession session) =>
         _sessions.TryGetValue(key, out session!);
@@ -27,7 +27,7 @@ public sealed class SessionCoordinator<TSession> where TSession : class
     {
         var key = _keySelector(session);
         if (!_sessions.TryAdd(key, session))
-            throw new InvalidOperationException("同一服务器只能存在一个活动会话。");
+            throw new InvalidOperationException("无法重复注册同一会话。");
         _order.Add(session);
     }
 

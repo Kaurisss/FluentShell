@@ -24,12 +24,14 @@ internal static class Program
     internal static string ReportPath = Path.GetFullPath("theme-smoke.json");
     internal static bool SftpDeleteOnly;
     internal static bool SftpPropertiesOnly;
+    internal static bool MultiSessionOnly;
     [STAThread]
     private static void Main(string[] args)
     {
         if (args.Length > 0) ReportPath = Path.GetFullPath(args[0]);
         SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
         SftpPropertiesOnly = args.Contains("--sftp-properties-smoke");
+        MultiSessionOnly = args.Contains("--multi-session-smoke");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -65,6 +67,11 @@ internal sealed class SmokeApp : App
         };
         try
         {
+            if (Program.MultiSessionOnly)
+            {
+                await VerifyMultiSessionAsync();
+                return;
+            }
             if (Program.SftpPropertiesOnly)
             {
                 await VerifySftpPropertiesAsync();
@@ -83,7 +90,7 @@ internal sealed class SmokeApp : App
             _window.Content = root;
             var profile = new ServerProfile { Name = "Offline theme check", Host = "offline.invalid", Username = "test" };
             var sidebar = new ConnectedServerSidebar();
-            sidebar.UpdateSession(profile, SessionConnectionState.Connected);
+            sidebar.UpdateSession(profile.Id, profile, SessionConnectionState.Connected);
             sidebar.UpdateMetrics(profile.Id, new ServerMetrics { CpuPercent = 42, MemoryPercent = 34, SwapPercent = 12, LoadAverage = "0.42" }, true);
             root.Children.Add(sidebar);
             var workspace = new SessionWorkspace(profile, WinRT.Interop.WindowNative.GetWindowHandle(_window),
@@ -376,7 +383,7 @@ internal sealed class SmokeApp : App
                 filesWorkspace.ExecuteShortcut("files");
                 if (filesWorkspace.Content is not SftpWorkspaceView || Descendants(filesWorkspace).OfType<TerminalPane>().Any())
                     failures.Add(protocol + " must show files without a terminal.");
-                sidebar.UpdateSession(fileProfile, SessionConnectionState.Connected);
+                sidebar.UpdateSession(filesWorkspace.Id, fileProfile, SessionConnectionState.Connected);
                 if (((StackPanel)sidebar.FindName("MetricsSection")).Visibility != Visibility.Collapsed)
                     failures.Add(protocol + " must hide SSH metrics.");
                 await CaptureAsync(root, Program.ReportPath + "." + protocol + ".png");
@@ -935,6 +942,102 @@ internal sealed class SmokeApp : App
             }
             Program.Results.Add(new { control = "SFTP deletion busy state and completion", theme = theme.ToString(), passed = true });
         }
+        _window.Close();
+        Program.Finish();
+    }
+
+    private async Task VerifyMultiSessionAsync()
+    {
+        _window = new Window { Title = "FluentShell offline multi-session regression" };
+        _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1200, 800));
+        var root = new Grid { RequestedTheme = ElementTheme.Light };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
+        root.ColumnDefinitions.Add(new ColumnDefinition());
+        var strip = new SessionTabStrip();
+        Grid.SetColumnSpan(strip, 2);
+        root.Children.Add(strip);
+        var sidebar = new ConnectedServerSidebar();
+        Grid.SetRow(sidebar, 1);
+        root.Children.Add(sidebar);
+        var presenter = new ContentPresenter();
+        Grid.SetRow(presenter, 1);
+        Grid.SetColumn(presenter, 1);
+        root.Children.Add(presenter);
+        _window.Content = root;
+        _window.Activate();
+
+        var profile = new ServerProfile { Name = "同一服务器", Host = "offline.invalid", Username = "fixture" };
+        SessionWorkspace CreateWorkspace() => new(profile, WinRT.Interop.WindowNative.GetWindowHandle(_window),
+            (_, _) => Task.FromResult<ISshConnection?>(null), _ => Task.FromResult(false), () => Task.FromResult<string?>(null));
+        var first = CreateWorkspace();
+        var second = CreateWorkspace();
+        var host = new SessionHost(strip);
+        host.ContentChanged += (_, session) =>
+        {
+            presenter.Content = session?.ContentElement;
+            if (session is not null) sidebar.UpdateSession(session.Id, session.Profile, SessionConnectionState.Connected);
+        };
+        host.SessionSelected += (_, session) => host.Select(session);
+        host.SessionCloseRequested += (_, session) => host.Remove(session);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        async Task WaitFor(Func<bool> condition)
+        {
+            while (!condition()) await Task.Delay(50, timeout.Token);
+        }
+        async Task<WebView2> InitializeTerminal(SessionWorkspace workspace, string output)
+        {
+            host.Add(workspace);
+            var terminal = Field<TerminalPane>(workspace, "_terminalPane");
+            await WaitFor(() => Field<bool>(terminal, "_ready"));
+            terminal.Write(output + "\r\n");
+            await Task.Delay(150, timeout.Token);
+            return Field<WebView2>(terminal, "_terminalView");
+        }
+        var firstWeb = await InitializeTerminal(first, "FIRST_SESSION_ONLY");
+        var secondWeb = await InitializeTerminal(second, "SECOND_SESSION_ONLY");
+        var tabPanel = (StackPanel)strip.FindName("TabPanel");
+        var firstButton = Descendants(strip).OfType<Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>()
+            .Single(button => ReferenceEquals(button.Tag, first));
+        ((Microsoft.UI.Xaml.Automation.Provider.IToggleProvider)
+            new Microsoft.UI.Xaml.Automation.Peers.ToggleButtonAutomationPeer(firstButton)
+                .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle)).Toggle();
+        await Task.Delay(150, timeout.Token);
+        root.UpdateLayout();
+        if (first.Id == second.Id || tabPanel.Children.Count != 2 || !ReferenceEquals(presenter.Content, first) ||
+            firstButton.IsChecked != true || first.ActualWidth <= 0 || firstWeb.CoreWebView2 is null)
+            throw new InvalidOperationException("Same-server tabs must have independent identities and display the requested workspace.");
+        async Task VerifyOutput(WebView2 web, string own, string other)
+        {
+            var output = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(
+                "document.querySelector('.xterm-rows').textContent"))!;
+            if (!output.Contains(own) || output.Contains(other))
+                throw new InvalidOperationException("Each terminal must preserve its own output when switching tabs.");
+        }
+        await VerifyOutput(firstWeb, "FIRST_SESSION_ONLY", "SECOND_SESSION_ONLY");
+        host.Select(second);
+        await Task.Delay(150, timeout.Token);
+        await VerifyOutput(secondWeb, "SECOND_SESSION_ONLY", "FIRST_SESSION_ONLY");
+        sidebar.UpdateMetrics(second.Id, new ServerMetrics { CpuPercent = 42 }, true);
+        host.Select(first);
+        sidebar.UpdateMetrics(second.Id, new ServerMetrics { CpuPercent = 99 }, true);
+        if (((TextBlock)sidebar.FindName("CompactCpuText")).Text != string.Empty)
+            throw new InvalidOperationException("Switching same-server tabs must clear previous metrics and reject inactive-session metrics.");
+        sidebar.UpdateMetrics(first.Id, new ServerMetrics { CpuPercent = 17 }, true);
+        if (((TextBlock)sidebar.FindName("CompactCpuText")).Text != "17%")
+            throw new InvalidOperationException("Metrics must belong to the selected session.");
+        var closeSecond = Descendants(strip).OfType<Button>().Single(button => ReferenceEquals(button.Tag, second));
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+            new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(closeSecond)
+                .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        root.UpdateLayout();
+        if (tabPanel.Children.Count != 1 || !ReferenceEquals(presenter.Content, first))
+            throw new InvalidOperationException("Closing one same-server tab must preserve the other workspace.");
+        await CaptureAsync(root, Program.ReportPath + ".png");
+        Program.Results.Add(new { control = "same-server tab selection, independent terminal output, session metrics and close", passed = true });
+        await first.DisposeAsync();
+        await second.DisposeAsync();
         _window.Close();
         Program.Finish();
     }

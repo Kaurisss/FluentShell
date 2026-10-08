@@ -121,6 +121,39 @@ public sealed class SessionHostTests
     }
 
     [TestMethod]
+    public async Task Same_server_tabs_select_and_close_the_requested_session()
+    {
+        var tabStrip = new RecordingSessionTabStrip();
+        var host = new SessionHost(tabStrip);
+        var shell = new ShellCoordinator(new InMemoryLocalStore(),
+            (profile, _, _) => FakeShellSession.Connectable(profile),
+            _ => Task.FromResult<string?>(null), _ => Task.FromResult(false));
+        shell.SessionAdded += (_, session) => host.Add(session);
+        shell.SessionSelected += (_, session) => host.Select(session);
+        shell.SessionRemoved += (_, session) => host.Remove(session);
+        host.SessionSelected += (_, session) => shell.SelectSession(session);
+        object? content = null;
+        host.ContentChanged += (_, session) => content = session?.ContentElement;
+        var profile = new ServerProfile { Name = "生产机", Host = "offline.invalid", Username = "fixture" };
+        await shell.ConnectAsync(profile);
+        await shell.ConnectAsync(profile);
+        var first = tabStrip.Tabs[0];
+        var second = tabStrip.Tabs[1];
+
+        tabStrip.RaiseSessionSelected(first);
+
+        Assert.HasCount(2, tabStrip.Tabs);
+        Assert.AreSame(first, shell.SelectedSession);
+        Assert.AreSame(first.ContentElement, content);
+
+        await shell.CloseSessionAsync(first, _ => Task.FromResult(true));
+
+        CollectionAssert.AreEqual(new[] { second }, tabStrip.Tabs);
+        Assert.AreSame(second, host.Selected);
+        Assert.AreSame(second.ContentElement, content);
+    }
+
+    [TestMethod]
     public void Tab_text_is_derived_from_the_session_title()
     {
         var session = CreateSession("生产机");

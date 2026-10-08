@@ -10,7 +10,7 @@ public sealed partial class ConnectedServerSidebar : UserControl
 {
     private readonly Dictionary<string, FrameworkElement> _metricElements = [];
     private readonly Dictionary<string, double> _compactMetricValues = [];
-    private Guid? _currentProfileId;
+    private Guid? _currentSessionId;
     private SessionConnectionState _connectionState = SessionConnectionState.Disconnected;
     private bool _hasFreshMetrics;
     private bool _supportsMetrics = true;
@@ -29,14 +29,14 @@ public sealed partial class ConnectedServerSidebar : UserControl
         CompactPanel.Visibility = isPaneOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void UpdateSession(ServerProfile profile, SessionConnectionState connectionState)
+    public void UpdateSession(Guid sessionId, ServerProfile profile, SessionConnectionState connectionState)
     {
-        var profileChanged = _currentProfileId != profile.Id;
-        _currentProfileId = profile.Id;
+        var sessionChanged = _currentSessionId != sessionId;
+        _currentSessionId = sessionId;
         _supportsMetrics = profile.SupportsTerminal;
         MetricsSection.Visibility = _supportsMetrics ? Visibility.Visible : Visibility.Collapsed;
         _connectionState = connectionState;
-        if (profileChanged || connectionState != SessionConnectionState.Connected)
+        if (sessionChanged || connectionState != SessionConnectionState.Connected)
             ClearMetricPresentation();
 
         ServerNameText.Text = profile.Name;
@@ -56,9 +56,9 @@ public sealed partial class ConnectedServerSidebar : UserControl
         UpdateCompactPresentation();
     }
 
-    public void UpdateMetrics(Guid profileId, ServerMetrics metrics, bool showDetails)
+    public void UpdateMetrics(Guid sessionId, ServerMetrics metrics, bool showDetails)
     {
-        if (_currentProfileId != profileId || _connectionState != SessionConnectionState.Connected)
+        if (_currentSessionId != sessionId || _connectionState != SessionConnectionState.Connected)
             return;
 
         _hasFreshMetrics = true;

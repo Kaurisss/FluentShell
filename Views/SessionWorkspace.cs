@@ -70,7 +70,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
             dispatchProgress: work => _dispatcherQueue.TryEnqueue(() => work()),
             transferFileService: _connection.TransferRemoteFiles,
             transfers: transfers,
-            connectionLabel: $"{profile.Name} · 会话 {Guid.NewGuid().ToString("N")[..6]}");
+            connectionLabel: $"{profile.Name} · 会话 {Id.ToString("N")[..6]}");
 
         _connection.Output += Connection_Output;
         _connection.StatusChanged += Connection_StatusChanged;
@@ -85,6 +85,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
         Content = BuildLayout();
     }
 
+    public Guid Id { get; } = Guid.NewGuid();
     public ServerProfile Profile => _profile;
     public string DisplayTitle => _profile.Name;
     public object ContentElement => this;

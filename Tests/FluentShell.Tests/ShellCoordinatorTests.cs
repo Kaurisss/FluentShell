@@ -242,6 +242,128 @@ public sealed class ShellCoordinatorTests
     }
 
     [TestMethod]
+    public async Task Connecting_same_server_opens_independent_sessions()
+    {
+        var sessions = new List<FakeShellSession>();
+        var store = new InMemoryLocalStore();
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            var session = FakeShellSession.Connectable(profile);
+            sessions.Add(session);
+            return session;
+        }, store: store);
+        var profile = new ServerProfile { Name = "生产机", Host = "offline.invalid", Username = "fixture" };
+
+        await coordinator.ConnectAsync(profile);
+        await coordinator.ConnectAsync(profile);
+
+        Assert.AreEqual(2, coordinator.SessionCount);
+        Assert.AreNotEqual(sessions[0].Id, sessions[1].Id);
+        Assert.AreSame(profile, sessions[0].Profile);
+        Assert.AreSame(profile, sessions[1].Profile);
+        Assert.AreNotSame(sessions[0].ContentElement, sessions[1].ContentElement);
+        Assert.AreSame(sessions[1], coordinator.SelectedSession);
+        Assert.IsFalse(sessions[0].IsActive);
+        Assert.IsTrue(sessions[1].IsActive);
+        Assert.AreEqual(2, store.SaveProfilesCallCount);
+
+        coordinator.SelectSession(sessions[0]);
+
+        Assert.HasCount(2, sessions, "切换标签页不能创建新连接。");
+        Assert.AreSame(sessions[0], coordinator.SelectedSession);
+        Assert.IsTrue(sessions[0].IsActive);
+        Assert.IsFalse(sessions[1].IsActive);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Closing_one_of_same_server_sessions_preserves_the_other(bool closeSelected)
+    {
+        var coordinator = CreateCoordinator((profile, _, _) => FakeShellSession.Connectable(profile));
+        var profile = new ServerProfile { Host = "offline.invalid", Username = "fixture" };
+        await coordinator.ConnectAsync(profile);
+        var first = (FakeShellSession)coordinator.SelectedSession!;
+        await coordinator.ConnectAsync(profile);
+        var second = (FakeShellSession)coordinator.SelectedSession!;
+        var closed = closeSelected ? second : first;
+        var remaining = closeSelected ? first : second;
+
+        Assert.IsTrue(await coordinator.CloseSessionAsync(closed, _ => Task.FromResult(true)));
+
+        Assert.IsTrue(closed.IsDisposed);
+        Assert.IsFalse(remaining.IsDisposed);
+        Assert.IsTrue(remaining.IsConnected);
+        Assert.IsTrue(remaining.IsActive);
+        Assert.AreSame(remaining, coordinator.SelectedSession);
+        CollectionAssert.AreEqual(new[] { remaining }, coordinator.Sessions.ToArray());
+        Assert.AreEqual(closeSelected ? 2 : 1, remaining.MetricsPollingStarts);
+    }
+
+    [TestMethod]
+    public async Task Reconnecting_one_of_same_server_sessions_preserves_the_other()
+    {
+        var sessions = new List<FakeShellSession>();
+        var connectCounts = new Dictionary<Guid, int>();
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            var session = new FakeShellSession(profile, current =>
+            {
+                connectCounts[current.Id] = connectCounts.GetValueOrDefault(current.Id) + 1;
+                current.SetConnectionState(SessionConnectionState.Connected);
+                return Task.CompletedTask;
+            });
+            sessions.Add(session);
+            return session;
+        });
+        var profile = new ServerProfile { Host = "offline.invalid", Username = "fixture" };
+        await coordinator.ConnectAsync(profile);
+        await coordinator.ConnectAsync(profile);
+        sessions[0].SetConnectionState(SessionConnectionState.Disconnected);
+        coordinator.SelectSession(sessions[0]);
+
+        await coordinator.ReconnectSelectedSessionAsync();
+
+        Assert.HasCount(2, sessions);
+        Assert.AreEqual(2, connectCounts[sessions[0].Id]);
+        Assert.AreEqual(1, connectCounts[sessions[1].Id]);
+        Assert.IsTrue(sessions.All(session => session.IsConnected && !session.IsDisposed));
+        Assert.AreSame(sessions[0], coordinator.SelectedSession);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Unsuccessful_additional_connection_preserves_existing_session(bool cancel)
+    {
+        var sessions = new List<FakeShellSession>();
+        var coordinator = CreateCoordinator((profile, _, _) =>
+        {
+            var session = sessions.Count == 0
+                ? FakeShellSession.Connectable(profile)
+                : new FakeShellSession(profile, current =>
+                {
+                    if (cancel) throw new OperationCanceledException();
+                    current.ReportConnectionFailure("Synthetic connection failure");
+                    return Task.CompletedTask;
+                });
+            sessions.Add(session);
+            return session;
+        });
+        var profile = new ServerProfile { Host = "offline.invalid", Username = "fixture" };
+        await coordinator.ConnectAsync(profile);
+
+        await coordinator.ConnectAsync(profile);
+
+        Assert.AreEqual(1, coordinator.SessionCount);
+        Assert.AreSame(sessions[0], coordinator.SelectedSession);
+        Assert.IsTrue(sessions[0].IsConnected);
+        Assert.IsTrue(sessions[0].IsActive);
+        Assert.IsFalse(sessions[0].IsDisposed);
+        Assert.IsTrue(sessions[1].IsDisposed);
+    }
+
+    [TestMethod]
     public async Task Selecting_current_session_does_not_restart_metrics_polling()
     {
         FakeShellSession? session = null;
@@ -257,7 +379,7 @@ public sealed class ShellCoordinatorTests
         var profile = new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" };
 
         await coordinator.ConnectAsync(profile);
-        await coordinator.ConnectAsync(profile);
+        coordinator.SelectSession(session!);
 
         Assert.AreEqual(1, session!.MetricsPollingStarts);
     }
@@ -306,7 +428,7 @@ public sealed class ShellCoordinatorTests
 
         await coordinator.ConnectAsync(firstProfile);
         await coordinator.ConnectAsync(secondProfile);
-        await coordinator.ConnectAsync(firstProfile);
+        coordinator.SelectSession(sessions[0]);
         await coordinator.CloseSessionAsync(sessions[1], _ => Task.FromResult(true));
 
         Assert.AreSame(sessions[0], coordinator.SelectedSession);

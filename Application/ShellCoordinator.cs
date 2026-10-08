@@ -12,6 +12,8 @@ public enum SessionConnectionState
 
 public interface IShellSession : IAsyncDisposable
 {
+    /// <summary>每个标签页独立的会话标识，同一服务器可创建多个会话。</summary>
+    Guid Id { get; }
     ServerProfile Profile { get; }
 
     /// <summary>标签栏上显示的会话名称。</summary>
@@ -54,7 +56,7 @@ public sealed record AppSettingsUpdate(
 public sealed class ShellCoordinator
 {
     private readonly ILocalStore _localStore;
-    private readonly SessionCoordinator<IShellSession> _sessions = new(session => session.Profile.Id);
+    private readonly SessionCoordinator<IShellSession> _sessions = new(session => session.Id);
     private readonly Func<
         ServerProfile,
         Func<Task<string?>>,
@@ -245,11 +247,6 @@ public sealed class ShellCoordinator
     }
     public async Task ConnectAsync(ServerProfile profile)
     {
-        if (_sessions.TryGet(profile.Id, out var existing))
-        {
-            SelectSession(existing);
-            return;
-        }
         if (!_sessions.TryBeginConnection(profile.Id)) return;
 
         using var connectionCancellation = new CancellationTokenSource();
@@ -315,7 +312,7 @@ public sealed class ShellCoordinator
     {
         if (!_sessions.Contains(session) || session.ConnectionState == SessionConnectionState.Connecting || session.IsConnected)
             return;
-        if (!_sessions.TryBeginConnection(session.Profile.Id)) return;
+        if (!_sessions.TryBeginConnection(session.Id)) return;
 
         using var connectionCancellation = new CancellationTokenSource();
         _connectionCancellation = connectionCancellation;
@@ -332,7 +329,7 @@ public sealed class ShellCoordinator
         }
         finally
         {
-            _sessions.EndConnection(session.Profile.Id);
+            _sessions.EndConnection(session.Id);
             ConnectionProgressChanged?.Invoke(this, new ConnectionProgressChangedEventArgs(false, null));
             if (ReferenceEquals(_connectionCancellation, connectionCancellation))
                 _connectionCancellation = null;
@@ -383,7 +380,9 @@ public sealed class ShellCoordinator
         return await _secretPrompt(profile);
     }
 
-    private void SelectSession(IShellSession session, bool forceActivation = false)
+    public void SelectSession(IShellSession session) => SelectSession(session, forceActivation: false);
+
+    private void SelectSession(IShellSession session, bool forceActivation)
     {
         if (!_sessions.Contains(session)) return;
         var activationChanged = forceActivation || !ReferenceEquals(_sessions.Selected, session);

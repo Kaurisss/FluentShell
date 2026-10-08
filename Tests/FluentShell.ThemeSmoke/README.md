@@ -9,6 +9,15 @@ dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
 
 The temporary window exits automatically. Exit code 0 and `passed: true` in the JSON report indicate success. A failed assertion or startup exception produces exit code 1 and its details in the report. A missing report is not a passing run.
 
+For same-server tabs, pass `--multi-session-smoke`. This opens two real workspaces
+for one synthetic profile, exercises the tab buttons and close action, and checks
+independent terminal output and session-specific sidebar metrics. It never connects
+to a server or loads saved profiles:
+
+```powershell
+& Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe .tmp/multi-session-smoke.json --multi-session-smoke
+```
+
 For the SFTP deletion flow only, pass `--sftp-delete-smoke` after the report path.
 This checks busy/completed states and directory/link confirmation dialogs in light
 and dark themes, including cancellation. It uses synthetic entries and never

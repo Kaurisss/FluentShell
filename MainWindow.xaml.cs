@@ -132,7 +132,7 @@ public sealed partial class MainWindow : Window
             _sessionHost.Select(null);
             ShowUnconnectedLayout("overview");
         };
-        _sessionHost.SessionSelected += async (_, session) => await _shell.ConnectAsync(session.Profile);
+        _sessionHost.SessionSelected += (_, session) => _shell.SelectSession(session);
         _sessionHost.SessionCloseRequested += async (_, session) =>
             await _shell.CloseSessionAsync(session, ConfirmCloseSessionAsync);
         _sessionHost.ContentChanged += (_, session) =>
@@ -198,7 +198,7 @@ public sealed partial class MainWindow : Window
         {
             if (ReferenceEquals(_shell.SelectedSession, args.Session))
                 ConnectedSidebar.UpdateMetrics(
-                    args.Session.Profile.Id,
+                    args.Session.Id,
                     args.Metrics,
                     !_layout.IsSidebarCollapsed);
         };
@@ -220,7 +220,7 @@ public sealed partial class MainWindow : Window
         _settingsPage.SetSettings(_shell.Settings, _shell.DataFolder);
         RenderServerCatalog();
         if (_shell.SelectedSession is { } session)
-            ConnectedSidebar.UpdateSession(session.Profile, session.ConnectionState);
+            ConnectedSidebar.UpdateSession(session.Id, session.Profile, session.ConnectionState);
     }
 
     private void RenderServerCatalog() => _serverCatalogPage.SetProfiles(_shell.Profiles);
@@ -261,7 +261,7 @@ public sealed partial class MainWindow : Window
         else if (action == "next")
         {
             var sessions = _shell.Sessions.ToList();
-            if (sessions.Count > 0) await _shell.ConnectAsync(sessions[(sessions.IndexOf(_shell.SelectedSession!) + 1) % sessions.Count].Profile);
+            if (sessions.Count > 0) _shell.SelectSession(sessions[(sessions.IndexOf(_shell.SelectedSession!) + 1) % sessions.Count]);
         }
         else if (_shell.SelectedSession is SessionWorkspace workspace) workspace.ExecuteShortcut(action);
     }

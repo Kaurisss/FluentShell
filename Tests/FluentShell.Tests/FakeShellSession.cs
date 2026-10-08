@@ -18,6 +18,7 @@ internal sealed class FakeShellSession : IShellSession
         ContentElement = new object();
     }
 
+    public Guid Id { get; } = Guid.NewGuid();
     public ServerProfile Profile { get; }
     public string DisplayTitle => Profile.Name;
     public object ContentElement { get; }
@@ -25,6 +26,8 @@ internal sealed class FakeShellSession : IShellSession
     public SessionConnectionState ConnectionState { get; private set; } = SessionConnectionState.Disconnected;
     public bool IsTransferActive => false;
     public int MetricsPollingStarts { get; private set; }
+    public bool IsActive { get; private set; }
+    public bool IsDisposed { get; private set; }
     public CancellationToken LastConnectionCancellationToken { get; private set; }
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated
@@ -54,6 +57,7 @@ internal sealed class FakeShellSession : IShellSession
 
     public void SetActive(bool active)
     {
+        IsActive = active;
         if (active) MetricsPollingStarts++;
     }
 
@@ -63,7 +67,11 @@ internal sealed class FakeShellSession : IShellSession
     public UserPreferences Preferences { get; private set; } = new();
     public void SetPreferences(UserPreferences preferences, string downloadDirectory) => Preferences = preferences;
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    public ValueTask DisposeAsync()
+    {
+        IsDisposed = true;
+        return ValueTask.CompletedTask;
+    }
 
     /// <summary>连接后立刻进入已连接状态的会话，是多数测试需要的默认行为。</summary>
     public static FakeShellSession Connectable(ServerProfile profile) =>

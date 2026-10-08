@@ -21,6 +21,20 @@ public sealed class SessionCoordinatorTests
     }
 
     [TestMethod]
+    public void Session_order_follows_tabs_after_removal_and_addition()
+    {
+        var first = new TestSession(Guid.NewGuid());
+        var second = new TestSession(Guid.NewGuid());
+        var third = new TestSession(Guid.NewGuid());
+        var coordinator = CreateCoordinator(first, second);
+
+        coordinator.Remove(first);
+        coordinator.Add(third);
+
+        CollectionAssert.AreEqual(new[] { second, third }, coordinator.Sessions.ToArray());
+    }
+
+    [TestMethod]
     public void Connection_guard_rejects_duplicate_attempt_until_ended()
     {
         var coordinator = new SessionCoordinator<TestSession>(session => session.Id);
