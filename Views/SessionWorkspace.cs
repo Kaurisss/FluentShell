@@ -113,8 +113,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     {
         _terminalPane.SetPreferences(preferences);
         _connection.SetPreferences(preferences);
-        _sftpWorkspace.SetPreferences(preferences);
-        _sftpView.SetPreferences(preferences, downloadDirectory);
+        _sftpWorkspace.SetPreferences(preferences, downloadDirectory);
+        _sftpView.SetPreferences(preferences);
     }
 
     public void ExecuteShortcut(string action)

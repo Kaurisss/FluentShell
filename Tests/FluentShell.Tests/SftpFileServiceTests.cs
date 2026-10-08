@@ -7,6 +7,16 @@ namespace FluentShell.Tests;
 public sealed class SftpFileServiceTests
 {
     [TestMethod]
+    public async Task Listing_preserves_symbolic_link_metadata()
+    {
+        var client = new FakeSftpClient();
+        client.Entries.Add(new RemoteDirectoryEntry("链接", "/链接", false, 0, default, IsSymbolicLink: true));
+        var service = new SftpFileService(() => client);
+        var item = (await service.ListDirectoryAsync("/")).Single();
+        Assert.IsTrue(item.IsSymbolicLink);
+    }
+
+    [TestMethod]
     public async Task Directory_type_check_uses_metadata_without_listing_contents()
     {
         var client = new FakeSftpClient();

@@ -1,4 +1,5 @@
 ﻿using FluentShell.Core;
+using FluentShell.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -16,6 +17,7 @@ public sealed partial class SftpWorkspaceView
     private bool _localLoaded;
     public event EventHandler<IReadOnlyList<SftpUploadEntry>>? UploadSelectionRequested;
     public event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
+    public event EventHandler<IReadOnlyList<RemoteFileItem>>? DownloadSelectionRequested;
 
     private void InitializeLocalPane()
     {
@@ -175,8 +177,9 @@ public sealed partial class SftpWorkspaceView
 
     private void RequestDownloadToLocal()
     {
-        if (_localPath is not null && SelectedItem is { Name: not ".." } item && _snapshot.CanTransfer)
-            DownloadToLocalRequested?.Invoke(this, new SftpPaneDownload(item, _localPath));
+        var items = GetDownloadSelection();
+        if (_localPath is not null && items.Count > 0 && _snapshot.CanTransfer)
+            DownloadToLocalRequested?.Invoke(this, new SftpPaneDownload(items, _localPath));
     }
 
     public sealed record LocalPaneItem(string Name, string FullPath, bool IsDirectory, long SizeBytes, DateTime ModifiedAt)

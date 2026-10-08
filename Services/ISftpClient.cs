@@ -6,7 +6,8 @@ public sealed record RemoteDirectoryEntry(
     string FullPath,
     bool IsDirectory,
     long Length,
-    DateTime LastWriteTime);
+    DateTime LastWriteTime,
+    bool IsSymbolicLink = false);
 
 /// <summary>
 /// SFTP 客户端的接缝：<see cref="SftpFileService"/> 需要的远程操作，不含 SSH.NET 类型。

@@ -17,7 +17,8 @@ internal sealed class FluentFtpClient(AsyncFtpClient client) : ISftpClient
     public IReadOnlyList<RemoteDirectoryEntry> ListDirectory(string path) =>
         client.GetListing(ValidateArgument(path)).GetAwaiter().GetResult()
             .Select(item => new RemoteDirectoryEntry(item.Name, item.FullName,
-                item.Type == FtpObjectType.Directory, item.Size, item.Modified)).ToList();
+                item.Type == FtpObjectType.Directory, item.Size, item.Modified,
+                item.Type == FtpObjectType.Link)).ToList();
 
     public void CreateDirectory(string path) => client.CreateDirectory(ValidateArgument(path)).GetAwaiter().GetResult();
     public bool Exists(string path) => client.FileExists(ValidateArgument(path)).GetAwaiter().GetResult() ||

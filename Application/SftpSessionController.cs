@@ -77,12 +77,13 @@ public sealed record DownloadDestination(
     Func<string, bool> FileExists,
     Func<string, Stream> CreateOutput,
     Action<string> CreateDirectory,
-    Action<string> DeleteFile);
+    Action<string> DeleteFile)
+{
+    public Action<string, string> ValidatePath { get; init; } = SftpPathValidator.EnsureSafeDownloadPath;
+}
 
 public sealed class SftpSessionController : IDisposable
 {
-    private const int MaxDownloadDepth = 32;
-
     private readonly ISftpFileService _fileService;
     private readonly ISftpFileService _transferService;
     private readonly Action<Action> _dispatchProgress;
@@ -347,208 +348,127 @@ public sealed class SftpSessionController : IDisposable
         return OperationOutcome.Success($"已上传 {relativePath}。");
     }
 
-    public Task DownloadAsync(
-        RemoteFileItem item,
-        string destinationDirectory,
-        DownloadDestination destination,
-        Func<string, Task<bool>> confirmOverwrite) =>
+    public Task DownloadAsync(RemoteFileItem item, string destinationDirectory,
+        DownloadDestination destination, Func<string, Task<bool>> confirmOverwrite) =>
+        DownloadEntriesAsync([item], destinationDirectory, destination, confirmOverwrite);
+
+    /// <summary>文件和文件夹共用一个批次，保留根目录和空目录，失败条目不阻断其他分支。</summary>
+    public Task DownloadEntriesAsync(IReadOnlyList<RemoteFileItem> entries, string destinationDirectory,
+        DownloadDestination destination, Func<string, Task<bool>> confirmOverwrite) =>
         RunTransferAsync("下载", async cancellationToken =>
         {
             _queueManager.Clear();
-            if (!SftpPathValidator.TryResolveDownloadPath(
-                    destinationDirectory,
-                    item.Name,
-                    out var localPath,
-                    out var error))
+            TransitionTransfer(SftpTransferState.Transferring, "正在统计待下载的文件和文件夹…");
+            var plan = await SftpDownloadPlanner.BuildAsync(entries, destinationDirectory, _transferService,
+                WaitForTransferAsync, (path, count) => TransitionTransfer(SftpTransferState.Transferring,
+                    $"正在统计 {path}…（已发现 {count} 项）"), cancellationToken);
+            _queueManager.AddPendingItems(plan.Select(item => (item.RelativePath, item.SizeBytes)));
+            SnapshotChanged?.Invoke(this, CreateSnapshot());
+            var reporter = new TransferProgressReporter(this, plan.Sum(item => item.SizeBytes));
+            var failedDirectories = new List<string>();
+            var files = 0;
+            var folders = 0;
+            foreach (var item in plan)
             {
-                return OperationOutcome.Failure(error);
-            }
-
-            if (!item.IsDirectory)
-            {
-                _queueManager.AddPendingItem(item.Name, Math.Max(0, item.SizeBytes));
-                if (destination.FileExists(localPath) && !await confirmOverwrite(item.Name))
-                {
-                    _queueManager.SkipTransfer(item.Name);
-                    return OperationOutcome.Failure("已保留现有文件。");
-                }
                 await WaitForTransferAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                _queueManager.StartTransfer(item.Name);
-
-                var reporter = new TransferProgressReporter(this, Math.Max(0, item.SizeBytes));
+                var outputCreated = false;
                 try
                 {
-                    using var output = new ByteCountingStream(
-                        destination.CreateOutput(localPath),
-                        bytes =>
+                    if (item.Error is not null) throw new IOException(item.Error);
+                    if (failedDirectories.Any(path => item.RelativePath.StartsWith(path + "/", StringComparison.Ordinal)))
+                        throw new IOException("父文件夹下载失败。");
+                    _queueManager.StartTransfer(item.RelativePath);
+                    if (item.IsDirectory)
+                    {
+                        TransitionTransfer(SftpTransferState.Transferring, $"正在创建文件夹 {item.RelativePath}…");
+                        await Task.Run(() =>
+                        {
+                            destination.ValidatePath(destinationDirectory, item.LocalPath);
+                            destination.CreateDirectory(item.LocalPath);
+                        }, cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _queueManager.CompleteTransfer(item.RelativePath);
+                        folders++;
+                    }
+                    else
+                    {
+                        var exists = await Task.Run(() =>
+                        {
+                            destination.ValidatePath(destinationDirectory, item.LocalPath);
+                            return destination.FileExists(item.LocalPath);
+                        }, cancellationToken);
+                        if (exists && !await confirmOverwrite(item.RelativePath))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            _queueManager.SkipTransfer(item.RelativePath);
+                            reporter.RemoveFromTotal(item.SizeBytes);
+                            continue;
+                        }
+                        await WaitForTransferAsync(cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        TransitionTransfer(SftpTransferState.Transferring, $"正在下载 {item.RelativePath}…");
+                        var localOutput = await Task.Run(() =>
+                        {
+                            // 覆盖确认期间目录可能已变成链接，因此打开前再次检查。
+                            destination.ValidatePath(destinationDirectory, item.LocalPath);
+                            return destination.CreateOutput(item.LocalPath);
+                        }, cancellationToken);
+                        outputCreated = true;
+                        using (var output = new ByteCountingStream(localOutput, bytes =>
                         {
                             reporter.OnCurrentFileBytes(bytes);
-                            _queueManager.UpdateProgress(item.Name, bytes, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
-                        }, _batchControl, cancellationToken);
-                    await _transferService.DownloadAsync(item.FullPath, output, cancellationToken);
-                    _queueManager.CompleteTransfer(item.Name);
-                }
-                catch
-                {
-                    // 无论取消还是出错，半截文件都不该冒充下载成功。
-                    if (_batchControl?.PreservePartialFiles != true) TryDeletePartialFile(destination, localPath);
-                    throw;
-                }
-                return OperationOutcome.Success($"已下载 {item.Name}。");
-            }
-
-            // 目录先统计再传输：总量已知，进度才能是确定的。统计阶段快照没有进度，
-            // 视图在这段时间退回不确定指示。
-            TransitionTransfer(SftpTransferState.Transferring, $"正在统计 {item.Name} 中的文件…");
-            var plan = new List<PlannedDownload>();
-            var collectFailure = await CollectDownloadPlanAsync(
-                item.FullPath,
-                item.Name,
-                localPath,
-                depth: 0,
-                destination,
-                plan,
-                cancellationToken);
-            if (collectFailure is not null) return collectFailure;
-
-            var directoryReporter = new TransferProgressReporter(this, plan.Sum(file => file.SizeBytes));
-            var files = 0;
-            var skipped = 0;
-            var failures = new List<string>();
-            foreach (var file in plan)
-            {
-                await WaitForTransferAsync(cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                _queueManager.StartTransfer(file.RelativePath);
-                SnapshotChanged?.Invoke(this, CreateSnapshot());
-
-                if (destination.FileExists(file.LocalPath) && !await confirmOverwrite(file.RelativePath))
-                {
-                    skipped++;
-                    directoryReporter.RemoveFromTotal(file.SizeBytes);
-                    _queueManager.SkipTransfer(file.RelativePath);
-                    SnapshotChanged?.Invoke(this, CreateSnapshot());
-                    continue;
-                }
-
-                await WaitForTransferAsync(cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                TransitionTransfer(SftpTransferState.Transferring, $"正在下载 {file.RelativePath}…");
-                try
-                {
-                    using var output = new ByteCountingStream(
-                        destination.CreateOutput(file.LocalPath),
-                        bytesWritten =>
+                            _queueManager.UpdateProgress(item.RelativePath, bytes,
+                                () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
+                        }, _batchControl, cancellationToken))
                         {
-                            directoryReporter.OnCurrentFileBytes(bytesWritten);
-                            _queueManager.UpdateProgress(file.RelativePath, bytesWritten, () => SnapshotChanged?.Invoke(this, CreateSnapshot()));
-                        }, _batchControl, cancellationToken);
-                    await _transferService.DownloadAsync(file.RemotePath, output, cancellationToken);
-
-                    _queueManager.CompleteTransfer(file.RelativePath);
-                    SnapshotChanged?.Invoke(this, CreateSnapshot());
+                            await _transferService.DownloadAsync(item.RemotePath, output, cancellationToken);
+                        }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _queueManager.CompleteTransfer(item.RelativePath);
+                        reporter.CompleteFile(item.SizeBytes);
+                        files++;
+                    }
                 }
                 catch (OperationCanceledException)
                 {
-                    if (_batchControl?.PreservePartialFiles != true) TryDeletePartialFile(destination, file.LocalPath);
-                    _queueManager.FailTransfer(file.RelativePath, "已取消");
+                    if (outputCreated && _batchControl?.PreservePartialFiles != true)
+                        await DeleteDownloadPartialAsync(destination, destinationDirectory, item.LocalPath);
                     throw;
                 }
                 catch (Exception exception)
                 {
-                    // 单个条目失败（符号链接、特殊文件、权限）不拖垮整批，记下继续。
-                    if (_batchControl?.PreservePartialFiles != true) TryDeletePartialFile(destination, file.LocalPath);
-                    var errorMsg = DescribeError(exception);
-                    failures.Add($"{file.RelativePath}（{errorMsg}）");
-                    directoryReporter.RemoveFromTotal(file.SizeBytes);
-                    _queueManager.FailTransfer(file.RelativePath, errorMsg);
-                    SnapshotChanged?.Invoke(this, CreateSnapshot());
-                    continue;
+                    if (outputCreated && _batchControl?.PreservePartialFiles != true)
+                        await DeleteDownloadPartialAsync(destination, destinationDirectory, item.LocalPath);
+                    _queueManager.FailTransfer(item.RelativePath, DescribeError(exception));
+                    reporter.RemoveFromTotal(item.SizeBytes);
+                    if (item.IsDirectory) failedDirectories.Add(item.RelativePath);
                 }
-
-                directoryReporter.CompleteFile(file.SizeBytes);
-                files++;
+                finally { SnapshotChanged?.Invoke(this, CreateSnapshot()); }
             }
 
-            var parts = new List<string> { $"已下载 {files} 个文件" };
-            if (skipped > 0) parts.Add($"跳过 {skipped} 个");
-            if (failures.Count > 0) parts.Add($"{failures.Count} 个失败");
-            var summary = string.Join("，", parts) + "。";
-            return failures.Count > 0
-                ? OperationOutcome.Error($"{summary}首个失败：{failures[0]}。")
-                : OperationOutcome.Success(summary);
+            var queue = _queueManager.CreateSnapshot();
+            var summary = $"已下载 {files} 个文件、{folders} 个文件夹，跳过 {queue.SkippedCount} 个文件。";
+            if (queue.FailedCount > 0)
+            {
+                var first = queue.Items.First(item => item.State == TransferItemState.Failed);
+                return OperationOutcome.Error($"{summary}{queue.FailedCount} 个失败，首个失败：{first.RelativePath}（{first.ErrorMessage}）。");
+            }
+            if (plan.Count == 1 && !plan[0].IsDirectory)
+                return OperationOutcome.Success(queue.SkippedCount > 0 ? "已保留现有文件。" : $"已下载 {plan[0].RelativePath}。");
+            return OperationOutcome.Success(summary);
         }, refreshDirectory: false);
 
-    /// <summary>
-    /// 递归收集一个远程目录的下载计划，并沿途创建本地目录（空目录也要落地）。
-    /// 每个条目名都经 <see cref="SftpPathValidator"/> 校验后才落到本地路径上——
-    /// 目录列表来自远程主机，条目名不可信。返回 <c>null</c> 表示收集完成。
-    /// </summary>
-    private async Task<OperationOutcome?> CollectDownloadPlanAsync(
-        string remotePath,
-        string relativePath,
-        string localDirectory,
-        int depth,
-        DownloadDestination destination,
-        List<PlannedDownload> plan,
-        CancellationToken cancellationToken)
-    {
-        // 远程符号链接可能构成环；层级上限把环变成一条明确的失败消息而不是无限递归。
-        if (depth > MaxDownloadDepth)
-            return OperationOutcome.Failure($"“{relativePath}”层级过深，可能存在循环链接。");
-
-        // 大目录树的统计要走完整棵树，逐目录汇报发现数，别让用户以为卡死了。
-        TransitionTransfer(SftpTransferState.Transferring, $"正在统计 {relativePath}…（已发现 {plan.Count} 个文件）");
-        await WaitForTransferAsync(cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        destination.CreateDirectory(localDirectory);
-        var entries = await _transferService.ListDirectoryAsync(remotePath);
-        foreach (var entry in entries)
+    private static Task DeleteDownloadPartialAsync(DownloadDestination destination, string root, string path) =>
+        Task.Run(() =>
         {
-            // 目录列表为呈现合成的父目录条目，不属于目录内容。
-            if (entry.Name == "..") continue;
-
-            await WaitForTransferAsync(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            var entryRelativePath = $"{relativePath}/{entry.Name}";
-            if (!SftpPathValidator.TryResolveDownloadPath(
-                    localDirectory,
-                    entry.Name,
-                    out var entryLocalPath,
-                    out var error))
+            try
             {
-                return OperationOutcome.Failure($"“{entryRelativePath}”：{error}");
+                destination.ValidatePath(root, path);
+                destination.DeleteFile(path);
             }
-
-            if (entry.IsDirectory)
-            {
-                var failure = await CollectDownloadPlanAsync(
-                    entry.FullPath,
-                    entryRelativePath,
-                    entryLocalPath,
-                    depth + 1,
-                    destination,
-                    plan,
-                    cancellationToken);
-                if (failure is not null) return failure;
-                continue;
-            }
-
-            var plannedDownload = new PlannedDownload(
-                entry.FullPath,
-                entryLocalPath,
-                entryRelativePath,
-                Math.Max(0, entry.SizeBytes));
-            plan.Add(plannedDownload);
-
-            // 同步添加到队列管理器
-            _queueManager.AddPendingItem(entryRelativePath, Math.Max(0, entry.SizeBytes));
-        }
-
-        return null;
-    }
+            catch { /* 尽力清理残件；路径已被换成链接时不要删除链接目标。 */ }
+        });
 
     private void PublishTransferProgress(SftpTransferProgress progress)
     {
@@ -666,18 +586,6 @@ public sealed class SftpSessionController : IDisposable
             ? "远程主机拒绝了该操作（常见于权限不足、目录非空或符号链接等特殊文件）"
             : exception.Message;
 
-    /// <summary>尽力清掉失败或取消留下的半截文件，清不掉也不额外报错。</summary>
-    private static void TryDeletePartialFile(DownloadDestination destination, string localPath)
-    {
-        try
-        {
-            destination.DeleteFile(localPath);
-        }
-        catch
-        {
-        }
-    }
-
     private void PublishOperationStatus(string message) =>
         Transition(_state, message);
 
@@ -735,12 +643,6 @@ public sealed class SftpSessionController : IDisposable
         public static OperationOutcome Failure(string message) => new(false, message);
         public static OperationOutcome Error(string message) => new(false, message, IsError: true);
     }
-
-    private sealed record PlannedDownload(
-        string RemotePath,
-        string LocalPath,
-        string RelativePath,
-        long SizeBytes);
 
     /// <summary>
     /// 把逐字节回调折算成整数百分比变化才发布的进度。

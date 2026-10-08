@@ -38,16 +38,17 @@ public interface ISftpWorkspaceView
     Task<IReadOnlyList<SftpUploadFile>> PickUploadFilesAsync();
     Task<SftpUploadDirectory?> PickUploadFolderAsync();
 
-    /// <summary>返回 <c>null</c> 表示用户没有选择目录。</summary>
+    /// <summary>询问用户选择下载目录；返回 <c>null</c> 表示取消。默认目录策略由工作区处理。</summary>
     Task<string?> PickDownloadDirectoryAsync();
 }
 
-/// <summary>双列面板直接传输入口；工具栏继续使用选择器。</summary>
+/// <summary>双列面板传输入口；普通下载沿用默认目录策略，显式指定时使用本地当前目录。</summary>
 public interface ISftpPaneTransferView
 {
     event EventHandler<IReadOnlyList<SftpUploadEntry>>? UploadSelectionRequested;
+    event EventHandler<IReadOnlyList<RemoteFileItem>>? DownloadSelectionRequested;
     event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
     void RefreshLocalDirectory();
 }
 
-public sealed record SftpPaneDownload(RemoteFileItem Item, string Destination);
+public sealed record SftpPaneDownload(IReadOnlyList<RemoteFileItem> Items, string Destination);

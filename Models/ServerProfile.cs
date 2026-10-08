@@ -110,6 +110,7 @@ public sealed partial class RemoteFileItem
     public DateTime ModifiedAt { get; init; }
     public string ModifiedLabel { get; init; } = string.Empty;
     public bool IsDirectory { get; init; }
+    public bool IsSymbolicLink { get; init; }
     public string FullPath { get; init; } = string.Empty;
 
     public override string ToString() => IsDirectory

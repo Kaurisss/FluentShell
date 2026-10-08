@@ -17,12 +17,10 @@ namespace FluentShell.Views.Session;
 public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView
 {
     private UserPreferences _preferences = new();
-    private string _downloadDirectory = AppSettings.DefaultDownloadDirectory;
-    public void SetPreferences(UserPreferences preferences, string downloadDirectory)
+    public void SetPreferences(UserPreferences preferences)
     {
         var refresh = _preferences.ShowHiddenFiles != preferences.ShowHiddenFiles;
         _preferences = preferences;
-        _downloadDirectory = downloadDirectory;
         if (refresh) { RenderDirectoryListing(_snapshot.DirectoryListing); RefreshLocalDirectory(); }
     }
     private readonly IntPtr _windowHandle;
@@ -183,7 +181,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     public async Task<string?> PickDownloadDirectoryAsync()
     {
-        if (_preferences.UseDefaultDownloadDirectory) return _downloadDirectory;
         var picker = new FolderPicker();
         picker.FileTypeFilter.Add("*");
         InitializeWithWindow.Initialize(picker, _windowHandle);
@@ -239,7 +236,9 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         var open = new MenuFlyoutItem { Text = "打开文件夹" };
         open.Click += (_, _) => OpenSelectedDirectory();
         var download = new MenuFlyoutItem { Text = "下载" };
-        download.Click += (_, _) => RequestDownloadToLocal();
+        download.Click += (_, _) => RequestDownload();
+        var downloadToCurrent = new MenuFlyoutItem { Text = "下载到本地当前目录" };
+        downloadToCurrent.Click += (_, _) => RequestDownloadToLocal();
         var copyPath = new MenuFlyoutItem { Text = "复制远程路径" };
         copyPath.Click += (_, _) => CopySelectedRemotePath();
         var rename = new MenuFlyoutItem { Text = "重命名" };
@@ -256,6 +255,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(open);
         menu.Items.Add(download);
+        menu.Items.Add(downloadToCurrent);
         menu.Items.Add(copyPath);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(rename);
@@ -270,10 +270,13 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
             var item = SelectedItem;
             refresh.IsEnabled = _snapshot.CanNavigate;
             open.IsEnabled = _snapshot.CanNavigate && item?.IsDirectory == true;
-            download.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." } && _localPath is not null;
+            var selected = GetDownloadSelection();
+            download.Text = selected.Count == 1 && selected[0].IsDirectory ? "下载文件夹" : "下载";
+            download.IsEnabled = _snapshot.CanTransfer && selected.Count > 0;
+            downloadToCurrent.IsEnabled = download.IsEnabled && _localPath is not null;
             copyPath.IsEnabled = item is not null;
-            rename.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
-            delete.IsEnabled = _snapshot.CanModifyRemoteFiles && item is not null && item.Name != "..";
+            rename.IsEnabled = _snapshot.CanModifyRemoteFiles && selected.Count == 1;
+            delete.IsEnabled = _snapshot.CanModifyRemoteFiles && selected.Count == 1;
             // 新建文件夹作用于当前目录，与选中项无关。
             newFolder.IsEnabled = _snapshot.CanModifyRemoteFiles;
             // ".." 是本地合成的父目录条目，大小、修改时间都是占位值，没有属性可看。
@@ -362,7 +365,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     private void RemoteTable_GridContextFlyoutOpening(object? sender, GridContextFlyoutEventArgs e)
     {
-        if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: RemoteFileItem item })
+        if (e.ContextFlyoutInfo is GridRecordContextFlyoutInfo { Record: RemoteFileItem item }
+            && !RemoteTable.SelectedItems.Contains(item))
             RemoteTable.SelectedItem = item;
     }
 
@@ -416,19 +420,29 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     private void RequestDownload()
     {
-        if (SelectedItem is { Name: not ".." } item && _snapshot.CanTransfer)
-            DownloadRequested?.Invoke(this, item);
+        var items = GetDownloadSelection();
+        if (items.Count > 0 && _snapshot.CanTransfer)
+        {
+            if (items.Count == 1) DownloadRequested?.Invoke(this, items[0]);
+            else DownloadSelectionRequested?.Invoke(this, items);
+        }
+    }
+
+    private IReadOnlyList<RemoteFileItem> GetDownloadSelection()
+    {
+        var items = RemoteTable.SelectedItems.Cast<RemoteFileItem>().ToArray();
+        return items.Any(item => item.Name == "..") ? [] : items;
     }
 
     private void RequestRename()
     {
-        if (SelectedItem is { Name: not ".." } item && _snapshot.CanModifyRemoteFiles)
+        if (GetDownloadSelection().Count == 1 && SelectedItem is { Name: not ".." } item && _snapshot.CanModifyRemoteFiles)
             RenameRequested?.Invoke(this, item);
     }
 
     private void RequestDelete()
     {
-        if (SelectedItem is { Name: not ".." } item && _snapshot.CanModifyRemoteFiles)
+        if (GetDownloadSelection().Count == 1 && SelectedItem is { Name: not ".." } item && _snapshot.CanModifyRemoteFiles)
             DeleteRequested?.Invoke(this, item);
     }
 
@@ -489,8 +503,11 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
 
     private void UpdateSelectionState()
     {
-        var item = SelectedItem;
-        DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
+        var items = GetDownloadSelection();
+        DownloadButton.IsEnabled = _snapshot.CanTransfer && items.Count > 0;
+        var label = items.Count == 1 && items[0].IsDirectory ? "下载文件夹" : "下载所选项";
+        ToolTipService.SetToolTip(DownloadButton, label);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(DownloadButton, label);
     }
 
 }

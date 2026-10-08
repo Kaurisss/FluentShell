@@ -94,6 +94,85 @@ public sealed class SftpWorkspaceTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task Ordinary_download_uses_configured_default_directory_without_opening_picker(bool folder)
+    {
+        var service = new FakeSftpFileService();
+        var item = new RemoteFileItem { Name = "资料", FullPath = "/资料", IsDirectory = folder };
+        if (folder) service.ListingsByPath["/资料"] = [new() { Name = "文件.txt", FullPath = "/资料/文件.txt" }];
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
+        var root = Path.Combine(Path.GetTempPath(), "FluentShell-default-" + Guid.NewGuid().ToString("N"));
+        var outputs = new List<string>();
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, view, localFileExists: _ => false,
+            createLocalOutput: path => { outputs.Add(path); return new MemoryStream(); },
+            createLocalDirectory: _ => { }, transfers: center);
+        workspace.SetPreferences(new UserPreferences { UseDefaultDownloadDirectory = true }, root);
+
+        await workspace.DownloadAsync(item);
+
+        Assert.AreEqual(0, view.DownloadPickerCalls);
+        Assert.AreEqual(root, center.Groups[0][0].Target);
+        CollectionAssert.AreEqual(new[] { folder ? Path.Combine(root, "资料", "文件.txt") : Path.Combine(root, "资料") }, outputs);
+    }
+
+    [TestMethod]
+    public async Task Mixed_download_uses_updated_default_directory_and_retains_it_for_retry()
+    {
+        var service = new FakeSftpFileService { DownloadHandler = _ => Task.FromException(new IOException("临时失败")) };
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = null };
+        var root = Path.Combine(Path.GetTempPath(), "FluentShell-default-" + Guid.NewGuid().ToString("N"));
+        var center = new TransferCenter();
+        var outputs = new List<string>();
+        using var workspace = new SftpWorkspace(service, view, localFileExists: _ => false,
+            createLocalOutput: path => { outputs.Add(path); return new MemoryStream(); },
+            deleteLocalFile: _ => { }, transfers: center);
+        var preferences = new UserPreferences { UseDefaultDownloadDirectory = true };
+        workspace.SetPreferences(preferences, Path.Combine(root, "旧设置"));
+        workspace.SetPreferences(preferences, root);
+        await workspace.DownloadAsync([new RemoteFileItem { Name = "一.txt", FullPath = "/一.txt" },
+            new RemoteFileItem { Name = "二.txt", FullPath = "/二.txt" }]);
+        var task = center.Groups[0][0];
+        workspace.SetPreferences(preferences, Path.Combine(root, "其他目标"));
+        service.DownloadHandler = null;
+        await task.RetryAsync();
+
+        Assert.AreEqual(0, view.DownloadPickerCalls);
+        Assert.AreEqual(root, task.Target);
+        Assert.IsTrue(outputs.All(path => Path.GetDirectoryName(path) == root));
+        Assert.AreEqual(TransferTaskState.Completed, task.State);
+    }
+
+    [TestMethod]
+    public async Task Download_asks_for_a_directory_when_direct_default_download_is_disabled()
+    {
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = Path.GetTempPath() };
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(new FakeSftpFileService(), view, localFileExists: _ => false,
+            createLocalOutput: _ => new MemoryStream(), transfers: center);
+        workspace.SetPreferences(new UserPreferences { UseDefaultDownloadDirectory = false },
+            Path.Combine(Path.GetTempPath(), "配置的目录"));
+        await workspace.DownloadAsync(new RemoteFileItem { Name = "文件.txt", FullPath = "/文件.txt" });
+        Assert.AreEqual(1, view.DownloadPickerCalls);
+        Assert.AreEqual(Path.GetTempPath(), center.Groups[0][0].Target);
+    }
+
+    [TestMethod]
+    public async Task Explicit_local_destination_takes_precedence_over_default_download_settings()
+    {
+        var view = new RecordingSftpWorkspaceView();
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(new FakeSftpFileService(), view, localFileExists: _ => false,
+            createLocalOutput: _ => new MemoryStream(), transfers: center);
+        workspace.SetPreferences(new UserPreferences { UseDefaultDownloadDirectory = true },
+            Path.Combine(Path.GetTempPath(), "配置的目录"));
+        await workspace.DownloadAsync(new RemoteFileItem { Name = "文件.txt", FullPath = "/文件.txt" }, Path.GetTempPath());
+        Assert.AreEqual(0, view.DownloadPickerCalls);
+        Assert.AreEqual(Path.GetTempPath(), center.Groups[0][0].Target);
+    }
+
+    [TestMethod]
     public async Task Declining_the_overwrite_prompt_skips_the_upload()
     {
         var fileService = new FakeSftpFileService { FileExists = true };
@@ -200,6 +279,60 @@ public sealed class SftpWorkspaceTests
     }
 
     [TestMethod]
+    public async Task Mixed_folder_download_uses_one_global_task_and_the_chosen_local_destination()
+    {
+        var service = new FakeSftpFileService();
+        var folder = new RemoteFileItem { Name = "资料", FullPath = "/资料", IsDirectory = true };
+        service.ListingsByPath["/资料"] = [new() { Name = "文件.txt", FullPath = "/资料/文件.txt" }];
+        var center = new TransferCenter();
+        var view = new RecordingSftpWorkspaceView();
+        var outputs = new List<string>();
+        var directories = new List<string>();
+        var root = Path.Combine(Path.GetTempPath(), "FluentShell-pane-" + Guid.NewGuid().ToString("N"));
+        using var workspace = new SftpWorkspace(service, view, localFileExists: _ => false,
+            createLocalOutput: path => { outputs.Add(path); return new MemoryStream(); },
+            createLocalDirectory: directories.Add, transfers: center);
+        await workspace.DownloadAsync([folder, new RemoteFileItem { Name = "独立.txt", FullPath = "/独立.txt" }], root);
+        Assert.HasCount(1, center.Groups[0]);
+        Assert.AreEqual(3, center.Groups[0][0].Queue.CompletedCount);
+        Assert.AreEqual(0, view.DownloadPickerCalls);
+        CollectionAssert.AreEqual(new[] { Path.Combine(root, "资料", "文件.txt"), Path.Combine(root, "独立.txt") }, outputs);
+        CollectionAssert.AreEqual(new[] { Path.Combine(root, "资料") }, directories);
+    }
+
+    [TestMethod]
+    public async Task Folder_download_retry_rescans_remote_tree_and_retains_captured_selection_and_destination()
+    {
+        var service = new FakeSftpFileService();
+        service.ListingsByPath["/资料"] = [new() { Name = "旧.txt", FullPath = "/资料/旧.txt" }];
+        service.DownloadHandler = _ => Task.FromException(new IOException("临时失败"));
+        var center = new TransferCenter();
+        var view = new RecordingSftpWorkspaceView { DownloadDirectory = Path.GetTempPath() };
+        var destinations = new List<string>();
+        using var workspace = new SftpWorkspace(service, view, localFileExists: _ => false,
+            createLocalOutput: path => { destinations.Add(path); return new MemoryStream(); },
+            createLocalDirectory: _ => { }, deleteLocalFile: _ => { }, transfers: center);
+        var selected = new List<RemoteFileItem> { new() { Name = "资料", FullPath = "/资料", IsDirectory = true } };
+        await workspace.DownloadAsync(selected);
+        var task = center.Groups[0][0];
+        Assert.IsTrue(task.CanRetry);
+        selected.Clear();
+        view.DownloadDirectory = Path.Combine(Path.GetTempPath(), "其他目标");
+        await workspace.NavigateToAsync("/其他目录");
+        service.ListingsByPath["/资料"] =
+        [new() { Name = "旧.txt", FullPath = "/资料/旧.txt" }, new() { Name = "新.txt", FullPath = "/资料/新.txt" }];
+        service.DownloadHandler = null;
+
+        await task.RetryAsync();
+
+        Assert.HasCount(1, center.Groups[0]);
+        Assert.AreEqual(TransferTaskState.Completed, task.State);
+        Assert.AreEqual(3, task.Queue.CompletedCount);
+        Assert.AreEqual(1, view.DownloadPickerCalls);
+        Assert.IsTrue(destinations.All(path => Path.GetDirectoryName(path) == Path.Combine(Path.GetTempPath(), "资料")));
+    }
+
+    [TestMethod]
     public async Task Cancelling_one_upload_stops_the_remaining_files()
     {
         var fileService = new FakeSftpFileService();
@@ -260,20 +393,24 @@ public sealed class SftpWorkspaceTests
             localFileExists: _ => false,
             createLocalOutput: _ => new MemoryStream());
         var uploaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var downloaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         view.OnRender = snapshot =>
         {
             if (snapshot.Transfer.State == SftpTransferState.Completed && snapshot.Transfer.Message.StartsWith("已上传"))
                 uploaded.TrySetResult();
+            if (snapshot.Transfer.State == SftpTransferState.Completed && snapshot.Transfer.Message.StartsWith("已下载"))
+                downloaded.TrySetResult();
         };
 
         view.RaiseRefreshRequested();
         view.RaiseNavigateRequested("/日志");
         view.RaiseNewFolderRequested();
-        view.RaiseDownloadRequested(item);
         view.RaiseRenameRequested(item);
         view.RaiseDeleteRequested(item);
         view.RaiseUploadRequested();
         await uploaded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        view.RaiseDownloadRequested(item);
+        await downloaded.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.AreEqual("/日志", view.LastSnapshot.DirectoryListing.Path);
         Assert.AreEqual(1, fileService.CreateDirectoryCallCount);
@@ -349,6 +486,8 @@ public sealed class SftpWorkspaceTests
         public bool FileExists { get; set; }
         public List<RemoteFileItem> DirectoryItems { get; } = [];
         public Func<CancellationToken, Task>? UploadHandler { get; set; }
+        public Func<CancellationToken, Task>? DownloadHandler { get; set; }
+        public Dictionary<string, IReadOnlyList<RemoteFileItem>> ListingsByPath { get; } = [];
         public int UploadCallCount { get; private set; }
         public int DownloadCallCount { get; private set; }
         public int DeleteCallCount { get; private set; }
@@ -356,7 +495,7 @@ public sealed class SftpWorkspaceTests
         public int CreateDirectoryCallCount { get; private set; }
 
         public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path) =>
-            Task.FromResult<IReadOnlyList<RemoteFileItem>>(DirectoryItems.ToList());
+            Task.FromResult(ListingsByPath.GetValueOrDefault(path) ?? (IReadOnlyList<RemoteFileItem>)DirectoryItems.ToList());
 
         public Task CreateDirectoryAsync(string path)
         {
@@ -377,7 +516,7 @@ public sealed class SftpWorkspaceTests
         public Task DownloadAsync(string remotePath, Stream output, CancellationToken cancellationToken)
         {
             DownloadCallCount++;
-            return Task.CompletedTask;
+            return DownloadHandler?.Invoke(cancellationToken) ?? Task.CompletedTask;
         }
 
         public Task RenameAsync(string sourcePath, string destinationPath)

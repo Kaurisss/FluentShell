@@ -119,6 +119,7 @@
             Grid.Row="1"
             AutoGenerateColumns="False"
             IsReadOnly="True"
+            SelectionMode="Extended"
             SelectionUnit="Row"
             CurrentCellBorderThickness="0"
             AllowSorting="True"

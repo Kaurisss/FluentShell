@@ -82,6 +82,7 @@ public sealed class SftpFileService : ISftpFileService
         {
             Name = entry.Name,
             IsDirectory = entry.IsDirectory,
+            IsSymbolicLink = entry.IsSymbolicLink,
             FullPath = entry.FullPath,
             TypeLabel = entry.IsDirectory ? "目录" : "文件",
             SizeBytes = entry.IsDirectory ? -1 : entry.Length,

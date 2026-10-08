@@ -21,7 +21,8 @@ public sealed class SshNetSftpClient : ISftpClient
                 item.FullName,
                 item.IsDirectory,
                 item.Length,
-                item.LastWriteTime))
+                item.LastWriteTime,
+                item.IsSymbolicLink))
             .ToList();
 
     public void CreateDirectory(string path) => _client.CreateDirectory(path);
