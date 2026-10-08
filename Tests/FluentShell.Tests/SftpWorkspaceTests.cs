@@ -1,4 +1,4 @@
-﻿using FluentShell.Core;
+using FluentShell.Core;
 using FluentShell.Models;
 using FluentShell.Services;
 
@@ -212,17 +212,20 @@ public sealed class SftpWorkspaceTests
                 CreateUploadFile("第三个.bin")
             ]
         };
-        using var workspace = new SftpWorkspace(fileService, view);
-        fileService.UploadHandler = _ =>
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(fileService, view, transfers: center);
+        fileService.UploadHandler = token =>
         {
-            workspace.CancelTransfer();
-            return Task.FromException(new OperationCanceledException());
+            center.Discard(center.Groups.Single().Single());
+            token.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         };
 
         await workspace.UploadAsync();
 
         Assert.AreEqual(1, fileService.UploadCallCount, "用户取消后不应继续上传剩余文件。");
         Assert.AreEqual(SftpTransferState.Cancelled, view.LastSnapshot!.Transfer.State);
+        Assert.HasCount(0, center.Groups, "丢弃操作应移除全局任务。");
     }
 
     [TestMethod]

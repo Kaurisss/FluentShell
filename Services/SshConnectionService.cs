@@ -56,7 +56,6 @@ public sealed class SshConnectionService : ISshConnection
         _transferSftpClient?.IsConnected == true;
     public ISftpClient? SftpClient => _remoteFileClient;
     public ISftpClient? TransferSftpClient => _transferFileClient;
-    public string? LastFingerprint { get; private set; }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -370,10 +369,10 @@ public sealed class SshConnectionService : ISshConnection
 
     private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
     {
-        LastFingerprint = VerifyHostKey(_profile, e, HostFingerprintRequired);
+        VerifyHostKey(_profile, e, HostFingerprintRequired);
     }
 
-    internal static string VerifyHostKey(
+    internal static void VerifyHostKey(
         ServerProfile profile,
         HostKeyEventArgs e,
         EventHandler<HostFingerprintRequiredEventArgs>? confirmationRequested)
@@ -398,7 +397,6 @@ public sealed class SshConnectionService : ISshConnection
         {
             throw new SshConnectionException($"服务器指纹已变化，连接被拒绝。\n存储: {storedFingerprint}\n当前: {fingerprint}");
         }
-        return fingerprint;
     }
 
     private async Task ReadOutputLoopAsync(CancellationToken cancellationToken)
@@ -425,9 +423,6 @@ public sealed class SshConnectionService : ISshConnection
         }
         if (!cancellationToken.IsCancellationRequested) Disconnected?.Invoke(this, EventArgs.Empty);
     }
-
-    public Task SendAsync(string command, bool appendNewLine = true)
-        => SendRawAsync(appendNewLine ? command + "\r" : command);
 
     public async Task SendRawAsync(string input)
     {

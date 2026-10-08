@@ -80,11 +80,6 @@ public sealed partial class SettingsPage : UserControl
         ShowCategory("terminal");
     }
 
-    private void BackToSettings_Click(object sender, RoutedEventArgs e)
-    {
-        NavigateCategory(null);
-    }
-
     private void SettingsBreadcrumb_ItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args)
     {
         if (args.Index == 0) NavigateCategory(null);

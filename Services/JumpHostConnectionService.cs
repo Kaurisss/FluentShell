@@ -41,7 +41,6 @@ public sealed class JumpHostConnectionService : ISshConnection
         _forward?.IsStarted == true && _target?.IsConnected == true;
     public ISftpClient? SftpClient => _target?.SftpClient;
     public ISftpClient? TransferSftpClient => _target?.TransferSftpClient;
-    public string? LastFingerprint => _target?.LastFingerprint;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {

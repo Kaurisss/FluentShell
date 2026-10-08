@@ -33,13 +33,12 @@ public sealed class TransferQueueManager
     /// <summary>清空队列，准备新的传输批次。</summary>
     public void Clear() => _items.Clear();
 
-    /// <summary>批量添加待传输的文件到队列（传输前的构建阶段）。</summary>
-    public void AddPendingItems(IEnumerable<(string FileName, string RelativePath, long SizeBytes)> files)
+    /// <summary>批量添加待传输的文件或目录到队列（传输前的构建阶段）。</summary>
+    public void AddPendingItems(IEnumerable<(string RelativePath, long SizeBytes)> files)
     {
-        foreach (var (fileName, relativePath, sizeBytes) in files)
+        foreach (var (relativePath, sizeBytes) in files)
         {
             var item = new TransferQueueItem(
-                fileName,
                 relativePath,
                 sizeBytes,
                 TransferItemState.Pending);
@@ -47,10 +46,10 @@ public sealed class TransferQueueManager
         }
     }
 
-    /// <summary>添加单个待传输文件（用于逐文件添加场景，如上传多个本地文件）。</summary>
-    public void AddPendingItem(string fileName, string relativePath, long sizeBytes)
+    /// <summary>添加单个待传输文件（下载统计阶段）。</summary>
+    public void AddPendingItem(string relativePath, long sizeBytes)
     {
-        var item = new TransferQueueItem(fileName, relativePath, sizeBytes, TransferItemState.Pending);
+        var item = new TransferQueueItem(relativePath, sizeBytes, TransferItemState.Pending);
         _items[relativePath] = item;
     }
 

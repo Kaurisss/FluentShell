@@ -78,8 +78,6 @@ public sealed class SftpWorkspace : IDisposable
 
     public Task NavigateToAsync(string path) => _controller.NavigateToAsync(path);
 
-    public void CancelTransfer() => _controller.CancelTransfer();
-
     public async Task CreateFolderAsync()
     {
         var name = await _view.PromptTextAsync("新建文件夹", "文件夹名称");

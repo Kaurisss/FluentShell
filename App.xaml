@@ -13,7 +13,6 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="#B3F3F3F3" />
-                    <SolidColorBrush x:Key="SidebarSurfaceBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="#CCFFFFFF" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="#5C5C5C" />
                     <SolidColorBrush x:Key="SubtleStrokeBrush" Color="#18000000" />
@@ -22,7 +21,6 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="#B3202020" />
-                    <SolidColorBrush x:Key="SidebarSurfaceBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="#CC2B2B2B" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="#B5B5B5" />
                     <SolidColorBrush x:Key="SubtleStrokeBrush" Color="#26FFFFFF" />
@@ -31,7 +29,6 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="SidebarSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="SubtleStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -40,24 +37,7 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <SolidColorBrush x:Key="TerminalSurfaceBrush" Color="#101214" />
-            <SolidColorBrush x:Key="TerminalTextBrush" Color="#E6EDF3" />
             <x:Double x:Key="IconButtonSize">40</x:Double>
-            <Thickness x:Key="AppBarButtonInnerBorderMargin">2</Thickness>
-            <Thickness x:Key="AppBarButtonContentViewboxCollapsedMargin">0,12</Thickness>
-
-            <StaticResource x:Key="AppBarButtonBackground" ResourceKey="ButtonBackground" />
-            <StaticResource x:Key="AppBarButtonBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver" />
-            <StaticResource x:Key="AppBarButtonBackgroundPressed" ResourceKey="ButtonBackgroundPressed" />
-            <StaticResource x:Key="AppBarButtonBackgroundDisabled" ResourceKey="ButtonBackgroundDisabled" />
-            <StaticResource x:Key="AppBarButtonForeground" ResourceKey="ButtonForeground" />
-            <StaticResource x:Key="AppBarButtonForegroundPointerOver" ResourceKey="ButtonForegroundPointerOver" />
-            <StaticResource x:Key="AppBarButtonForegroundPressed" ResourceKey="ButtonForegroundPressed" />
-            <StaticResource x:Key="AppBarButtonForegroundDisabled" ResourceKey="ButtonForegroundDisabled" />
-            <StaticResource x:Key="AppBarButtonBorderBrush" ResourceKey="ButtonBorderBrush" />
-            <StaticResource x:Key="AppBarButtonBorderBrushPointerOver" ResourceKey="ButtonBorderBrushPointerOver" />
-            <StaticResource x:Key="AppBarButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
-            <StaticResource x:Key="AppBarButtonBorderBrushDisabled" ResourceKey="ButtonBorderBrushDisabled" />
 
             <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
@@ -222,16 +202,6 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
-            </Style>
-
-            <Style x:Key="CommandBarIconButtonStyle" TargetType="AppBarButton" BasedOn="{StaticResource DefaultAppBarButtonStyle}">
-                <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
-                <Setter Property="Height" Value="{StaticResource IconButtonSize}" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource ButtonBorderBrush}" />
-                <Setter Property="BorderThickness" Value="{ThemeResource ButtonBorderThemeThickness}" />
-                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
             </Style>
 
             <Style x:Key="WorkspaceSplitterStyle" TargetType="Thumb">

@@ -12,7 +12,7 @@ public sealed class TransferFileProgressTests
     public void Progress_ticks_preserve_collection_and_rows_without_collection_events()
     {
         var task = CreateTask();
-        var file = new TransferQueueItem("file", "file", 100, TransferItemState.Transferring);
+        var file = new TransferQueueItem("file", 100, TransferItemState.Transferring);
         task.UpdateFiles([file]);
         var files = task.Files;
         var row = files[0];
@@ -27,9 +27,9 @@ public sealed class TransferFileProgressTests
         Assert.AreSame(files, task.Files);
         Assert.AreSame(row, task.Files[0]);
         Assert.AreEqual(0, collectionEvents);
-        Assert.AreEqual(100d, row.PercentComplete);
         Assert.AreEqual("100%", row.StatusLabel);
-        Assert.Contains(nameof(TransferFileProgress.PercentComplete), properties);
+        Assert.Contains(nameof(TransferFileProgress.StatusLabel), properties);
+        Assert.HasCount(100, properties);
         Assert.DoesNotContain(string.Empty, properties);
         properties.Clear();
         task.UpdateFiles([file.WithProgress(100)]);
@@ -40,8 +40,8 @@ public sealed class TransferFileProgressTests
     public void Membership_changes_preserve_surviving_rows_and_update_errors()
     {
         var task = CreateTask();
-        var a = new TransferQueueItem("a", "a", 100, TransferItemState.Pending);
-        var b = a with { FileName = "b", RelativePath = "b" };
+        var a = new TransferQueueItem("a", 100, TransferItemState.Pending);
+        var b = a with { RelativePath = "b" };
         task.UpdateFiles([a, b]);
         var row = task.Files[1];
         task.UpdateFiles([b.WithState(TransferItemState.Failed, "failure"), a]);

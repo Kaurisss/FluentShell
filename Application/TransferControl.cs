@@ -8,7 +8,6 @@ public sealed class TransferControl : IDisposable
     private TaskCompletionSource? _resume;
     public CancellationToken Token => _cancellation.Token;
     public bool PreservePartialFiles { get; private set; }
-    public bool IsPaused { get { lock (_sync) return _resume is not null; } }
 
     public void Pause()
     {

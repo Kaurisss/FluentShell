@@ -377,7 +377,7 @@ public sealed class SessionConnectionTests
         Action<Action>? post = null) =>
         new(
             profile ?? new ServerProfile { Name = "测试服务器", Host = "host", Username = "user" },
-            _ => connectionFactory(),
+            (_, _) => Task.FromResult<ISshConnection?>(connectionFactory()),
             secretProvider ?? (() => Task.FromResult<string?>("secret")),
             confirmFingerprint ?? (_ => Task.FromResult(false)),
             post ?? (work => work()),

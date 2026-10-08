@@ -79,13 +79,12 @@ public sealed class SftpSessionControllerTests
         };
         using var controller = new SftpSessionController(fileService);
 
-        await controller.UploadAsync(
-            "上传.bin",
-            () => Task.FromResult<Stream>(new MemoryStream()),
+        await controller.UploadEntriesAsync(
+            [new SftpUploadFile("上传.bin", () => Task.FromResult<Stream>(new MemoryStream()))],
             _ => Task.FromResult(true));
 
         Assert.AreEqual(SftpTransferState.Failed, controller.Snapshot.Transfer.State, "传输失败落在传输轴上，视图据此弹窗。");
-        Assert.Contains("磁盘已满", controller.Snapshot.Transfer.Message);
+        Assert.AreEqual("磁盘已满", controller.Snapshot.Queue.Items.Single().ErrorMessage);
         Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State, "浏览轴不受传输失败影响。");
     }
 
@@ -148,9 +147,8 @@ public sealed class SftpSessionControllerTests
         using var controller = new SftpSessionController(fileService);
         var snapshots = CaptureSnapshots(controller);
 
-        await controller.UploadAsync(
-            "上传.txt",
-            () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])),
+        await controller.UploadEntriesAsync(
+            [new SftpUploadFile("上传.txt", () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])))],
             _ => Task.FromResult(true));
 
         Assert.IsTrue(snapshots[^1].DirectoryListing.Items.Any(item => item.Name == "上传.txt"));
@@ -172,9 +170,7 @@ public sealed class SftpSessionControllerTests
         var snapshots = CaptureSnapshots(controller);
         var files = new[] { new SftpUploadFile("archive.zip",
             () => Task.FromResult<Stream>(new MemoryStream(bytes, writable: false))) };
-        await controller.BuildUploadQueueAsync(files);
-
-        await controller.UploadAsync(files[0].Name, files[0].OpenRead, _ => Task.FromResult(true));
+        await controller.UploadEntriesAsync(files, _ => Task.FromResult(true));
 
         Assert.AreEqual(SftpTransferState.Completed, controller.Snapshot.Transfer.State,
             controller.Snapshot.Transfer.Message);
@@ -198,9 +194,8 @@ public sealed class SftpSessionControllerTests
         };
         using var controller = new SftpSessionController(fileService);
 
-        var upload = controller.UploadAsync(
-            "日志.txt",
-            () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])),
+        var upload = controller.UploadEntriesAsync(
+            [new SftpUploadFile("日志.txt", () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])))],
             _ => Task.FromResult(true));
         await uploadStarted.Task;
         controller.CancelTransfer();
@@ -230,9 +225,8 @@ public sealed class SftpSessionControllerTests
         browseService.DirectoryItems.Add(new RemoteFileItem { Name = "文档", IsDirectory = true, FullPath = "/文档" });
         using var controller = new SftpSessionController(browseService, transferService);
 
-        var upload = controller.UploadAsync(
-            "大文件.bin",
-            () => Task.FromResult<Stream>(new MemoryStream([1])),
+        var upload = controller.UploadEntriesAsync(
+            [new SftpUploadFile("大文件.bin", () => Task.FromResult<Stream>(new MemoryStream([1])))],
             _ => Task.FromResult(true));
         await uploadStarted.Task;
 
@@ -515,6 +509,29 @@ public sealed class SftpSessionControllerTests
         Assert.AreEqual(SftpSessionState.Idle, controller.Snapshot.State, "校验失败按未完成操作收尾，不是异常。");
     }
 
+    [TestMethod]
+    [DataRow("../escape")]
+    [DataRow("nested/file")]
+    [DataRow(".")]
+    public async Task Upload_entries_reject_invalid_root_names_before_opening_streams_or_remote_io(string name)
+    {
+        var service = new FakeSftpFileService();
+        using var controller = new SftpSessionController(service);
+        var opened = false;
+
+        await controller.UploadEntriesAsync([new SftpUploadFile(name, () =>
+        {
+            opened = true;
+            return Task.FromResult<Stream>(new MemoryStream([1, 2, 3]));
+        })], _ => Task.FromResult(true));
+
+        Assert.IsFalse(opened);
+        Assert.AreEqual(0, service.UploadCallCount);
+        Assert.AreEqual(SftpTransferState.Failed, controller.Snapshot.Transfer.State);
+        Assert.AreEqual(1, controller.Snapshot.Queue.FailedCount);
+        Assert.IsNotNull(controller.Snapshot.Queue.Items.Single().ErrorMessage);
+    }
+
     private static List<SftpSessionSnapshot> CaptureSnapshots(SftpSessionController controller)
     {
         var snapshots = new List<SftpSessionSnapshot>();
@@ -531,6 +548,7 @@ public sealed class SftpSessionControllerTests
         public Func<CancellationToken, Task>? UploadHandler { get; set; }
         public int RenameCallCount { get; private set; }
         public int DownloadCallCount { get; private set; }
+        public int UploadCallCount { get; private set; }
 
         public Task<IReadOnlyList<RemoteFileItem>> ListDirectoryAsync(string path)
         {
@@ -554,6 +572,7 @@ public sealed class SftpSessionControllerTests
 
         public async Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken)
         {
+            UploadCallCount++;
             if (UploadHandler is not null)
             {
                 await UploadHandler(cancellationToken);

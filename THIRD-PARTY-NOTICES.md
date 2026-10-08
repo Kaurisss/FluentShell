@@ -59,7 +59,7 @@ variable; keys must not be stored in source control.
 
 ## xterm.js
 
-FluentShell bundles the browser terminal emulator and fit, search, and web-links addons from
+FluentShell bundles the browser terminal emulator and fit and search addons from
 [xterm.js](https://github.com/xtermjs/xterm.js). The bundled files are under
 `Assets/Terminal`.
 
@@ -67,8 +67,7 @@ Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.
 Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com)
 Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
 
-The fit addon is Copyright (c) 2019, The xterm.js authors. The search and
-web-links addons are Copyright (c) 2017, The xterm.js authors. They are each
+The fit addon is Copyright (c) 2019, The xterm.js authors. The search addon is Copyright (c) 2017, The xterm.js authors. They are each
 distributed under the same MIT license below.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

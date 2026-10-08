@@ -9,7 +9,6 @@ internal static class SftpUploadPlanner
         string? Error = null)
     {
         public bool IsDirectory => File is null;
-        public string Name => RelativePath.Split('/').Last();
     }
 
     public static Task<IReadOnlyList<Item>> BuildAsync(IReadOnlyList<SftpUploadEntry> entries,

@@ -49,19 +49,6 @@ public sealed class SessionConnection : IAsyncDisposable
 
     public SessionConnection(
         ServerProfile profile,
-        Func<string, ISshConnection> connectionFactory,
-        Func<Task<string?>> secretProvider,
-        Func<HostFingerprintRequiredEventArgs, Task<bool>> confirmFingerprint,
-        Action<Action> post,
-        Action cancelTransfers)
-        : this(profile,
-            (secret, _) => Task.FromResult<ISshConnection?>(connectionFactory(secret)),
-            secretProvider, confirmFingerprint, post, cancelTransfers)
-    {
-    }
-
-    public SessionConnection(
-        ServerProfile profile,
         Func<string, CancellationToken, Task<ISshConnection?>> connectionFactory,
         Func<Task<string?>> secretProvider,
         Func<HostFingerprintRequiredEventArgs, Task<bool>> confirmFingerprint,

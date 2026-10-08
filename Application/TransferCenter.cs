@@ -239,7 +239,6 @@ public sealed class TransferFileProgress(TransferQueueItem item) : INotifyProper
 {
     private TransferQueueItem _item = item;
     public string RelativePath => _item.RelativePath;
-    public double PercentComplete => _item.PercentComplete;
     public string StatusLabel => _item.StatusLabel;
     public string? ErrorMessage => _item.ErrorMessage;
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -248,8 +247,6 @@ public sealed class TransferFileProgress(TransferQueueItem item) : INotifyProper
     {
         var previous = _item;
         _item = item;
-        if (previous.PercentComplete != item.PercentComplete)
-            PropertyChanged?.Invoke(this, new(nameof(PercentComplete)));
         if (previous.StatusLabel != item.StatusLabel)
             PropertyChanged?.Invoke(this, new(nameof(StatusLabel)));
         if (previous.ErrorMessage != item.ErrorMessage)

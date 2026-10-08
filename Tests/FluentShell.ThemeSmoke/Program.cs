@@ -78,12 +78,19 @@ internal sealed class SmokeApp : App
             Grid.SetColumn(workspace, 1);
             root.Children.Add(workspace);
             _window.Activate();
+            var highContrast = (ResourceDictionary)Resources.ThemeDictionaries["HighContrast"];
+            var highContrastKeys = new[] { "PageSurfaceBrush", "PanelSurfaceBrush", "MutedTextBrush", "SubtleStrokeBrush",
+                "NavigationViewDefaultPaneBackground", "NavigationViewExpandedPaneBackground" };
+            if (highContrastKeys.Any(key => highContrast[key] is not SolidColorBrush))
+                throw new InvalidOperationException("High contrast application brushes must still resolve.");
+            Program.Results.Add(new { control = "high contrast resource resolution", passed = true });
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
             var terminal = Field<TerminalPane>(workspace, "_terminalPane");
             var web = Field<WebView2>(terminal, "_terminalView");
             while (!Field<bool>(terminal, "_ready")) await Task.Delay(100, timeout.Token);
             terminal.Write("Offline output survives theme changes\r\n");
             var failures = new List<string>();
+            await VerifyTerminalAsync(terminal, web, failures);
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark, ElementTheme.Light })
             {
                 // Match navigating away to settings and returning to the cached session.
@@ -121,6 +128,7 @@ internal sealed class SmokeApp : App
                 Program.Results.Add(new { phase = theme.ToString(), control = "xterm page", scheme, background, passed = webPassed });
                 if (!webPassed) failures.Add($"xterm expected {expectedScheme}/{expectedBackground}, got {scheme}/{background}");
             }
+            await VerifyTransferAndFileFlyoutsAsync(root, Field<SftpWorkspaceView>(workspace, "_sftpView"), failures);
             // Exercise the settings editor without touching user settings or SSH.
             root.Children.Remove(workspace);
             var settingsPage = new SettingsPage(WinRT.Interop.WindowNative.GetWindowHandle(_window));
@@ -129,6 +137,7 @@ internal sealed class SmokeApp : App
             settingsPage.SetSettings(new AppSettings(), "Offline fixture");
             root.UpdateLayout();
             await Task.Delay(200, timeout.Token);
+            await VerifyTextFlyoutAsync(root, failures);
             foreach (var iconName in new[] { "Copy", "Paste", "Confirm" })
                 foreach (var scale in new[] { 1d, 1.25d, 1.5d })
                     await VerifyIconEdgesAsync(settingsPage, root, iconName, scale, failures);
@@ -250,7 +259,7 @@ internal sealed class SmokeApp : App
             if (keyPicker.Key != "K" || shortcutUpdates != 1 || ((TextBlock)settingsPage.FindName("ShortcutError")).Visibility != Visibility.Visible)
                 failures.Add("Duplicate shortcut must show an error and retain the previous binding.");
             Program.Results.Add(new { control = "breadcrumb and shortcut controls", passed = failures.Count == 0 });
-            typeof(SettingsPage).GetMethod("BackToSettings_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            ReturnToSettingsHome(settingsPage, root, "shortcuts", failures);
             ((Expander)settingsPage.FindName("LightColorsExpander")).IsExpanded = true;
             var fields = Field<Dictionary<string, Button>>(settingsPage, "_lightColors");
             var updates = 0;
@@ -289,7 +298,7 @@ internal sealed class SmokeApp : App
             if (fields["background"].Tag as string != "#123456") failures.Add("Confirming ColorDialog must update the selected color.");
             fields["red"].Tag = "#ABCDEF";
             typeof(SettingsPage).GetMethod("SaveColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
-            typeof(SettingsPage).GetMethod("BackToSettings_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            ReturnToSettingsHome(settingsPage, root, "terminal", failures);
             if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Visible)
                 failures.Add("Back must return to settings home.");
             // Page scrollers reach the viewport edge; content retains its responsive inset.
@@ -541,6 +550,158 @@ internal sealed class SmokeApp : App
         }
         catch (Exception e) { Program.Finish(e); }
     }
+    private static void ReturnToSettingsHome(SettingsPage page, Grid root, string category, List<string> failures)
+    {
+        root.UpdateLayout();
+        var breadcrumb = (BreadcrumbBar)page.FindName("SettingsBreadcrumb");
+        var home = Descendants(breadcrumb).OfType<BreadcrumbBarItem>().Single(item => item.Content as string == "设置");
+        new Microsoft.UI.Xaml.Automation.Peers.BreadcrumbBarItemAutomationPeer(home).Invoke();
+        root.UpdateLayout();
+        if (((ScrollViewer)page.FindName("SettingsHome")).Visibility != Visibility.Visible
+            || breadcrumb.ItemsSource is not string[] { Length: 1 })
+            failures.Add("Invoking the root breadcrumb must return to settings home.");
+        var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
+        var homePanel = (StackPanel)((ScrollViewer)page.FindName("SettingsHome")).Content;
+        FrameworkElement expectedCard = category == "terminal" ? (FrameworkElement)page.FindName("OpenTerminalColorsButton")
+            : homePanel.Children.OfType<SettingsCard>().Single(card => card.Tag as string == category);
+        if (focused != expectedCard && !Descendants(expectedCard).Contains(focused))
+            failures.Add("Breadcrumb return must restore focus to the originating category card.");
+        Program.Results.Add(new { control = "root breadcrumb return and focus", passed = failures.Count == 0 });
+    }
+
+    private static async Task VerifyTransferAndFileFlyoutsAsync(Grid root, SftpWorkspaceView sftp, List<string> failures)
+    {
+        var center = new TransferCenter();
+        var task = center.Add(Guid.NewGuid(), "Offline server", "上传", "file.bin", "/fixture", () => Task.CompletedTask, () => true);
+        void Publish(long bytes)
+        {
+            var item = new TransferQueueItem("folder/file.bin", 100, TransferItemState.Transferring, bytes);
+            var snapshot = new SftpSessionSnapshot(SftpSessionState.Idle, SftpDirectoryListing.Empty("/"), true, true, false, "", null)
+            {
+                Transfer = new(SftpTransferState.Transferring, "Offline transfer", new(bytes, 100, 512)),
+                Queue = new([item], 1, 0, 0, 0)
+            };
+            typeof(TransferTask).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(task, [snapshot]);
+        }
+        var anchor = new Button { Content = "Offline flyout fixture", HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        Grid.SetColumn(anchor, 1);
+        root.Children.Add(anchor);
+        var view = new TransferCenterView { Width = 400, Height = 500 };
+        view.SetCenter(center);
+        var flyout = new Flyout { Content = view };
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            Publish(25);
+            flyout.ShowAt(anchor);
+            await Task.Delay(200);
+            view.UpdateLayout();
+            var expander = Descendants(view).OfType<Expander>().Single();
+            expander.IsExpanded = true;
+            await Task.Delay(150);
+            if (!Descendants(view).OfType<TextBlock>().Any(text => text.Text == "25%")) failures.Add("File detail must display its initial percentage.");
+            Publish(50);
+            await Task.Delay(100);
+            if (view.ActualTheme != theme || !Descendants(view).OfType<TextBlock>().Any(text => text.Text == "50%"))
+                failures.Add("Transfer flyout must follow the theme and update the bound status label.");
+            // RenderTargetBitmap cannot reliably capture native popup composition;
+            // verify the live popup's theme, layout and bound text instead.
+            if (view.ActualWidth <= 0 || view.ActualHeight <= 0) failures.Add("Transfer flyout must have a visible layout.");
+            await HideFlyoutAsync(flyout);
+
+            var menu = (MenuFlyout)typeof(SftpWorkspaceView).GetMethod("BuildEmptyAreaMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sftp, null)!;
+            menu.ShowAt(anchor);
+            await Task.Delay(150);
+            var presenter = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Select(p => p.Child).OfType<FrameworkElement>().Single();
+            if (presenter.ActualTheme != theme || !Descendants(presenter).OfType<MenuFlyoutItem>().Any())
+                failures.Add("File context menu must retain its native items and theme.");
+            if (presenter.ActualWidth <= 0 || presenter.ActualHeight <= 0) failures.Add("File menu must have a visible layout.");
+            await HideFlyoutAsync(menu);
+            Program.Results.Add(new { control = "transfer detail updates and file menu", theme = theme.ToString(), passed = failures.Count == 0 });
+        }
+        root.RequestedTheme = ElementTheme.Light;
+        root.Children.Remove(anchor);
+    }
+
+    private static async Task HideFlyoutAsync(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase flyout)
+    {
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnClosed(object? sender, object args) => closed.TrySetResult();
+        flyout.Closed += OnClosed;
+        flyout.Hide();
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        flyout.Closed -= OnClosed;
+    }
+
+    private static async Task VerifyTerminalAsync(TerminalPane terminal, WebView2 web, List<string> failures)
+    {
+        var input = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnInput(object? sender, string data) => input.TrySetResult(data);
+        var resize = new TaskCompletionSource<TerminalResizeRequestedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnResize(object? sender, TerminalResizeRequestedEventArgs args) => resize.TrySetResult(args);
+        terminal.InputReceived += OnInput;
+        terminal.ResizeRequested += OnResize;
+        try
+        {
+            web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"paste\",\"data\":\"offline-input\"}");
+            if (await input.Task.WaitAsync(TimeSpan.FromSeconds(3)) != "offline-input")
+                failures.Add("xterm input must reach the host intact.");
+            terminal.SetFontSize(18);
+            var size = await resize.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            if (size.Columns <= 0 || size.Rows <= 0) failures.Add("Font resizing must preserve positive terminal dimensions.");
+            terminal.Search();
+            await Task.Delay(150);
+            var result = await web.CoreWebView2.ExecuteScriptAsync("JSON.stringify({searchVisible:!document.getElementById('search').hidden,fontSize:getComputedStyle(document.querySelector('.xterm-rows')).fontSize,hasOutput:document.querySelector('.xterm-rows').textContent.includes('Offline output')})");
+            using var state = JsonDocument.Parse(JsonSerializer.Deserialize<string>(result)!);
+            Program.Results.Add(new { control = "terminal bridge state", state = state.RootElement.Clone() });
+            if (!state.RootElement.GetProperty("searchVisible").GetBoolean() || !state.RootElement.GetProperty("hasOutput").GetBoolean()
+                || state.RootElement.GetProperty("fontSize").GetString() != "18px")
+                failures.Add("Terminal output, font size and search must survive asset cleanup.");
+            await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('search-input').value='Offline output';document.getElementById('search-next').click();document.getElementById('search-close').click()");
+            terminal.SetFontSize(14);
+            Program.Results.Add(new { control = "terminal output, input, font resizing and search", passed = failures.Count == 0 });
+        }
+        finally { terminal.InputReceived -= OnInput; terminal.ResizeRequested -= OnResize; }
+    }
+
+    private static async Task VerifyTextFlyoutAsync(Grid root, List<string> failures)
+    {
+        var text = new TextBox { Width = 240, Height = 40, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        Grid.SetColumn(text, 1);
+        root.Children.Add(text);
+        root.UpdateLayout();
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            await Task.Delay(150);
+            text.Text = "Offline text fixture";
+            text.Focus(FocusState.Programmatic);
+            text.SelectAll();
+            var flyout = text.ContextFlyout;
+            if (flyout is not TextCommandBarFlyout) throw new InvalidOperationException("Expected the native text context flyout.");
+            flyout.ShowAt(text);
+            await Task.Delay(150);
+            var buttons = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .SelectMany(p => Descendants(p.Child)).OfType<AppBarButton>().ToArray();
+            if (buttons.Length == 0) failures.Add("Text context flyout must create native command buttons.");
+            foreach (var button in buttons)
+            {
+                var buttonStates = new Dictionary<string, bool>();
+                foreach (var state in new[] { "Normal", "PointerOver", "Pressed", "Disabled" })
+                {
+                    buttonStates[state] = VisualStateManager.GoToState(button, state, false);
+                    if (!buttonStates[state]) failures.Add("Text command button lost visual state: " + state);
+                }
+                Program.Results.Add(new { control = "text command button", label = button.Label, width = button.ActualWidth, foreground = button.Foreground?.GetType().Name, states = buttonStates });
+                if (button.Foreground is not SolidColorBrush) failures.Add("Text command button must retain its foreground.");
+            }
+            Program.Results.Add(new { control = "native text command flyout states", theme = theme.ToString(), buttons = buttons.Length, passed = failures.Count == 0 });
+            await HideFlyoutAsync(flyout);
+        }
+        root.RequestedTheme = ElementTheme.Light;
+        root.Children.Remove(text);
+    }
+
     private static async Task VerifyIconEdgesAsync(SettingsPage settingsPage, Grid root, string iconName, double scale, List<string> failures)
     {
         var icon = new PathIcon

@@ -8,7 +8,7 @@ public class TransferQueueTests
     [TestMethod]
     public void TransferQueueItem_CalculatesPercentComplete()
     {
-        var item = new TransferQueueItem("test.txt", "test.txt", 1000, TransferItemState.Transferring, 250);
+        var item = new TransferQueueItem("test.txt", 1000, TransferItemState.Transferring, 250);
 
         Assert.AreEqual(25.0, item.PercentComplete);
     }
@@ -16,7 +16,7 @@ public class TransferQueueTests
     [TestMethod]
     public void TransferQueueItem_HandlesZeroSize()
     {
-        var item = new TransferQueueItem("test.txt", "test.txt", 0, TransferItemState.Transferring, 0);
+        var item = new TransferQueueItem("test.txt", 0, TransferItemState.Transferring, 0);
 
         Assert.AreEqual(0.0, item.PercentComplete);
     }
@@ -24,7 +24,7 @@ public class TransferQueueTests
     [TestMethod]
     public void TransferQueueItem_WithState_UpdatesStateAndError()
     {
-        var item = new TransferQueueItem("test.txt", "test.txt", 1000, TransferItemState.Pending);
+        var item = new TransferQueueItem("test.txt", 1000, TransferItemState.Pending);
         var updated = item.WithState(TransferItemState.Failed, "Network error");
 
         Assert.AreEqual(TransferItemState.Failed, updated.State);
@@ -36,11 +36,11 @@ public class TransferQueueTests
     {
         var manager = new TransferQueueManager();
 
-        manager.AddPendingItem("test.txt", "folder/test.txt", 1024);
+        manager.AddPendingItem("folder/test.txt", 1024);
 
         var snapshot = manager.CreateSnapshot();
         Assert.AreEqual(1, snapshot.TotalCount);
-        Assert.AreEqual("test.txt", snapshot.Items[0].FileName);
+        Assert.AreEqual("folder/test.txt", snapshot.Items[0].RelativePath);
         Assert.AreEqual(TransferItemState.Pending, snapshot.Items[0].State);
     }
 
@@ -48,7 +48,7 @@ public class TransferQueueTests
     public void TransferQueueManager_StartTransfer_UpdatesState()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test.txt", "test.txt", 1024);
+        manager.AddPendingItem("test.txt", 1024);
 
         manager.StartTransfer("test.txt");
 
@@ -60,7 +60,7 @@ public class TransferQueueTests
     public void TransferQueueManager_CompleteTransfer_UpdatesState()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test.txt", "test.txt", 1024);
+        manager.AddPendingItem("test.txt", 1024);
         manager.StartTransfer("test.txt");
 
         manager.CompleteTransfer("test.txt");
@@ -74,7 +74,7 @@ public class TransferQueueTests
     public void TransferQueueManager_SkipTransfer_UpdatesState()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test.txt", "test.txt", 1024);
+        manager.AddPendingItem("test.txt", 1024);
 
         manager.SkipTransfer("test.txt");
 
@@ -87,7 +87,7 @@ public class TransferQueueTests
     public void TransferQueueManager_FailTransfer_UpdatesStateWithError()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test.txt", "test.txt", 1024);
+        manager.AddPendingItem("test.txt", 1024);
         manager.StartTransfer("test.txt");
 
         manager.FailTransfer("test.txt", "Connection timeout");
@@ -102,7 +102,7 @@ public class TransferQueueTests
     public void TransferQueueManager_UpdateProgress_UpdatesBytesTransferred()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test.txt", "test.txt", 1024);
+        manager.AddPendingItem("test.txt", 1024);
         manager.StartTransfer("test.txt");
 
         var snapshotUpdated = false;
@@ -118,8 +118,8 @@ public class TransferQueueTests
     public void TransferQueueManager_Clear_RemovesAllItems()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("test1.txt", "test1.txt", 1024);
-        manager.AddPendingItem("test2.txt", "test2.txt", 2048);
+        manager.AddPendingItem("test1.txt", 1024);
+        manager.AddPendingItem("test2.txt", 2048);
 
         manager.Clear();
 
@@ -134,9 +134,9 @@ public class TransferQueueTests
         var manager = new TransferQueueManager();
         var files = new[]
         {
-            ("file1.txt", "folder/file1.txt", 100L),
-            ("file2.txt", "folder/file2.txt", 200L),
-            ("file3.txt", "folder/file3.txt", 300L)
+            ("folder/file1.txt", 100L),
+            ("folder/file2.txt", 200L),
+            ("folder/file3.txt", 300L)
         };
 
         manager.AddPendingItems(files);
@@ -150,11 +150,11 @@ public class TransferQueueTests
     public void TransferQueueManager_CreateSnapshot_CalculatesStatistics()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("file1.txt", "file1.txt", 100);
-        manager.AddPendingItem("file2.txt", "file2.txt", 200);
-        manager.AddPendingItem("file3.txt", "file3.txt", 300);
-        manager.AddPendingItem("file4.txt", "file4.txt", 400);
-        manager.AddPendingItem("file5.txt", "file5.txt", 500);
+        manager.AddPendingItem("file1.txt", 100);
+        manager.AddPendingItem("file2.txt", 200);
+        manager.AddPendingItem("file3.txt", 300);
+        manager.AddPendingItem("file4.txt", 400);
+        manager.AddPendingItem("file5.txt", 500);
         manager.StartTransfer("file4.txt");
 
         manager.CompleteTransfer("file1.txt");
@@ -175,9 +175,9 @@ public class TransferQueueTests
     public void TransferQueueManager_SnapshotIsSorted_ByRelativePath()
     {
         var manager = new TransferQueueManager();
-        manager.AddPendingItem("zebra.txt", "zebra.txt", 100);
-        manager.AddPendingItem("alpha.txt", "alpha.txt", 200);
-        manager.AddPendingItem("beta.txt", "beta.txt", 300);
+        manager.AddPendingItem("zebra.txt", 100);
+        manager.AddPendingItem("alpha.txt", 200);
+        manager.AddPendingItem("beta.txt", 300);
 
         var snapshot = manager.CreateSnapshot();
 
@@ -191,7 +191,7 @@ public class TransferQueueTests
     {
         var manager = new TransferQueueManager();
         var files = Enumerable.Range(0, 100)
-            .Select(i => ($"file{i}.txt", $"file{i}.txt", (long)i * 100))
+            .Select(i => ($"file{i}.txt", (long)i * 100))
             .ToArray();
 
         manager.AddPendingItems(files);
@@ -199,11 +199,11 @@ public class TransferQueueTests
         // 模拟并发更新
         Parallel.ForEach(files, file =>
         {
-            manager.StartTransfer(file.Item2);
+            manager.StartTransfer(file.Item1);
             Thread.Sleep(1);
-            manager.UpdateProgress(file.Item2, file.Item3 / 2, () => { });
+            manager.UpdateProgress(file.Item1, file.Item2 / 2, () => { });
             Thread.Sleep(1);
-            manager.CompleteTransfer(file.Item2);
+            manager.CompleteTransfer(file.Item1);
         });
 
         var snapshot = manager.CreateSnapshot();

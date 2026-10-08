@@ -10,9 +10,8 @@ public enum TransferItemState
     Failed
 }
 
-/// <summary>传输队列中的单个文件项。</summary>
+/// <summary>传输队列中的单个文件或目录项。</summary>
 public sealed record TransferQueueItem(
-    string FileName,
     string RelativePath,
     long SizeBytes,
     TransferItemState State,

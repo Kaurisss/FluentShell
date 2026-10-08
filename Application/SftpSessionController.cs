@@ -52,7 +52,6 @@ public sealed record SftpDirectoryListing(string Path, IReadOnlyList<RemoteFileI
 public sealed record SftpSessionSnapshot(
     SftpSessionState State,
     SftpDirectoryListing DirectoryListing,
-    bool IsBusy,
     bool CanNavigate,
     bool CanModifyRemoteFiles,
     bool CanTransfer,
@@ -71,11 +70,7 @@ public sealed record SftpSessionSnapshot(
 public sealed record SftpTransferProgress(
     long BytesTransferred,
     long TotalBytes,
-    double BytesPerSecond,
-    double? EstimatedSecondsRemaining)
-{
-    public double Percent => TotalBytes <= 0 ? 0 : Math.Min(100d, BytesTransferred * 100d / TotalBytes);
-}
+    double BytesPerSecond);
 
 /// <summary>下载落地的本地文件系统接缝：存在性检查、输出流、目录创建与残件清理。</summary>
 public sealed record DownloadDestination(
@@ -242,44 +237,6 @@ public sealed class SftpSessionController : IDisposable
         }
     }
 
-    /// <summary>构建上传队列：在批量上传开始前收集所有文件信息。</summary>
-    public async Task BuildUploadQueueAsync(IReadOnlyList<SftpUploadFile> files)
-    {
-        _queueManager.Clear();
-        var items = new List<(string FileName, string RelativePath, long SizeBytes)>();
-
-        foreach (var file in files)
-        {
-            try
-            {
-                using var stream = await file.OpenRead();
-                var size = stream.CanSeek ? stream.Length : 0;
-                items.Add((file.Name, file.Name, size));
-            }
-            catch
-            {
-                // 无法获取文件大小时使用 0，队列仍然显示该文件
-                items.Add((file.Name, file.Name, 0));
-            }
-        }
-
-        _queueManager.AddPendingItems(items);
-        SnapshotChanged?.Invoke(this, CreateSnapshot());
-    }
-
-    public Task UploadAsync(
-        string localFileName,
-        Func<Task<Stream>> openInput,
-        Func<string, Task<bool>> confirmOverwrite,
-        string? destinationDirectory = null) =>
-        RunTransferAsync("上传", async cancellationToken =>
-        {
-            if (!SftpPathValidator.TryValidateRemoteName(localFileName, out var error))
-                return OperationOutcome.Failure(error);
-            return await UploadFileAsync(localFileName, openInput, confirmOverwrite,
-                destinationDirectory ?? _directoryListing.Path, null, cancellationToken);
-        }, refreshDirectory: true);
-
     /// <summary>一批文件和目录在同一传输轴上统计、创建目录并上传；浏览不会改变目标。</summary>
     public Task UploadEntriesAsync(IReadOnlyList<SftpUploadEntry> entries,
         Func<string, Task<bool>> confirmOverwrite, string? destinationDirectory = null) =>
@@ -289,7 +246,7 @@ public sealed class SftpSessionController : IDisposable
             _queueManager.Clear();
             TransitionTransfer(SftpTransferState.Transferring, "正在统计待上传的文件和文件夹…");
             var plan = await SftpUploadPlanner.BuildAsync(entries, WaitForTransferAsync, cancellationToken);
-            _queueManager.AddPendingItems(plan.Select(item => (item.Name, item.RelativePath, item.SizeBytes)));
+            _queueManager.AddPendingItems(plan.Select(item => (item.RelativePath, item.SizeBytes)));
             SnapshotChanged?.Invoke(this, CreateSnapshot());
             var reporter = new TransferProgressReporter(this, plan.Sum(item => item.SizeBytes));
             var failedDirectories = new List<string>();
@@ -353,10 +310,8 @@ public sealed class SftpSessionController : IDisposable
 
     private async Task<OperationOutcome> UploadFileAsync(string relativePath, Func<Task<Stream>> openInput,
         Func<string, Task<bool>> confirmOverwrite, string destinationDirectory,
-        TransferProgressReporter? reporter, CancellationToken cancellationToken)
+        TransferProgressReporter reporter, CancellationToken cancellationToken)
     {
-        if (!_queueManager.CreateSnapshot().Items.Any(i => i.RelativePath == relativePath))
-            _queueManager.AddPendingItem(relativePath.Split('/').Last(), relativePath, 0);
         if (!SftpPathValidator.TryValidateUploadRelativePath(relativePath, out var error))
         {
             _queueManager.FailTransfer(relativePath, error);
@@ -378,7 +333,6 @@ public sealed class SftpSessionController : IDisposable
         await WaitForTransferAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         using var input = await openInput();
-        reporter ??= new TransferProgressReporter(this, input.CanSeek ? input.Length : 0);
         using var countingStream = new ByteCountingStream(input, bytesRead =>
         {
             reporter.OnCurrentFileBytes(bytesRead);
@@ -412,7 +366,7 @@ public sealed class SftpSessionController : IDisposable
 
             if (!item.IsDirectory)
             {
-                _queueManager.AddPendingItem(item.Name, item.Name, Math.Max(0, item.SizeBytes));
+                _queueManager.AddPendingItem(item.Name, Math.Max(0, item.SizeBytes));
                 if (destination.FileExists(localPath) && !await confirmOverwrite(item.Name))
                 {
                     _queueManager.SkipTransfer(item.Name);
@@ -590,7 +544,7 @@ public sealed class SftpSessionController : IDisposable
             plan.Add(plannedDownload);
 
             // 同步添加到队列管理器
-            _queueManager.AddPendingItem(entry.Name, entryRelativePath, Math.Max(0, entry.SizeBytes));
+            _queueManager.AddPendingItem(entryRelativePath, Math.Max(0, entry.SizeBytes));
         }
 
         return null;
@@ -756,7 +710,6 @@ public sealed class SftpSessionController : IDisposable
         new(
             _state,
             _directoryListing,
-            _state == SftpSessionState.ListingDirectory || _transfer.IsActive,
             CanNavigate(),
             CanModifyRemoteFiles(),
             CanStartTransfer() && _batchControl is null,
@@ -796,7 +749,6 @@ public sealed class SftpSessionController : IDisposable
     private sealed class TransferProgressReporter
     {
         private readonly SftpSessionController _owner;
-        private readonly DateTime _startTime;
         private readonly Queue<(DateTime Time, long Bytes)> _speedSamples;
         private const int SpeedWindowSeconds = 5;
         private long _totalBytes;
@@ -807,7 +759,6 @@ public sealed class SftpSessionController : IDisposable
         {
             _owner = owner;
             _totalBytes = totalBytes;
-            _startTime = DateTime.UtcNow;
             _speedSamples = new Queue<(DateTime, long)>();
         }
 
@@ -836,19 +787,16 @@ public sealed class SftpSessionController : IDisposable
             if (Interlocked.Exchange(ref _lastPercent, percent) == percent) return;
 
             var now = DateTime.UtcNow;
-            var (bytesPerSecond, estimatedSecondsRemaining) = CalculateSpeedAndTimeRemaining(
-                now, transferred, total);
+            var bytesPerSecond = CalculateSpeed(now, transferred);
 
             var progress = new SftpTransferProgress(
                 transferred,
                 total,
-                bytesPerSecond,
-                estimatedSecondsRemaining);
+                bytesPerSecond);
             _owner._dispatchProgress(() => _owner.PublishTransferProgress(progress));
         }
 
-        private (double BytesPerSecond, double? EstimatedSeconds) CalculateSpeedAndTimeRemaining(
-            DateTime now, long transferred, long total)
+        private double CalculateSpeed(DateTime now, long transferred)
         {
             // 添加当前样本到窗口
             _speedSamples.Enqueue((now, transferred));
@@ -864,26 +812,17 @@ public sealed class SftpSessionController : IDisposable
 
             // 需要至少 2 个样本才能计算速度
             if (_speedSamples.Count < 2)
-                return (0, null);
+                return 0;
 
             var earliest = _speedSamples.Peek();
             var elapsedSeconds = (now - earliest.Time).TotalSeconds;
 
             // 时间跨度太短（< 0.5 秒），样本不足以计算可靠速度
             if (elapsedSeconds < 0.5)
-                return (0, null);
+                return 0;
 
             var bytesDelta = transferred - earliest.Bytes;
-            var bytesPerSecond = bytesDelta / elapsedSeconds;
-
-            // 速度过低（< 1 B/s）视为停滞，不估算剩余时间
-            if (bytesPerSecond < 1)
-                return (bytesPerSecond, null);
-
-            var remaining = total - transferred;
-            var estimatedSeconds = remaining / bytesPerSecond;
-
-            return (bytesPerSecond, estimatedSeconds);
+            return bytesDelta / elapsedSeconds;
         }
     }
 }

@@ -35,7 +35,6 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         false,
         false,
         false,
-        false,
         string.Empty,
         null);
 
@@ -494,9 +493,4 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         DownloadButton.IsEnabled = _snapshot.CanTransfer && item is { Name: not ".." };
     }
 
-    private static Microsoft.UI.Xaml.Data.Binding CreateOneWayBinding(string propertyName) => new()
-    {
-        Path = new Microsoft.UI.Xaml.PropertyPath(propertyName),
-        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
-    };
 }
