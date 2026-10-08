@@ -4,6 +4,7 @@ using System.ComponentModel;
 namespace FluentShell.Core;
 
 public enum TransferTaskState { Running, Paused, Completed, Failed, Disconnected, Discarded }
+public enum TransferTaskKind { File, Folder, Batch }
 
 /// <summary>Window-scoped transfer history. Mutations and commands run on the shell dispatcher.</summary>
 public sealed class TransferCenter
@@ -17,7 +18,7 @@ public sealed class TransferCenter
     public int FailedCount => Groups.SelectMany(g => g).Count(t => t.State is TransferTaskState.Failed or TransferTaskState.Disconnected);
 
     public TransferTask Add(Guid connectionId, string connectionLabel, string direction, string title,
-        string target, Func<Task> retry, Func<bool> canRetry)
+        string target, Func<Task> retry, Func<bool> canRetry, TransferTaskKind kind = TransferTaskKind.File)
     {
         var group = Groups.FirstOrDefault(g => g.ConnectionId == connectionId);
         if (group is null)
@@ -25,7 +26,7 @@ public sealed class TransferCenter
             group = new(connectionId, connectionLabel);
             Groups.Add(group);
         }
-        var task = new TransferTask(direction, title, target, retry, canRetry);
+        var task = new TransferTask(direction, title, target, retry, canRetry, kind);
         task.PropertyChanged += TaskChanged;
         group.Add(task);
         NotifyChanged();
@@ -82,6 +83,8 @@ public sealed class TransferTask : INotifyPropertyChanged
     public string Direction { get; }
     public string Title { get; }
     public string Target { get; }
+    // The selected root's kind is stable while scanning, transferring and retrying.
+    public TransferTaskKind Kind { get; }
     public TransferTaskState State { get; private set; } = TransferTaskState.Running;
     public string Message { get; private set; } = "正在准备传输…";
     public TransferQueue Queue { get; private set; } = TransferQueue.Empty;
@@ -110,11 +113,12 @@ public sealed class TransferTask : INotifyPropertyChanged
             ? $"  ·  {FormatBytes((long)_progress.BytesPerSecond)}/s" : string.Empty);
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    internal TransferTask(string direction, string title, string target, Func<Task> retry, Func<bool> canRetry)
+    internal TransferTask(string direction, string title, string target, Func<Task> retry, Func<bool> canRetry, TransferTaskKind kind)
     {
         Direction = direction;
         Title = title;
         Target = target;
+        Kind = kind;
         _retry = retry;
         _canRetry = canRetry;
     }

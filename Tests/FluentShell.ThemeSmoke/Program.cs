@@ -28,6 +28,7 @@ internal static class Program
     internal static bool TextEditorOnly;
     internal static bool MultiSessionOnly;
     internal static bool TabOverflowOnly;
+    internal static bool TransferCenterOnly;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -37,6 +38,7 @@ internal static class Program
         TextEditorOnly = args.Contains("--text-editor-smoke");
         MultiSessionOnly = args.Contains("--multi-session-smoke");
         TabOverflowOnly = args.Contains("--tab-overflow-smoke");
+        TransferCenterOnly = args.Contains("--transfer-center-smoke");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -72,6 +74,11 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.TransferCenterOnly)
+            {
+                await VerifyTransferCenterAsync();
+                return;
+            }
             if (Program.TextEditorOnly)
             {
                 await VerifyTextEditorAsync();

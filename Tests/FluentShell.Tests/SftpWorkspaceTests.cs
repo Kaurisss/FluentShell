@@ -41,14 +41,18 @@ public sealed class SftpWorkspaceTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => calculation.WaitAsync(TimeSpan.FromSeconds(5)));
     }
     [TestMethod]
-    public async Task Pane_upload_uses_selected_files_without_opening_picker()
+    [DataRow(1)]
+    [DataRow(2)]
+    public async Task Pane_upload_uses_selected_files_without_opening_picker(int count)
     {
         var service = new FakeSftpFileService();
         var view = new RecordingSftpWorkspaceView();
-        using var workspace = new SftpWorkspace(service, view);
-        await workspace.UploadAsync([CreateUploadFile("one.txt"), CreateUploadFile("two.txt")]);
-        Assert.AreEqual(2, service.UploadCallCount);
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, view, transfers: center);
+        await workspace.UploadAsync(Enumerable.Range(0, count).Select(index => CreateUploadFile($"file{index}")).ToArray());
+        Assert.AreEqual(count, service.UploadCallCount);
         Assert.AreEqual(0, view.UploadPickerCalls);
+        Assert.AreEqual(count == 1 ? TransferTaskKind.File : TransferTaskKind.Batch, center.Groups[0][0].Kind);
     }
 
     [TestMethod]
@@ -67,6 +71,7 @@ public sealed class SftpWorkspaceTests
             Assert.HasCount(1, center.Groups[0]);
             Assert.AreEqual(TransferTaskState.Completed, center.Groups[0][0].State);
             Assert.AreEqual(1, center.Groups[0][0].Queue.CompletedCount);
+            Assert.AreEqual(TransferTaskKind.Folder, center.Groups[0][0].Kind);
         }
         finally { Directory.Delete(path); }
     }
@@ -98,6 +103,7 @@ public sealed class SftpWorkspaceTests
             await workspace.UploadAsync([new SftpUploadDirectory("资料", path)]);
             var task = center.Groups[0][0];
             Assert.IsTrue(task.CanRetry);
+            Assert.AreEqual(TransferTaskKind.Folder, task.Kind);
             service.UploadHandler = null;
             File.WriteAllText(Path.Combine(path, "新文件.txt"), "new");
 
@@ -107,6 +113,7 @@ public sealed class SftpWorkspaceTests
             Assert.AreEqual(TransferTaskState.Completed, task.State);
             Assert.AreEqual(3, task.Queue.CompletedCount);
             Assert.AreEqual(3, service.UploadCallCount);
+            Assert.AreEqual(TransferTaskKind.Folder, task.Kind);
         }
         finally { Directory.Delete(path, recursive: true); }
     }
@@ -147,6 +154,7 @@ public sealed class SftpWorkspaceTests
 
         Assert.AreEqual(0, view.DownloadPickerCalls);
         Assert.AreEqual(root, center.Groups[0][0].Target);
+        Assert.AreEqual(folder ? TransferTaskKind.Folder : TransferTaskKind.File, center.Groups[0][0].Kind);
         CollectionAssert.AreEqual(new[] { folder ? Path.Combine(root, "资料", "文件.txt") : Path.Combine(root, "资料") }, outputs);
     }
 
@@ -173,6 +181,7 @@ public sealed class SftpWorkspaceTests
 
         Assert.AreEqual(0, view.DownloadPickerCalls);
         Assert.AreEqual(root, task.Target);
+        Assert.AreEqual(TransferTaskKind.Batch, task.Kind);
         Assert.IsTrue(outputs.All(path => Path.GetDirectoryName(path) == root));
         Assert.AreEqual(TransferTaskState.Completed, task.State);
     }
@@ -309,6 +318,7 @@ public sealed class SftpWorkspaceTests
         Assert.HasCount(1, center.Groups);
         Assert.HasCount(1, center.Groups[0]);
         Assert.AreEqual(TransferTaskState.Completed, center.Groups[0][0].State);
+        Assert.AreEqual(TransferTaskKind.File, center.Groups[0][0].Kind);
     }
 
     [TestMethod]
@@ -328,6 +338,7 @@ public sealed class SftpWorkspaceTests
         await workspace.DownloadAsync([folder, new RemoteFileItem { Name = "独立.txt", FullPath = "/独立.txt" }], root);
         Assert.HasCount(1, center.Groups[0]);
         Assert.AreEqual(3, center.Groups[0][0].Queue.CompletedCount);
+        Assert.AreEqual(TransferTaskKind.Batch, center.Groups[0][0].Kind);
         Assert.AreEqual(0, view.DownloadPickerCalls);
         CollectionAssert.AreEqual(new[] { Path.Combine(root, "资料", "文件.txt"), Path.Combine(root, "独立.txt") }, outputs);
         CollectionAssert.AreEqual(new[] { Path.Combine(root, "资料") }, directories);
@@ -349,6 +360,7 @@ public sealed class SftpWorkspaceTests
         await workspace.DownloadAsync(selected);
         var task = center.Groups[0][0];
         Assert.IsTrue(task.CanRetry);
+        Assert.AreEqual(TransferTaskKind.Folder, task.Kind);
         selected.Clear();
         view.DownloadDirectory = Path.Combine(Path.GetTempPath(), "其他目标");
         await workspace.NavigateToAsync("/其他目录");
@@ -362,6 +374,7 @@ public sealed class SftpWorkspaceTests
         Assert.AreEqual(TransferTaskState.Completed, task.State);
         Assert.AreEqual(3, task.Queue.CompletedCount);
         Assert.AreEqual(1, view.DownloadPickerCalls);
+        Assert.AreEqual(TransferTaskKind.Folder, task.Kind);
         Assert.IsTrue(destinations.All(path => Path.GetDirectoryName(path) == Path.Combine(Path.GetTempPath(), "资料")));
     }
 

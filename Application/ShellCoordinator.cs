@@ -343,6 +343,7 @@ public sealed class ShellCoordinator
     {
         if (!_sessions.Contains(session)) return false;
         if (session.IsTransferActive && !await confirmClose(session)) return false;
+        if (session is IShellSessionCloseGuard guard && !guard.TryPrepareClose()) return false;
 
         var wasSelected = ReferenceEquals(_sessions.Selected, session);
         var nextSession = _sessions.Remove(session);

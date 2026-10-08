@@ -301,6 +301,23 @@ public sealed class ShellCoordinatorTests
     }
 
     [TestMethod]
+    public async Task Unsaved_document_guard_preserves_session_until_ready_to_close()
+    {
+        var coordinator = CreateCoordinator((profile, _, _) => FakeShellSession.Connectable(profile));
+        await coordinator.ConnectAsync(new ServerProfile { Host = "offline.invalid", Username = "fixture" });
+        var session = (FakeShellSession)coordinator.SelectedSession!;
+        session.CanClose = false;
+        Assert.IsFalse(await coordinator.CloseSessionAsync(session, _ => Task.FromResult(true)));
+        Assert.AreSame(session, coordinator.SelectedSession);
+        Assert.AreEqual(1, coordinator.SessionCount);
+        Assert.IsFalse(session.IsDisposed);
+        session.CanClose = true;
+        Assert.IsTrue(await coordinator.CloseSessionAsync(session, _ => Task.FromResult(true)));
+        Assert.IsTrue(session.IsDisposed);
+        Assert.AreEqual(0, coordinator.SessionCount);
+    }
+
+    [TestMethod]
     public async Task Reconnecting_one_of_same_server_sessions_preserves_the_other()
     {
         var sessions = new List<FakeShellSession>();

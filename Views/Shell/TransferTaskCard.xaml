@@ -1,0 +1,205 @@
+<UserControl
+    x:Class="FluentShell.Views.Shell.TransferTaskCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:FluentShell.Views.Converters">
+    <UserControl.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BoolVisibility" />
+        <converters:StringToVisibilityConverter x:Key="TextVisibility" />
+    </UserControl.Resources>
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="TransferStates">
+                <VisualState x:Name="Running" />
+                <VisualState x:Name="Paused">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                        <Setter Target="StateText.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Completed">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Background" Value="{ThemeResource SystemFillColorSuccessBackgroundBrush}" />
+                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                        <Setter Target="StateText.Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Failed">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="StateText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Disconnected">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="StateText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Discarded" />
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="LayoutStates">
+                <VisualState x:Name="Wide" />
+                <VisualState x:Name="Compact">
+                    <VisualState.Setters>
+                        <Setter Target="StatusBadge.(Grid.Row)" Value="1" />
+                        <Setter Target="StatusBadge.(Grid.Column)" Value="1" />
+                        <Setter Target="StatusBadge.Margin" Value="0,8,0,0" />
+                        <Setter Target="StatusBadge.HorizontalAlignment" Value="Left" />
+                        <Setter Target="TaskActions.(Grid.Row)" Value="1" />
+                        <Setter Target="TaskActions.(Grid.Column)" Value="0" />
+                        <Setter Target="TaskActions.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="TaskActions.Margin" Value="0,12,0,0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Border x:Name="CardSurface" Padding="16" Background="{ThemeResource PanelSurfaceBrush}"
+                BorderBrush="{ThemeResource SubtleStrokeBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}">
+            <StackPanel Spacing="16">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid x:Name="TaskIconHost" Width="44" Height="44" VerticalAlignment="Top">
+                        <SymbolIcon x:Name="TaskIcon" Symbol="{x:Bind ItemSymbol(Task.Kind), Mode=OneWay}"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind Task.Title, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Task.Title, Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind TargetLabel(Task.Direction, Task.Target), Mode=OneWay}" FontSize="13"
+                                   Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis"
+                                   ToolTipService.ToolTip="{x:Bind Task.Target, Mode=OneWay}" />
+                    </StackPanel>
+                    <Border x:Name="StatusBadge" Grid.Column="2" Padding="10,5" VerticalAlignment="Top"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="{ThemeResource ControlCornerRadius}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Viewbox Width="14" Height="14">
+                                <SymbolIcon x:Name="StateIcon" Symbol="{x:Bind StatusSymbol(Task.State), Mode=OneWay}"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            AutomationProperties.AccessibilityView="Raw" />
+                            </Viewbox>
+                            <TextBlock x:Name="StateText" Text="{x:Bind Task.StateLabel, Mode=OneWay}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <ProgressBar x:Name="TaskProgress" Minimum="0" Maximum="100" Value="{x:Bind Task.Percent, Mode=OneWay}"
+                             IsIndeterminate="{x:Bind Task.IsIndeterminate, Mode=OneWay}" AutomationProperties.Name="传输进度" />
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind ProgressText(Task.TotalBytes, Task.ProgressLabel, Task.Message, Task.IsActive), Mode=OneWay}"
+                                   FontSize="13" Foreground="{ThemeResource MutedTextBrush}" TextWrapping="Wrap" MaxLines="2"
+                                   TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Task.Message, Mode=OneWay}" />
+                        <Grid ColumnSpacing="8" Visibility="{x:Bind CurrentPathVisibility(Task.Queue), Mode=OneWay}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Width="16" Height="16">
+                                <SymbolIcon Symbol="Folder" Foreground="{ThemeResource MutedTextBrush}"
+                                            AutomationProperties.AccessibilityView="Raw" />
+                            </Viewbox>
+                            <TextBlock Grid.Column="1" Text="{x:Bind CurrentPath(Task.Queue), Mode=OneWay}" FontSize="12"
+                                       Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis"
+                                       ToolTipService.ToolTip="{x:Bind CurrentPath(Task.Queue), Mode=OneWay}" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel x:Name="TaskActions" Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                        <Button x:Name="PauseButton" MinHeight="32" Padding="10,4" FontSize="13" Style="{StaticResource AppAccentButtonStyle}"
+                                Click="Pause_Click" Visibility="{x:Bind Task.CanPause, Mode=OneWay, Converter={StaticResource BoolVisibility}}"
+                                AutomationProperties.Name="{x:Bind Task.PauseLabel, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                    <SymbolIcon Symbol="{x:Bind PauseSymbol(Task.State), Mode=OneWay}"
+                                                AutomationProperties.AccessibilityView="Raw" />
+                                </Viewbox>
+                                <TextBlock Text="{x:Bind Task.PauseLabel, Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="RetryButton" MinHeight="32" Padding="10,4" FontSize="13" Style="{StaticResource AppAccentButtonStyle}"
+                                Click="Retry_Click" IsEnabled="{x:Bind Task.CanRetry, Mode=OneWay}" AutomationProperties.Name="重试"
+                                Visibility="{x:Bind Task.CanRetry, Mode=OneWay, Converter={StaticResource BoolVisibility}}"
+                                ToolTipService.ToolTip="重新执行本批任务；已有文件会再次确认覆盖">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                    <SymbolIcon Symbol="Refresh" AutomationProperties.AccessibilityView="Raw" />
+                                </Viewbox>
+                                <TextBlock Text="重试" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="DiscardButton" MinHeight="32" Padding="10,4" FontSize="13" Click="Discard_Click" AutomationProperties.Name="丢弃"
+                                ToolTipService.ToolTip="停止并移除任务，保留已传输的部分文件">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                    <SymbolIcon Symbol="Delete" AutomationProperties.AccessibilityView="Raw" />
+                                </Viewbox>
+                                <TextBlock Text="丢弃" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="{x:Bind Task.Message, Mode=OneWay}" FontSize="12" TextWrapping="Wrap" MaxLines="3"
+                           TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Task.Message, Mode=OneWay}"
+                           Visibility="{x:Bind OutcomeVisibility(Task.IsActive), Mode=OneWay}" />
+                <Expander x:Name="FileDetails" Header="{x:Bind Task.FileSummary, Mode=OneWay}" HorizontalAlignment="Stretch" Padding="0"
+                          HorizontalContentAlignment="Stretch" Visibility="{x:Bind Task.HasFiles, Mode=OneWay, Converter={StaticResource BoolVisibility}}">
+                    <Expander.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </Expander.HeaderTemplate>
+                    <ListView ItemsSource="{x:Bind Task.Files, Mode=OneWay}" MaxHeight="180" Padding="12,4" SelectionMode="None"
+                              HorizontalContentAlignment="Stretch" AutomationProperties.Name="传输文件明细"
+                              ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="MinHeight" Value="36" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Padding="0,8">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding RelativePath}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{Binding RelativePath}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding StatusLabel}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding ErrorMessage}" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap"
+                                               Visibility="{Binding ErrorMessage, Converter={StaticResource TextVisibility}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Expander>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -14,7 +14,7 @@ namespace FluentShell.Views;
 /// 一个会话标签页的可视外壳：终端与 SFTP 面板的布局、底边拖拽与折叠。
 /// 连接本身归 <see cref="SessionConnection"/>；本控件只负责把它的事件编组回 UI 线程。
 /// </summary>
-public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposable
+public sealed class SessionWorkspace : UserControl, IShellSession, IShellSessionCloseGuard, IAsyncDisposable
 {
     /// <summary>覆盖在 xterm 底部内边距上的透明拖拽区域高度。</summary>
     private const double TerminalBottomDragHeight = 10;
@@ -93,6 +93,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public SessionConnectionState ConnectionState => _connection.State;
     public bool IsTransferActive => _sftpWorkspace.IsTransferActive;
     public bool TryCloseTextEditor() => _sftpView.TryCloseTextEditor();
+    public bool TryPrepareClose() => TryCloseTextEditor();
     public bool IsTextEditorOpen => _sftpView.IsTextEditorOpen;
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated;

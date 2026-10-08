@@ -7,21 +7,58 @@ using FluentShell.Views.Session;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using WinUIEditor;
 
 namespace FluentShell.ThemeSmoke;
 
 internal sealed partial class SmokeApp
 {
+    private static T EditorElement<T>(TextFileEditorWindow window, string name) => (T)((Grid)window.Content).FindName(name);
+    private static void EditorCommand(TextFileEditorWindow window, string name) =>
+        typeof(TextFileEditorWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null);
+    private static void ReplaceDocument(CodeEditorControl control, string text)
+    {
+        control.Editor.SetSel(0, control.Editor.Length);
+        control.Editor.ReplaceSel(text);
+    }
+    private static void DiscardEditor(TextFileEditorWindow editor) =>
+        typeof(TextFileEditorWindow).GetMethod("Discard_Click", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(editor, new object[] { editor, new RoutedEventArgs() });
+
+    private static async Task EditorUiAsync(TextFileEditorWindow window, string command, params string[] arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("winapp")
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        start.ArgumentList.Add("ui");
+        start.ArgumentList.Add(command);
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        start.ArgumentList.Add("--window");
+        start.ArgumentList.Add(WinRT.Interop.WindowNative.GetWindowHandle(window).ToString());
+        start.ArgumentList.Add("--json");
+        using var process = System.Diagnostics.Process.Start(start)!;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var error = process.StandardError.ReadToEndAsync(timeout.Token);
+        await process.WaitForExitAsync(timeout.Token);
+        var result = await output;
+        var diagnostic = await error;
+        if (process.ExitCode != 0) throw new InvalidOperationException($"winapp ui {command}: {result} {diagnostic}");
+    }
+
     private async Task VerifyTextEditorAsync()
     {
-        _window = new Window { Title = "FluentShell offline text editor regression" };
+        _window = new Window { Title = "FluentShell offline WinUIEdit regression" };
         _window.AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 900));
         var root = new Grid { RequestedTheme = ElementTheme.Light };
-        var view = new SftpWorkspaceView(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+        var handle = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+        var view = new SftpWorkspaceView(handle);
         root.Children.Add(view);
         _window.Content = root;
         _window.Activate();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+        var nativeUi = Environment.GetCommandLineArgs().Contains("--native-editor-ui");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(nativeUi ? 120 : 55));
         async Task WaitFor(Func<bool> condition)
         {
             while (!condition()) await Task.Delay(20, timeout.Token);
@@ -31,8 +68,7 @@ internal sealed partial class SmokeApp
             Program.Results.Add(new { control = description, passed });
             if (!passed) throw new InvalidOperationException(description);
         }
-        TextFileEditorDialog Dialog() => VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
-            .SelectMany(p => new[] { p.Child }.Concat(Descendants(p.Child))).OfType<TextFileEditorDialog>().Single();
+        List<TextFileEditorWindow> Editors() => Field<List<TextFileEditorWindow>>(view, "_textEditors");
         await WaitFor(() => view.XamlRoot is not null);
         var path = Path.GetTempFileName();
         try
@@ -40,107 +76,196 @@ internal sealed partial class SmokeApp
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 root.RequestedTheme = theme;
-                await File.WriteAllBytesAsync(path, Encoding.UTF8.GetBytes("中文配置\r\nkey=value\r\n"));
+                const string original = "{\r\n  \"标题\": \"中文配置😀\",\r\n  \"key\": \"value\",\r\n  \"enabled\": true\r\n}\r\n";
+                await File.WriteAllBytesAsync(path, Encoding.UTF8.GetBytes(original));
                 var table = (Syncfusion.UI.Xaml.DataGrid.SfDataGrid)view.FindName("LocalFiles");
                 await WaitFor(() => table.IsEnabled && Field<string?>(view, "_localPath") is not null);
-                var localItems = Field<System.Collections.ObjectModel.ObservableCollection<SftpWorkspaceView.LocalPaneItem>>(view, "_localFiles");
-                var localItem = new SftpWorkspaceView.LocalPaneItem("config.txt", path, false, 32, DateTime.Now);
-                localItems.Add(localItem);
-                table.SelectedItem = localItem;
-                var showing = (Task)typeof(SftpWorkspaceView).GetMethod("OpenLocalItemAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, null)!;
-                await Task.Delay(150, timeout.Token);
-                var dialog = Dialog();
-                var text = (TextBox)dialog.FindName("EditorText");
-                await WaitFor(() => !((ProgressRing)dialog.FindName("LoadingRing")).IsActive);
-                Check(dialog.ActualTheme == theme && dialog.ActualWidth > 600 && text.ActualHeight > 200 && text.IsReadOnly,
-                    theme + ": responsive editor opens in read-only mode");
-                Check(TextFileDocument.NormalizeNewLines(text.Text) == "中文配置\nkey=value\n", "Local entry point loads real temporary text file");
-                Check(text.Focus(FocusState.Programmatic), "Editor accepts keyboard focus");
-                ((CheckBox)dialog.FindName("ReadOnlyBox")).IsChecked = false;
-                Check(!text.IsReadOnly, "Read-only toggle enables editing");
-                ((CheckBox)dialog.FindName("WrapBox")).IsChecked = true;
-                Check(text.TextWrapping == TextWrapping.Wrap, "Automatic wrapping enables native text wrapping");
-                ((TextBox)dialog.FindName("FindBox")).Text = "value";
-                typeof(TextFileEditorDialog).GetMethod("FindNext", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(dialog, null);
-                Check(text.SelectedText == "value", "Find command selects a matching range");
-                text.Text = "中文配置\rkey=edited\r";
-                await WaitFor(() => dialog.IsPrimaryButtonEnabled);
-                Check(dialog.IsPrimaryButtonEnabled && !view.TryCloseTextEditor() && !showing.IsCompleted,
-                    "Dirty editor blocks window close and keeps content");
-                Check(((Button)dialog.FindName("DiscardButton")).Visibility == Visibility.Visible, "Dirty close offers explicit discard");
-                Check(await dialog.SaveAsync(), "Save succeeds through the production local service");
-                Check(!dialog.IsPrimaryButtonEnabled, "Successful save clears the dirty state");
-                Check(Encoding.UTF8.GetString(await File.ReadAllBytesAsync(path)) == "中文配置\r\nkey=edited\r\n", "Saved file retains CRLF");
-                dialog.UpdateLayout();
-                var status = (TextBlock)dialog.FindName("FileStatus");
-                var statusBottom = status.TransformToVisual(dialog).TransformPoint(new Windows.Foundation.Point(0, status.ActualHeight)).Y;
-                Check(status.ActualHeight >= 12 && statusBottom <= dialog.ActualHeight - 74,
-                    "Encoding and newline status fits above the dialog footer");
-                await CaptureAsync(dialog, Program.ReportPath + "." + theme + ".png");
-                text.Text = "unsaved draft";
-                await File.WriteAllTextAsync(path, "external content");
-                Check(!await dialog.SaveAsync() && dialog.IsPrimaryButtonEnabled && text.Text == "unsaved draft", "Conflicting save retains the draft");
-                Check(await File.ReadAllTextAsync(path) == "external content", "Conflicting save leaves external content intact");
-                dialog.Hide();
+                var items = Field<System.Collections.ObjectModel.ObservableCollection<SftpWorkspaceView.LocalPaneItem>>(view, "_localFiles");
+                var item = new SftpWorkspaceView.LocalPaneItem("config.json", path, false, 100, DateTime.Now);
+                items.Add(item);
+                table.SelectedItem = item;
+                Task OpenLocal() => (Task)typeof(SftpWorkspaceView).GetMethod("OpenLocalItemAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, null)!;
+                var showing = OpenLocal();
+                await WaitFor(() => Editors().Count == 1);
+                var editor = Editors().Single();
+                var text = EditorElement<CodeEditorControl>(editor, "CodeEditor");
+                await WaitFor(() => !EditorElement<ProgressRing>(editor, "LoadingRing").IsActive);
+                var surface = (Grid)editor.Content;
+                var current = (string)typeof(TextFileEditorWindow).GetMethod("GetDocumentText", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null)!;
+                Check(current == TextFileDocument.NormalizeNewLines(original), "UTF-8 Chinese and emoji round trip without a trailing NUL");
+                Check(surface.ActualTheme == theme && text.ActualWidth > 600 && text.ActualHeight > 200 && text.Editor.ReadOnly,
+                    theme + ": native editor opens read-only and fills a responsive window");
+                Check(editor.SystemBackdrop is MicaBackdrop && ((SolidColorBrush)surface.Background).Color.A == 0 &&
+                    ((SolidColorBrush)text.Background).Color.A == 0, "Mica window and transparent native editor surface");
+                Check(text.HighlightingLanguage == "json" && text.Editor.GetMarginWidthN(0) > 0, "JSON syntax highlighting and native line numbers enabled");
+                Check(surface.KeyboardAcceleratorPlacementMode == Microsoft.UI.Xaml.Input.KeyboardAcceleratorPlacementMode.Hidden &&
+                    surface.KeyboardAccelerators.Count == 4, "Root accelerator tooltip is hidden without disabling shortcuts");
+                var settings = EditorElement<Button>(editor, "SettingsButton");
+                Check(ReferenceEquals(settings.Parent, EditorElement<StackPanel>(editor, "EditorToolbar")) && settings.Flyout is Flyout,
+                    "Editor settings button belongs to the command StackPanel");
+                settings.Flyout.ShowAt(settings);
+                await Task.Delay(100, timeout.Token);
+                if (nativeUi) await EditorUiAsync(editor, "screenshot", "--output", Program.ReportPath + ".settings." + theme + ".png", "--capture-screen");
+                var readonlyBox = EditorElement<CheckBox>(editor, "ReadOnlyBox");
+                var wrapBox = EditorElement<CheckBox>(editor, "WrapBox");
+                Check(Descendants(((Flyout)settings.Flyout).Content).Contains(readonlyBox) &&
+                    Descendants(((Flyout)settings.Flyout).Content).Contains(wrapBox), "Read-only and wrap options are inside the settings flyout");
+                var whitespace = EditorElement<CheckBox>(editor, "WhitespaceBox");
+                whitespace.IsChecked = true;
+                Check(text.Editor.ViewWS == WhiteSpace.VisibleAlways, "Settings reveal whitespace in the native editor");
+                whitespace.IsChecked = false;
+                var indent = EditorElement<ComboBox>(editor, "IndentWidthBox");
+                var tabs = EditorElement<CheckBox>(editor, "UseTabsBox");
+                indent.SelectedIndex = 0;
+                tabs.IsChecked = true;
+                Check(text.Editor.Indent == 2 && text.Editor.TabWidth == 2 && text.Editor.UseTabs, "Settings apply Tab indentation and width");
+                indent.SelectedIndex = 1;
+                tabs.IsChecked = false;
+                Check(text.Editor.Indent == 4 && !text.Editor.UseTabs && !text.Editor.Modify, "Display and indentation settings preserve document content");
+                var lineNumbers = EditorElement<CheckBox>(editor, "LineNumbersBox");
+                lineNumbers.IsChecked = false;
+                text.Editor.Zoom = 2;
+                await WaitFor(() => text.Editor.GetMarginWidthN(0) == 0);
+                Check(true, "Hidden line numbers remain hidden after zoom changes");
+                lineNumbers.IsChecked = true;
+                Check(text.Editor.GetMarginWidthN(0) > 0, "Line numbers can be restored");
+                text.Editor.Zoom = 0;
+                settings.Flyout.Hide();
+                Check(text.Focus(FocusState.Programmatic), "Native editor accepts keyboard focus");
+                if (nativeUi)
+                {
+                    await EditorUiAsync(editor, "hover", "TextEditorTitle", "--dwell-time", "1200");
+                    Check(!VisualTreeHelper.GetOpenPopupsForXamlRoot(surface.XamlRoot).SelectMany(p => new[] { p.Child }.Concat(Descendants(p.Child)))
+                        .OfType<ToolTip>().Any(t => t.IsOpen), "Native title-bar hover does not open an accelerator tooltip");
+                }
+                await OpenLocal();
+                Check(Editors().Count == 1, "Opening the same file activates the existing editor");
+                root.RequestedTheme = theme == ElementTheme.Light ? ElementTheme.Dark : ElementTheme.Light;
+                await WaitFor(() => surface.ActualTheme == root.ActualTheme && text.ActualTheme == root.ActualTheme);
+                Check(true, "Open editor follows the owner theme change");
+                root.RequestedTheme = theme;
+                await WaitFor(() => text.ActualTheme == theme);
+                EditorElement<CheckBox>(editor, "ReadOnlyBox").IsChecked = false;
+                Check(!text.Editor.ReadOnly, "Read-only toggle enables native editing");
+                EditorElement<CheckBox>(editor, "WrapBox").IsChecked = true;
+                Check(text.Editor.WrapMode == Wrap.Word, "Native word wrapping enabled");
+                if (nativeUi)
+                {
+                    await EditorUiAsync(editor, "send-keys", "ctrl+f", "--via", "send-input", "--target", "TextEditorContent");
+                    await WaitFor(() => EditorElement<Grid>(editor, "FindPanel").Visibility == Visibility.Visible);
+                    Check(true, "Ctrl+F opens find while the native editor has focus");
+                }
+                else EditorCommand(editor, "ShowFind");
+                var find = EditorElement<TextBox>(editor, "FindBox");
+                find.Text = "中文配置😀";
+                text.Editor.SetSel(0, 0);
+                EditorCommand(editor, "FindNext");
+                Check(text.Editor.GetSelText().TrimEnd('\0') == find.Text && text.Editor.SelectionEnd - text.Editor.SelectionStart == Encoding.UTF8.GetByteCount(find.Text),
+                    "Find selects Chinese and emoji using UTF-8 byte positions");
+                text.Editor.SetSel(text.Editor.Length, text.Editor.Length);
+                EditorCommand(editor, "FindNext");
+                Check(text.Editor.GetSelText().TrimEnd('\0') == find.Text, "Find wraps at the end of the document");
+                EditorCommand(editor, "HideFind");
+                lineNumbers.IsChecked = false;
+                ReplaceDocument(text, TextFileDocument.NormalizeNewLines(original).Replace("value", "edited"));
+                await WaitFor(() => EditorElement<Button>(editor, "SaveButton").IsEnabled);
+                await WaitFor(() => text.Editor.GetMarginWidthN(0) == 0);
+                Check(true, "Hidden line numbers remain hidden after document edits");
+                lineNumbers.IsChecked = true;
+                text.Editor.Undo();
+                await WaitFor(() => !EditorElement<Button>(editor, "SaveButton").IsEnabled);
+                Check(!text.Editor.Modify, "Undo restores the loaded save point");
+                text.Editor.Redo();
+                await WaitFor(() => EditorElement<Button>(editor, "SaveButton").IsEnabled);
+                Check(!view.TryCloseTextEditor() && !showing.IsCompleted, "Workspace close preserves the unsaved draft");
+                SendMessage(WinRT.Interop.WindowNative.GetWindowHandle(editor), 0x0010u, IntPtr.Zero, IntPtr.Zero);
                 await Task.Delay(80, timeout.Token);
-                Check(!showing.IsCompleted, "Escape or dialog dismissal cannot discard unsaved text");
-                typeof(TextFileEditorDialog).GetMethod("Discard_Click", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(dialog, new object[] { dialog, new RoutedEventArgs() });
+                Check(!editor.Completion.IsCompleted && EditorElement<Button>(editor, "DiscardButton").Visibility == Visibility.Visible,
+                    "Native window close preserves dirty text and offers explicit discard");
+                if (nativeUi)
+                {
+                    await EditorUiAsync(editor, "send-keys", "ctrl+s", "--via", "send-input", "--target", "TextEditorContent");
+                    await WaitFor(() => editor.WasSaved && !EditorElement<ProgressRing>(editor, "LoadingRing").IsActive);
+                    Check(true, "Ctrl+S saves while the native editor has focus");
+                }
+                else Check(await editor.SaveAsync(), "Production local service saves native editor content");
+                Check(!EditorElement<Button>(editor, "SaveButton").IsEnabled, "Save resets the native save point");
+                Check(await File.ReadAllTextAsync(path) == original.Replace("value", "edited"), "Save retains CRLF without appending a NUL");
+                text.Editor.SetSel(0, 0);
+                surface.UpdateLayout();
+                await Task.Delay(120, timeout.Token);
+                if (nativeUi) await EditorUiAsync(editor, "screenshot", "--output", Program.ReportPath + "." + theme + ".png", "--capture-screen");
+                else await CaptureAsync(surface, Program.ReportPath + "." + theme + ".png");
+                Check(EditorElement<TextBlock>(editor, "FileStatus").ActualHeight >= 12, "Encoding and newline status remains visible");
+                ReplaceDocument(text, "unsaved draft");
+                await File.WriteAllTextAsync(path, "external content");
+                Check(!await editor.SaveAsync() && text.Editor.Modify, "Conflicting save retains the draft");
+                Check(await File.ReadAllTextAsync(path) == "external content", "Conflicting save preserves external content");
+                DiscardEditor(editor);
                 await showing.WaitAsync(timeout.Token);
             }
-            await VerifyRemoteTextEditorAsync(root, view, timeout.Token, Check, WaitFor, Dialog);
+            await VerifyRemoteTextEditorAsync(root, view, handle, timeout.Token, Check, WaitFor, Editors);
         }
         finally { File.Delete(path); }
         _window.Close();
         Program.Finish();
     }
 
-    private async Task VerifyRemoteTextEditorAsync(Grid root, SftpWorkspaceView view, CancellationToken token,
-        Action<bool, string> check, Func<Func<bool>, Task> waitFor, Func<TextFileEditorDialog> getDialog)
+    private async Task VerifyRemoteTextEditorAsync(Grid root, SftpWorkspaceView view, IntPtr handle, CancellationToken token,
+        Action<bool, string> check, Func<Func<bool>, Task> waitFor, Func<List<TextFileEditorWindow>> editors)
     {
         var remote = new SyntheticTextService();
         view.SetTextFileService(remote);
         var item = new RemoteFileItem { Name = "remote.txt", FullPath = "/untrusted/remote.txt", SizeBytes = 8 };
         view.Render(new(SftpSessionState.Idle, new("/", [item]), true, true, true, "", null));
-        var remoteTable = (Syncfusion.UI.Xaml.DataGrid.SfDataGrid)view.FindName("RemoteTable");
-        remoteTable.SelectedItem = item;
+        var table = (Syncfusion.UI.Xaml.DataGrid.SfDataGrid)view.FindName("RemoteTable");
+        table.SelectedItem = item;
         typeof(SftpWorkspaceView).GetMethod("OpenSelectedRemoteText", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, null);
-        await Task.Delay(150, token);
-        var editor = getDialog();
-        await waitFor(() => !((ProgressRing)editor.FindName("LoadingRing")).IsActive);
-        check(remote.ReadPath == "/remote.txt", "Remote entry point captures selected path");
-        ((CheckBox)editor.FindName("ReadOnlyBox")).IsChecked = false;
-        ((TextBox)editor.FindName("EditorText")).Text = "saved remotely";
+        await waitFor(() => editors().Count == 1);
+        var editor = editors().Single();
+        await waitFor(() => !EditorElement<ProgressRing>(editor, "LoadingRing").IsActive);
+        check(remote.ReadPath == "/remote.txt", "Remote entry point derives path from validated name and current directory");
+        EditorElement<CheckBox>(editor, "ReadOnlyBox").IsChecked = false;
+        var text = EditorElement<CodeEditorControl>(editor, "CodeEditor");
+        ReplaceDocument(text, "saved remotely");
+        await waitFor(() => EditorElement<Button>(editor, "SaveButton").IsEnabled);
         remote.SaveCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var saving = editor.SaveAsync();
         await waitFor(() => remote.SavePath is not null);
-        check(!editor.TryClose() && ((TextBox)editor.FindName("EditorText")).IsReadOnly,
-            "Saving blocks dismissal and further edits until completion");
+        check(!editor.TryClose() && text.Editor.ReadOnly, "Saving blocks native close and edits until completion");
+        var second = new RemoteFileItem { Name = "second.yaml", FullPath = "/second.yaml", SizeBytes = 8 };
+        view.Render(new(SftpSessionState.Idle, new("/", [item, second]), true, true, true, "", null));
+        table.SelectedItem = second;
+        typeof(SftpWorkspaceView).GetMethod("OpenSelectedRemoteText", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(view, null);
+        await waitFor(() => editors().Count == 2);
+        var other = editors().Single(e => !ReferenceEquals(e, editor));
+        check(true, "Different files open in independent native windows");
+        check(other.TryClose(), "Independent clean editor closes");
         remote.SaveCompletion.SetResult();
         check(await saving && remote.SavePath == "/remote.txt" && Encoding.UTF8.GetString(remote.Content) == "saved remotely",
-            "Remote save uses selected path and completes before closing");
+            "Remote save uses captured path and completes before closing");
         check(editor.TryClose(), "Clean remote editor closes");
-        await Task.Delay(150, token);
+        await waitFor(() => editors().Count == 0);
 
         var delayed = new SyntheticTextService { ReadCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously) };
-        var lateEditor = new TextFileEditorDialog(delayed, "/late.txt", "late.txt", true, root.XamlRoot, root.ActualTheme);
-        var lateShowing = lateEditor.ShowAsync().AsTask();
+        var lateEditor = new TextFileEditorWindow(delayed, "/late.txt", "late.txt", true, root.XamlRoot, handle);
+        lateEditor.Activate();
         await waitFor(() => delayed.ReadPath is not null);
         check(lateEditor.TryClose(), "Loading editor can be cancelled");
-        await lateShowing.WaitAsync(token);
+        await lateEditor.Completion.WaitAsync(token);
         check(delayed.ReadToken.IsCancellationRequested, "Closing loading editor cancels the read");
         delayed.ReadCompletion.SetResult();
         await Task.Delay(100, token);
-        check(((TextBox)lateEditor.FindName("EditorText")).Text == string.Empty, "Late read does not mutate a closed editor");
+        check(Field<TextFileDocument?>(lateEditor, "_document") is null, "Late read does not mutate a closed editor");
 
         var binary = new SyntheticTextService { Content = [0, 1, 2] };
-        var failedEditor = new TextFileEditorDialog(binary, "/binary", "binary", true, root.XamlRoot, root.ActualTheme);
-        var failedShowing = failedEditor.ShowAsync().AsTask();
-        await waitFor(() => ((InfoBar)failedEditor.FindName("Notice")).IsOpen);
-        check(!failedEditor.IsPrimaryButtonEnabled && ((InfoBar)failedEditor.FindName("Notice")).Severity == InfoBarSeverity.Error,
-            "Binary file failure is visible and cannot be saved");
+        var failedEditor = new TextFileEditorWindow(binary, "/binary", "binary", true, root.XamlRoot, handle);
+        failedEditor.Activate();
+        await waitFor(() => EditorElement<InfoBar>(failedEditor, "Notice").IsOpen);
+        check(!EditorElement<Button>(failedEditor, "SaveButton").IsEnabled && EditorElement<InfoBar>(failedEditor, "Notice").Severity == InfoBarSeverity.Error,
+            "Binary read failure is visible and cannot be saved");
         failedEditor.TryClose();
-        await failedShowing.WaitAsync(token);
+        await failedEditor.Completion.WaitAsync(token);
     }
 
     private sealed class SyntheticTextService : ITextFileService

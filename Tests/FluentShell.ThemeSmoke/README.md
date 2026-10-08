@@ -9,11 +9,29 @@ dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
 
 The temporary window exits automatically. Exit code 0 and `passed: true` in the JSON report indicate success. A failed assertion or startup exception produces exit code 1 and its details in the report. A missing report is not a passing run.
 
+For the transfer center only, pass `--transfer-center-smoke`. It checks the real
+task cards in light/dark themes at 520 and 280 DIPs, the existing corner radii,
+live filter counts, progress and file-detail updates, keyboard focus retention,
+pause/resume, retry, discard, discovery with unknown totals, and native flyout
+reload. It saves layout screenshots next to the JSON report. All tasks are
+synthetic; it never loads saved profiles or connects to a server:
+
+```powershell
+Start-Process -FilePath Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe -ArgumentList '.tmp/transfer-center-smoke.json', '--transfer-center-smoke' -WindowStyle Hidden -Wait
+```
+
 For the in-app text editor, pass the --text-editor-smoke option after the report path.
-It exercises local and remote entry points, light/dark layout, read-only mode,
-search, wrapping, CRLF preservation, save conflicts, unsaved-close protection,
-loading cancellation and late results. Local saves use a temporary file; remote
+It exercises native WinUIEdit windows, local and remote entry points, light/dark
+layout, the settings flyout (read-only, wrapping, line numbers, whitespace and
+indentation), UTF-8 Chinese/emoji search, undo/redo, CRLF preservation, save
+conflicts, native unsaved-close protection, loading cancellation and late results.
+Local saves use a temporary file; remote
 saves use an in-memory service. It never loads saved profiles or connects to a server.
+
+With WinApp CLI available, add `--native-editor-ui` to verify title-bar hover and
+Ctrl+F/Ctrl+S with actual input. This also captures light/dark window and settings
+screenshots from the desktop, including Mica, which RenderTargetBitmap omits.
+These commands target only the offline editor's own window handles.
 
 For same-server tabs, pass `--multi-session-smoke`. This opens two real workspaces
 for one synthetic profile, exercises the tab buttons and close action, and checks

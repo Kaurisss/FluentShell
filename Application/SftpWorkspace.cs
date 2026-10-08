@@ -115,9 +115,11 @@ public sealed class SftpWorkspace : IDisposable
             TransferTask? task = null;
             async Task Run() => await RunBatchAsync(task!, () =>
                 _controller.UploadEntriesAsync(files, ConfirmOverwriteAsync, target));
+            var kind = files.Count > 1 ? TransferTaskKind.Batch
+                : files[0] is SftpUploadDirectory ? TransferTaskKind.Folder : TransferTaskKind.File;
             task = _transfers.Add(_connectionId, _connectionLabel, "上传",
                 files.Count == 1 ? files[0].Name : $"{files[0].Name} 等 {files.Count} 项",
-                target, Run, CanRetry);
+                target, Run, CanRetry, kind);
             await Run();
         }
         finally { _picking = false; _transfers.RefreshCommands(); }
@@ -140,9 +142,11 @@ public sealed class SftpWorkspace : IDisposable
             TransferTask? task = null;
             async Task Run() => await RunBatchAsync(task!, () =>
                 _controller.DownloadEntriesAsync(items, destination, _downloadDestination, ConfirmOverwriteAsync));
+            var kind = items.Length > 1 ? TransferTaskKind.Batch
+                : items[0].IsDirectory ? TransferTaskKind.Folder : TransferTaskKind.File;
             task = _transfers.Add(_connectionId, _connectionLabel, "下载",
                 items.Length == 1 ? items[0].Name : $"{items[0].Name} 等 {items.Length} 项",
-                destination, Run, CanRetry);
+                destination, Run, CanRetry, kind);
             await Run();
         }
         finally { _picking = false; _transfers.RefreshCommands(); }

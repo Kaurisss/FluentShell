@@ -7,7 +7,7 @@ namespace FluentShell.Tests;
 /// <see cref="IShellSession"/> 的测试适配器：连接行为由构造参数给出，
 /// 激活次数与内容元素供标签栏与外壳协调的断言使用。
 /// </summary>
-internal sealed class FakeShellSession : IShellSession
+internal sealed class FakeShellSession : IShellSession, IShellSessionCloseGuard
 {
     private readonly Func<FakeShellSession, Task> _connect;
 
@@ -28,6 +28,8 @@ internal sealed class FakeShellSession : IShellSession
     public int MetricsPollingStarts { get; private set; }
     public bool IsActive { get; private set; }
     public bool IsDisposed { get; private set; }
+    public bool CanClose { get; set; } = true;
+    public bool TryPrepareClose() => CanClose;
     public CancellationToken LastConnectionCancellationToken { get; private set; }
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated
