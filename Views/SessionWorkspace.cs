@@ -92,6 +92,8 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IAsyncDisposa
     public bool IsConnected => _connection.IsConnected;
     public SessionConnectionState ConnectionState => _connection.State;
     public bool IsTransferActive => _sftpWorkspace.IsTransferActive;
+    public bool TryCloseTextEditor() => _sftpView.TryCloseTextEditor();
+    public bool IsTextEditorOpen => _sftpView.IsTextEditorOpen;
 
     public event EventHandler<ServerMetrics?>? MetricsUpdated;
     public event EventHandler<string>? StatusChanged;

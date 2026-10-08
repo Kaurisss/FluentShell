@@ -25,6 +25,7 @@ internal static class Program
     internal static string ReportPath = Path.GetFullPath("theme-smoke.json");
     internal static bool SftpDeleteOnly;
     internal static bool SftpPropertiesOnly;
+    internal static bool TextEditorOnly;
     internal static bool MultiSessionOnly;
     internal static bool TabOverflowOnly;
     [STAThread]
@@ -33,6 +34,7 @@ internal static class Program
         if (args.Length > 0) ReportPath = Path.GetFullPath(args[0]);
         SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
         SftpPropertiesOnly = args.Contains("--sftp-properties-smoke");
+        TextEditorOnly = args.Contains("--text-editor-smoke");
         MultiSessionOnly = args.Contains("--multi-session-smoke");
         TabOverflowOnly = args.Contains("--tab-overflow-smoke");
         try
@@ -58,7 +60,7 @@ internal static class Program
 }
 
 // Reuse real application resources, but never launch MainWindow or load user profiles.
-internal sealed class SmokeApp : App
+internal sealed partial class SmokeApp : App
 {
     private Window? _window;
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -70,6 +72,11 @@ internal sealed class SmokeApp : App
         };
         try
         {
+            if (Program.TextEditorOnly)
+            {
+                await VerifyTextEditorAsync();
+                return;
+            }
             if (Program.TabOverflowOnly)
             {
                 await VerifyTabOverflowAsync();

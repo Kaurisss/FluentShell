@@ -21,6 +21,8 @@ internal sealed class FakeSftpClient : ISftpClient
     public List<(string Source, string Destination)> Renames { get; } = [];
     public string? LastListedPath { get; private set; }
     public bool ExistsAnswer { get; set; }
+    public Func<string, Stream, CancellationToken, Task>? DownloadHandler { get; set; }
+    public Func<Stream, string, CancellationToken, Task>? UploadHandler { get; set; }
 
     public IReadOnlyList<RemoteDirectoryEntry> ListDirectory(string path)
     {
@@ -57,10 +59,10 @@ internal sealed class FakeSftpClient : ISftpClient
     }
 
     public Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+        UploadHandler?.Invoke(input, remotePath, cancellationToken) ?? Task.CompletedTask;
 
     public Task DownloadAsync(string remotePath, Stream output, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+        DownloadHandler?.Invoke(remotePath, output, cancellationToken) ?? Task.CompletedTask;
 
     public Task RenameAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
     {

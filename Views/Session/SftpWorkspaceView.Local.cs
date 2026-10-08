@@ -128,16 +128,15 @@ public sealed partial class SftpWorkspaceView
 
     private async void LocalFiles_DoubleTapped(object? sender, GridCellDoubleTappedEventArgs e)
     {
-        if (LocalFiles.SelectedItem is LocalPaneItem { IsDirectory: true } item)
-            await NavigateLocalAsync(item.FullPath);
+        await OpenLocalItemAsync();
     }
 
     private async void LocalFiles_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Enter && LocalFiles.SelectedItem is LocalPaneItem { IsDirectory: true } item)
+        if (e.Key == Windows.System.VirtualKey.Enter && LocalFiles.SelectedItem is LocalPaneItem)
         {
             e.Handled = true;
-            await NavigateLocalAsync(item.FullPath);
+            await OpenLocalItemAsync();
         }
         else if (e.Key == Windows.System.VirtualKey.Back)
         {
@@ -153,10 +152,14 @@ public sealed partial class SftpWorkspaceView
         refresh.Click += (_, _) => RefreshLocalDirectory();
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
+        var edit = new MenuFlyoutItem { Text = "查看/编辑文本" };
+        edit.Click += async (_, _) => await OpenLocalItemAsync();
+        menu.Items.Add(edit);
         var upload = new MenuFlyoutItem { Text = "上传" };
         menu.Opened += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
+            edit.IsEnabled = selected.Length == 1 && !selected[0].IsDirectory;
             upload.IsEnabled = _snapshot.CanTransfer && selected.Length > 0 && selected.All(file => file.Name != "..");
         };
         upload.Click += (_, _) =>

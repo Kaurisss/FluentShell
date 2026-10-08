@@ -2,7 +2,7 @@ using FluentShell.Models;
 
 namespace FluentShell.Services;
 
-public sealed class SftpFileService : ISftpFileService
+public sealed partial class SftpFileService : ISftpFileService, ITextFileService
 {
     private readonly Func<ISftpClient?> _clientProvider;
     // 属性统计可能在窗口关闭后仍等待一次远程读取；同一客户端不能并发操作。

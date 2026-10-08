@@ -100,6 +100,11 @@ public sealed partial class MainWindow : Window
         RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
         Closed += (_, _) => _serverCatalogPage.CloseEditorWindows();
+        _appWindow.Closing += (_, args) =>
+        {
+            if (_shell.Sessions.OfType<SessionWorkspace>().Any(workspace => !workspace.TryCloseTextEditor()))
+                args.Cancel = true;
+        };
     }
 
     private void ConfigureWindow()
@@ -255,6 +260,11 @@ public sealed partial class MainWindow : Window
 
     private async Task ExecuteShortcutAsync(string action)
     {
+        if (_shell.Sessions.OfType<SessionWorkspace>().FirstOrDefault(workspace => workspace.IsTextEditorOpen) is { } editing)
+        {
+            if (action == "close") editing.TryCloseTextEditor();
+            return;
+        }
         if (action == "new") { _sessionHost.Select(null); ShowUnconnectedLayout("overview"); }
         else if (action == "close" && _shell.SelectedSession is { } selected)
             await _shell.CloseSessionAsync(selected, ConfirmCloseSessionAsync);

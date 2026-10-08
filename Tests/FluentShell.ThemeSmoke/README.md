@@ -9,6 +9,12 @@ dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
 
 The temporary window exits automatically. Exit code 0 and `passed: true` in the JSON report indicate success. A failed assertion or startup exception produces exit code 1 and its details in the report. A missing report is not a passing run.
 
+For the in-app text editor, pass the --text-editor-smoke option after the report path.
+It exercises local and remote entry points, light/dark layout, read-only mode,
+search, wrapping, CRLF preservation, save conflicts, unsaved-close protection,
+loading cancellation and late results. Local saves use a temporary file; remote
+saves use an in-memory service. It never loads saved profiles or connects to a server.
+
 For same-server tabs, pass `--multi-session-smoke`. This opens two real workspaces
 for one synthetic profile, exercises the tab buttons and close action, and checks
 independent terminal output and session-specific sidebar metrics. It never connects

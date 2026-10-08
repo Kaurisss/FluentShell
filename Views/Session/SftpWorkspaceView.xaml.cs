@@ -15,7 +15,7 @@ using WinRT.Interop;
 
 namespace FluentShell.Views.Session;
 
-public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView, ISftpPropertiesView
+public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView, ISftpPropertiesView, ISftpTextEditorView
 {
     private UserPreferences _preferences = new();
     public void SetPreferences(UserPreferences preferences)
@@ -260,6 +260,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         var menu = new MenuFlyout();
         var open = new MenuFlyoutItem { Text = "打开文件夹" };
         open.Click += (_, _) => OpenSelectedDirectory();
+        var edit = new MenuFlyoutItem { Text = "查看/编辑文本" };
+        edit.Click += (_, _) => OpenSelectedRemoteText();
         var download = new MenuFlyoutItem { Text = "下载" };
         download.Click += (_, _) => RequestDownload();
         var downloadToCurrent = new MenuFlyoutItem { Text = "下载到本地当前目录" };
@@ -279,6 +281,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(open);
+        menu.Items.Add(edit);
         menu.Items.Add(download);
         menu.Items.Add(downloadToCurrent);
         menu.Items.Add(copyPath);
@@ -295,6 +298,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
             var item = SelectedItem;
             refresh.IsEnabled = _snapshot.CanNavigate;
             open.IsEnabled = _snapshot.CanNavigate && item?.IsDirectory == true;
+            edit.IsEnabled = _snapshot.CanTransfer && _textFileService is not null &&
+                item is { IsDirectory: false, IsSymbolicLink: false } && RemoteTable.SelectedItems.Count == 1;
             var selected = GetDownloadSelection();
             download.Text = selected.Count == 1 && selected[0].IsDirectory ? "下载文件夹" : "下载";
             download.IsEnabled = _snapshot.CanTransfer && selected.Count > 0;
@@ -441,6 +446,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     {
         if (SelectedItem is { IsDirectory: true } item && _snapshot.CanNavigate)
             NavigateRequested?.Invoke(this, item.FullPath);
+        else
+            OpenSelectedRemoteText();
     }
 
     private void RequestDownload()

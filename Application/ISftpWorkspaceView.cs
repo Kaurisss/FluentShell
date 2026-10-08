@@ -58,3 +58,9 @@ public interface ISftpPropertiesView
 {
     void SetDirectorySizeProvider(Func<RemoteFileItem, CancellationToken, Task<long>>? provider);
 }
+
+/// <summary>文本编辑器使用独立传输服务，不占用目录浏览通道。</summary>
+public interface ISftpTextEditorView
+{
+    void SetTextFileService(FluentShell.Services.ITextFileService? service);
+}

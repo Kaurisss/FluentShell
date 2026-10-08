@@ -63,6 +63,8 @@ public sealed class SftpWorkspace : IDisposable
         _controller.SnapshotChanged += Controller_SnapshotChanged;
         if (_view is ISftpPropertiesView properties)
             properties.SetDirectorySizeProvider(_controller.GetDirectorySizeAsync);
+        if (_view is ISftpTextEditorView editor)
+            editor.SetTextFileService(_transferService as ITextFileService);
         _view.RefreshRequested += View_RefreshRequested;
         _view.NavigateRequested += View_NavigateRequested;
         _view.NewFolderRequested += View_NewFolderRequested;
@@ -267,6 +269,8 @@ public sealed class SftpWorkspace : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        if (_view is ISftpTextEditorView editor)
+            editor.SetTextFileService(null);
         if (_view is ISftpPropertiesView properties)
             properties.SetDirectorySizeProvider(null);
         if (_view is ISftpPaneTransferView panes)
