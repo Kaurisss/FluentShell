@@ -27,7 +27,7 @@ public sealed partial class SftpWorkspaceView
         LocalFiles.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(LocalFiles_KeyDown), true);
         LocalFiles.RecordContextFlyout = BuildLocalRowMenu();
         var emptyAreaMenu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
         refresh.Click += (_, _) => RefreshLocalDirectory();
         emptyAreaMenu.Items.Add(refresh);
         ApplyChineseMenuFont(emptyAreaMenu);
@@ -148,14 +148,14 @@ public sealed partial class SftpWorkspaceView
     private MenuFlyout BuildLocalRowMenu()
     {
         var menu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
         refresh.Click += (_, _) => RefreshLocalDirectory();
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var edit = new MenuFlyoutItem { Text = "查看/编辑文本" };
+        var edit = new MenuFlyoutItem { Text = "查看/编辑文本", Icon = CreateMenuIcon("DocumentEdit") };
         edit.Click += async (_, _) => await OpenLocalItemAsync();
         menu.Items.Add(edit);
-        var upload = new MenuFlyoutItem { Text = "上传" };
+        var upload = new MenuFlyoutItem { Text = "上传", Icon = CreateMenuIcon("Upload") };
         menu.Opened += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();

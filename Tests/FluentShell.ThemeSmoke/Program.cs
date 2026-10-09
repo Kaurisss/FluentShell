@@ -652,15 +652,30 @@ internal sealed partial class SmokeApp : App
             if (view.ActualWidth <= 0 || view.ActualHeight <= 0) failures.Add("Transfer flyout must have a visible layout.");
             await HideFlyoutAsync(flyout);
 
-            var menu = (MenuFlyout)typeof(SftpWorkspaceView).GetMethod("BuildEmptyAreaMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sftp, null)!;
-            menu.ShowAt(anchor);
-            await Task.Delay(150);
-            var presenter = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Select(p => p.Child).OfType<FrameworkElement>().Single();
-            if (presenter.ActualTheme != theme || !Descendants(presenter).OfType<MenuFlyoutItem>().Any())
-                failures.Add("File context menu must retain its native items and theme.");
-            if (presenter.ActualWidth <= 0 || presenter.ActualHeight <= 0) failures.Add("File menu must have a visible layout.");
-            await HideFlyoutAsync(menu);
-            Program.Results.Add(new { control = "transfer detail updates and file menu", theme = theme.ToString(), passed = failures.Count == 0 });
+            var menus = new[]
+            {
+                (MenuFlyout)typeof(SftpWorkspaceView).GetMethod("BuildEmptyAreaMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sftp, null)!,
+                (MenuFlyout)((Syncfusion.UI.Xaml.DataGrid.SfDataGrid)sftp.FindName("RemoteTable")).RecordContextFlyout,
+                (MenuFlyout)((Syncfusion.UI.Xaml.DataGrid.SfDataGrid)sftp.FindName("LocalFiles")).RecordContextFlyout,
+                (MenuFlyout)((Button)sftp.FindName("UploadButton")).Flyout
+            };
+            foreach (var menu in menus)
+            {
+                menu.ShowAt(anchor);
+                await Task.Delay(150);
+                var presenter = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Select(p => p.Child).OfType<FrameworkElement>().Single();
+                if (presenter.ActualTheme != theme || !Descendants(presenter).OfType<MenuFlyoutItem>().Any())
+                    failures.Add("File context menu must retain its native items and theme.");
+                if (presenter.ActualWidth <= 0 || presenter.ActualHeight <= 0) failures.Add("File menu must have a visible layout.");
+                foreach (var item in menu.Items.OfType<MenuFlyoutItem>())
+                {
+                    var passed = item.Icon is PathIcon { Data: GeometryGroup, ActualWidth: 16, ActualHeight: 16 };
+                    Program.Results.Add(new { control = "SFTP menu icon", theme = theme.ToString(), item.Text, item.IsEnabled, passed });
+                    if (!passed) failures.Add($"{item.Text} must render a viewport-preserving 16 DIP icon.");
+                }
+                await HideFlyoutAsync(menu);
+            }
+            Program.Results.Add(new { control = "transfer detail updates and file menus", theme = theme.ToString(), passed = failures.Count == 0 });
         }
         root.RequestedTheme = ElementTheme.Light;
         root.Children.Remove(anchor);

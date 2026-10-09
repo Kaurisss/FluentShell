@@ -1,6 +1,7 @@
 ﻿using FluentShell.Core;
 using FluentShell.Models;
 using FluentShell.Services;
+using FluentShell.Views.Converters;
 using FluentShell.Views.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -44,6 +45,8 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     {
         _windowHandle = windowHandle;
         InitializeComponent();
+        UploadFileMenuItem.Icon = CreateMenuIcon("Upload");
+        UploadFolderMenuItem.Icon = CreateMenuIcon("Upload");
         ConfigureRemoteTable();
         InitializeLocalPane();
         Unloaded += (_, _) =>
@@ -258,25 +261,25 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     private MenuFlyout BuildRemoteRowMenu()
     {
         var menu = new MenuFlyout();
-        var open = new MenuFlyoutItem { Text = "打开文件夹" };
+        var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = CreateMenuIcon("FolderOpen") };
         open.Click += (_, _) => OpenSelectedDirectory();
-        var edit = new MenuFlyoutItem { Text = "查看/编辑文本" };
+        var edit = new MenuFlyoutItem { Text = "查看/编辑文本", Icon = CreateMenuIcon("DocumentEdit") };
         edit.Click += (_, _) => OpenSelectedRemoteText();
-        var download = new MenuFlyoutItem { Text = "下载" };
+        var download = new MenuFlyoutItem { Text = "下载", Icon = CreateMenuIcon("Download") };
         download.Click += (_, _) => RequestDownload();
-        var downloadToCurrent = new MenuFlyoutItem { Text = "下载到本地当前目录" };
+        var downloadToCurrent = new MenuFlyoutItem { Text = "下载到本地当前目录", Icon = CreateMenuIcon("Download") };
         downloadToCurrent.Click += (_, _) => RequestDownloadToLocal();
-        var copyPath = new MenuFlyoutItem { Text = "复制远程路径" };
+        var copyPath = new MenuFlyoutItem { Text = "复制远程路径", Icon = CreateMenuIcon("Copy") };
         copyPath.Click += (_, _) => CopySelectedRemotePath();
-        var rename = new MenuFlyoutItem { Text = "重命名" };
+        var rename = new MenuFlyoutItem { Text = "重命名", Icon = CreateMenuIcon("Rename") };
         rename.Click += (_, _) => RequestRename();
-        var delete = new MenuFlyoutItem { Text = "删除" };
+        var delete = new MenuFlyoutItem { Text = "删除", Icon = CreateMenuIcon("Delete") };
         delete.Click += (_, _) => RequestDelete();
-        var newFolder = new MenuFlyoutItem { Text = "新建文件夹" };
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon("FolderAdd") };
         newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
-        var properties = new MenuFlyoutItem { Text = "属性" };
+        var properties = new MenuFlyoutItem { Text = "属性", Icon = CreateMenuIcon("Info") };
         properties.Click += (_, _) => _ = ShowSelectedItemPropertiesAsync();
-        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -318,13 +321,13 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
     private MenuFlyout BuildEmptyAreaMenu()
     {
         var menu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新" };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
-        var upload = new MenuFlyoutItem { Text = "上传文件" };
+        var upload = new MenuFlyoutItem { Text = "上传文件", Icon = CreateMenuIcon("Upload") };
         upload.Click += (_, _) => UploadRequested?.Invoke(this, EventArgs.Empty);
-        var uploadFolder = new MenuFlyoutItem { Text = "上传文件夹" };
+        var uploadFolder = new MenuFlyoutItem { Text = "上传文件夹", Icon = CreateMenuIcon("Upload") };
         uploadFolder.Click += (_, _) => UploadFolderRequested?.Invoke(this, EventArgs.Empty);
-        var newFolder = new MenuFlyoutItem { Text = "新建文件夹" };
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon("FolderAdd") };
         newFolder.Click += (_, _) => NewFolderRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -341,6 +344,12 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         };
         return menu;
     }
+
+    private PathIcon CreateMenuIcon(string name) => new()
+    {
+        Data = IconGeometryConverter.Parse((string)Resources[$"Sftp{name}IconData"], 16),
+        Style = (Style)Resources["SftpMenuIconStyle"]
+    };
 
     /// <summary>
     /// Syncfusion 的表格样式把字体设成了系统上并不存在的 "Segoe UI Variable Static Text"，

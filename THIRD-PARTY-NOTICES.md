@@ -26,7 +26,7 @@ SOFTWARE.
 
 ## Microsoft Fluent UI System Icons
 
-The sidebar toggle, settings-page and text-editor title-bar icons, and tab scroll caret icons use vector path data from
+The sidebar toggle, settings-page and text-editor title-bar icons, tab scroll caret icons, and SFTP menu icons use vector path data from
 [Microsoft Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons).
 
 Copyright (c) Microsoft Corporation.
