@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.0](https://github.com/Kaurisss/FluentShell/compare/v0.1.0...v0.2.0) (2026-10-09)
+
+
+### 新功能
+
+* **sftp:** 为 SFTP 菜单添加 Fluent UI 图标并更新第三方声明 ([248f4d2](https://github.com/Kaurisss/FluentShell/commit/248f4d2a2cb2fe7cd1e708191dc9837b2eed7968))
+* **sftp:** 实现本地文件拖放上传功能 ([be249b0](https://github.com/Kaurisss/FluentShell/commit/be249b054c9fbd048992e1c23041c6eb35342180))
+* **sftp:** 实现远程目录递归下载功能，支持混选文件和文件夹 ([07437b0](https://github.com/Kaurisss/FluentShell/commit/07437b00f51f8fa7ba24b623b5088681efccbe13))
+* **sftp:** 实现递归删除远程目录功能，优化删除逻辑与状态管理 ([05b98b0](https://github.com/Kaurisss/FluentShell/commit/05b98b091b1b1d379650fe0173e0955d8fece8aa))
+* **sftp:** 新增远程目录属性窗口及递归大小计算功能 ([2fd5247](https://github.com/Kaurisss/FluentShell/commit/2fd52476c64138594a497d4b4183c7efb1354c12))
+* 实现同服务器多会话独立支持 ([6d5c64b](https://github.com/Kaurisss/FluentShell/commit/6d5c64b789dbe96dc9104161c7a090c98b104ce9))
+* 引入 FluentIcons.WinUI 替换自定义图标资源 ([da7b429](https://github.com/Kaurisss/FluentShell/commit/da7b42977ece696bf82ed5724e978c8fbad15743))
+* 支持递归上传本地目录，新增上传文件夹功能 ([4022472](https://github.com/Kaurisss/FluentShell/commit/402247233d4001141462a12da2acc2e58b6041a0))
+* 新增主题动效冒烟测试及页面导航动画 ([206d4d1](https://github.com/Kaurisss/FluentShell/commit/206d4d1b1cdfc0952325516aff1fdfdd66a6c979))
+* 新增应用内文本查看与编辑功能 ([7bd3b9d](https://github.com/Kaurisss/FluentShell/commit/7bd3b9d87cf542805545bf7e0cb620781e72fdcf))
+* 新增文本编辑器偏好设置及窗口背景适配 ([00b34a3](https://github.com/Kaurisss/FluentShell/commit/00b34a305f581f9fb137578d59992a08601e70bd))
+* 新增标签页滚动功能及相关测试 ([c4c2e9b](https://github.com/Kaurisss/FluentShell/commit/c4c2e9b695b548c28c0cd7f4a00239898255f5df))
+* 新增终端背景材质开关及多种窗口背景材质支持 ([2bc85af](https://github.com/Kaurisss/FluentShell/commit/2bc85afec5b559b9e066c7f3164850340013159f))
+* 集成 WinUIEdit 实现多标签页文本编辑器，新增传输中心功能 ([df00556](https://github.com/Kaurisss/FluentShell/commit/df00556d0b7e20944eab9b6d2d5d60d3ac5bf676))
+
+
+### 问题修复
+
+* **color dialog:** 修复颜色对话框滚动条布局和短对话框输入访问问题 ([a8eec64](https://github.com/Kaurisss/FluentShell/commit/a8eec6481f2629d9d527e661d975a7f0845bf429))
+
+
+### 重构与优化
+
+* 清理死代码并重构传输相关逻辑 ([5fdfd78](https://github.com/Kaurisss/FluentShell/commit/5fdfd782c9a29816f5cc564806ab38b213071016))
+
 ## 0.1.0 (2026-10-05)
 
 
