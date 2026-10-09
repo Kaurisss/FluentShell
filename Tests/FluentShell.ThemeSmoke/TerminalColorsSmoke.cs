@@ -133,6 +133,59 @@ internal sealed partial class SmokeApp
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 root.RequestedTheme = theme;
+                foreach (var height in new[] { 420d, 700d })
+                {
+                    var dialog = new ColorDialog("终端 · 背景", ColorDialog.Parse("#123456"))
+                    {
+                        XamlRoot = root.XamlRoot,
+                        RequestedTheme = theme
+                    };
+                    dialog.Resources["ContentDialogMaxHeight"] = height;
+                    var showing = dialog.ShowAsync().AsTask();
+                    await Task.Delay(250, timeout.Token);
+                    var scroller = (ScrollViewer)dialog.Content;
+                    scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
+                    root.UpdateLayout();
+                    var surface = Descendants(dialog).OfType<Border>().Single(border => border.Name == "BackgroundElement");
+                    var bar = Descendants(scroller).OfType<Microsoft.UI.Xaml.Controls.Primitives.ScrollBar>()
+                        .First(candidate =>
+                        {
+                            if (candidate.Orientation != Orientation.Vertical) return false;
+                            DependencyObject? parent = candidate;
+                            do { parent = VisualTreeHelper.GetParent(parent); } while (parent is not null && parent is not ScrollViewer);
+                            return ReferenceEquals(parent, scroller);
+                        });
+                    var barBounds = bar.TransformToVisual(surface).TransformBounds(new Rect(0, 0, bar.ActualWidth, bar.ActualHeight));
+                    var picker = (ColorPicker)scroller.Content;
+                    var pickerBounds = picker.TransformToVisual(surface).TransformBounds(new Rect(0, 0, picker.ActualWidth, picker.ActualHeight));
+                    Program.Results.Add(new { control = "color dialog scrollbar bounds", theme = theme.ToString(), height,
+                        surfaceWidth = surface.ActualWidth, barBounds, pickerBounds, scrollerWidth = scroller.ActualWidth, scroller.ScrollableHeight });
+                    Check(Math.Abs(barBounds.Right - (surface.ActualWidth - surface.BorderThickness.Right)) <= 2,
+                        $"{theme}/{height}: color dialog scrollbar reaches its right edge");
+                    Check(pickerBounds.Right <= barBounds.X && pickerBounds.X >= 20,
+                        $"{theme}/{height}: picker retains its inset without scrollbar overlap");
+                    if (height == 420)
+                    {
+                        Check(scroller.ScrollableHeight > 0, $"{theme}: short color dialog allows vertical scrolling");
+                        scroller.ChangeView(null, scroller.ScrollableHeight, null, true);
+                        await Task.Delay(100, timeout.Token);
+                        Check(Math.Abs(scroller.VerticalOffset - scroller.ScrollableHeight) < 1,
+                            $"{theme}: short color dialog can reach its last color input");
+                        await CaptureAsync(surface, Program.ReportPath + $".picker.{theme}.{height}.bottom.png");
+                        scroller.ChangeView(null, 0, null, true);
+                        await Task.Delay(100, timeout.Token);
+                    }
+                    await CaptureAsync(surface, Program.ReportPath + $".picker.{theme}.{height}.png");
+                    Program.Results.Add(new { control = "color dialog scrollbar layout", theme = theme.ToString(), height,
+                        surfaceWidth = surface.ActualWidth, barBounds, pickerBounds, scroller.ScrollableHeight, passed = true });
+                    dialog.Hide();
+                    await showing.WaitAsync(timeout.Token);
+                }
+            }
+
+            foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                root.RequestedTheme = theme;
                 root.Background = new SolidColorBrush(theme == ElementTheme.Light
                     ? Microsoft.UI.Colors.WhiteSmoke : ColorDialog.Parse("#202020"));
                 foreach (var width in new[] { 1000d, 760d, 600d, 390d })

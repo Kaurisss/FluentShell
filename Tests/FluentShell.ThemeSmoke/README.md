@@ -5,6 +5,8 @@ It exercises the actual color picker save, cancel and per-color default actions,
 persists only temporary settings, and checks independent light/dark resets.
 It captures both expanded palettes in light/dark themes and verifies side-by-side
 groups, narrow layouts, all 21 color fields and keyboard focus without clipping.
+It also checks the color dialog scrollbar at the right edge, content clearance,
+and access to the last input when the dialog is short in light/dark themes.
 
 For settings icons, pass `--settings-icons-smoke` after the report path.
 It checks all eight settings pages in light and dark themes, verifies

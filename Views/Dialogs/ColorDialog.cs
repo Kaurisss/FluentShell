@@ -12,9 +12,11 @@ public sealed class ColorDialog : ContentDialog
     public ColorDialog(string title, Color initialColor)
     {
         Title = title;
+        var rightInset = ((Thickness)Application.Current.Resources["ContentDialogPadding"]).Right;
         _picker = new ColorPicker
         {
             Color = initialColor,
+            Margin = new Thickness(0, 0, rightInset, 0),
             IsAlphaEnabled = false,
             IsColorSpectrumVisible = true,
             IsColorPreviewVisible = true,
@@ -22,7 +24,17 @@ public sealed class ColorDialog : ContentDialog
             IsHexInputVisible = true,
             IsColorChannelTextInputVisible = true
         };
-        Content = new ScrollViewer { Content = _picker, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        // Extend the viewport to the dialog edge; keep the inset on the picker so
+        // the scrollbar sits outside its preview and color inputs.
+        Content = new ScrollViewer
+        {
+            Content = _picker,
+            Margin = new Thickness(0, 0, -rightInset, 0),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalScrollMode = ScrollMode.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
         PrimaryButtonText = "保存";
         SecondaryButtonText = "使用默认";
         CloseButtonText = "取消";
