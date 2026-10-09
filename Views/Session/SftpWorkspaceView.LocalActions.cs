@@ -2,6 +2,7 @@ using FluentShell.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
+using FluentSymbol = FluentIcons.Common.Symbol;
 
 namespace FluentShell.Views.Session;
 
@@ -16,14 +17,14 @@ public sealed partial class SftpWorkspaceView
     private MenuFlyout BuildLocalEmptyAreaMenu()
     {
         var menu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon(FluentSymbol.ArrowClockwise) };
         refresh.Click += (_, _) => RefreshLocalDirectory();
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon("FolderAdd") };
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon(FluentSymbol.FolderAdd) };
         newFolder.Click += async (_, _) => await CreateLocalFolderAsync();
         menu.Items.Add(newFolder);
-        var copy = new MenuFlyoutItem { Text = "复制当前目录路径", Icon = CreateMenuIcon("Copy") };
+        var copy = new MenuFlyoutItem { Text = "复制当前目录路径", Icon = CreateMenuIcon(FluentSymbol.Copy) };
         copy.Click += (_, _) => { if (_localPath is { } path) CopyLocalPaths([path]); };
         menu.Items.Add(copy);
         menu.Opened += (_, _) =>

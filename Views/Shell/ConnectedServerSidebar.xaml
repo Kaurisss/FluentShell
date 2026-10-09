@@ -2,7 +2,8 @@
 <UserControl
     x:Class="FluentShell.Views.Shell.ConnectedServerSidebar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:icons="using:FluentIcons.WinUI">
     <UserControl.Resources>
         <Style x:Key="MetricMutedTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" />
@@ -58,7 +59,7 @@
                     Click="ReconnectButton_Click"
                     AutomationProperties.Name="重新连接服务器"
                     ToolTipService.ToolTip="重新连接服务器">
-                    <SymbolIcon Symbol="Refresh" Width="20" Height="20" />
+                    <icons:SymbolIcon Symbol="ArrowClockwise" />
                 </Button>
             </StackPanel>
 

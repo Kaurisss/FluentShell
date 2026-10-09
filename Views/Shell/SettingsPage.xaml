@@ -2,7 +2,8 @@
     x:Class="FluentShell.Views.Shell.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:icons="using:FluentIcons.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -15,31 +16,51 @@
     </UserControl.Resources>
     <Grid RowSpacing="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <BreadcrumbBar x:Name="SettingsBreadcrumb" ItemClicked="SettingsBreadcrumb_ItemClicked">
-            <BreadcrumbBar.ItemTemplate>
-                <DataTemplate><TextBlock Text="{Binding}" FontSize="28" FontWeight="SemiBold" /></DataTemplate>
-            </BreadcrumbBar.ItemTemplate>
-        </BreadcrumbBar>
+        <Grid x:Name="SettingsHeader" ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <BreadcrumbBar x:Name="SettingsBreadcrumb" ItemClicked="SettingsBreadcrumb_ItemClicked">
+                <BreadcrumbBar.ItemTemplate>
+                    <DataTemplate><TextBlock Text="{Binding}" FontSize="28" FontWeight="SemiBold" /></DataTemplate>
+                </BreadcrumbBar.ItemTemplate>
+            </BreadcrumbBar>
+            <Button x:Name="PageHelpButton" Grid.Column="1" Width="24" Height="24" MinWidth="0" MinHeight="0" Padding="3"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Center"
+                    Style="{StaticResource SubtleButtonStyle}" Visibility="Collapsed"
+                    AutomationProperties.AutomationId="SettingsPageHelp" AutomationProperties.Name="设置说明" ToolTipService.ToolTip="设置说明">
+                <icons:FluentIcon Icon="ErrorCircle" IconVariant="Regular" IconSize="Size16"
+                                  FontSize="14" Width="16" Height="16" IsTextScaleFactorEnabled="False"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedRight">
+                        <StackPanel MaxWidth="360" Spacing="8">
+                            <TextBlock x:Name="PageHelpTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock x:Name="PageHelpText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
         <ScrollViewer x:Name="SettingsHome" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="12" HorizontalAlignment="Stretch" Padding="0,0,0,28">
-                <toolkit:SettingsCard Header="外观" Description="应用主题、背景效果和侧栏默认状态" IsClickEnabled="True" IsActionIconVisible="True" Tag="appearance" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Setting" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard x:Name="OpenTerminalColorsButton" Header="终端" Description="字体、光标、滚动缓冲、主题配色与粘贴行为" IsClickEnabled="True" IsActionIconVisible="True" Click="OpenTerminalColors_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Font" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="连接" Description="连接超时、保活间隔和断线自动重连" IsClickEnabled="True" IsActionIconVisible="True" Tag="connection" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="World" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="文件传输" Description="下载目录、隐藏文件、冲突处理与传输通知" IsClickEnabled="True" IsActionIconVisible="True" Tag="transfer" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Folder" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="快捷键" Description="自定义会话切换、终端查找和文件管理器快捷键" IsClickEnabled="True" IsActionIconVisible="True" Tag="shortcuts" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Edit" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="数据管理" Description="导入和导出应用设置、打开数据目录与恢复默认值" IsClickEnabled="True" IsActionIconVisible="True" Tag="data" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Save" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
-                <toolkit:SettingsCard Header="关于与诊断" Description="应用信息、GitHub 仓库、开源许可与诊断" IsClickEnabled="True" IsActionIconVisible="True" Tag="about" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Help" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="外观" Description="应用主题、背景效果和侧栏默认状态" IsClickEnabled="True" IsActionIconVisible="True" Tag="appearance" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="CalendarTemplate" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard x:Name="OpenTerminalColorsButton" Header="终端" Description="字体、光标、滚动缓冲、主题配色与粘贴行为" IsClickEnabled="True" IsActionIconVisible="True" Click="OpenTerminalColors_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="WindowConsole" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="连接" Description="连接超时、保活间隔和断线自动重连" IsClickEnabled="True" IsActionIconVisible="True" Tag="connection" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Globe" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="文件传输" Description="下载目录、隐藏文件、冲突处理与传输通知" IsClickEnabled="True" IsActionIconVisible="True" Tag="transfer" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Folder" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="快捷键" Description="自定义会话切换、终端查找和文件管理器快捷键" IsClickEnabled="True" IsActionIconVisible="True" Tag="shortcuts" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Keyboard" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="数据管理" Description="导入和导出应用设置、打开数据目录与恢复默认值" IsClickEnabled="True" IsActionIconVisible="True" Tag="data" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Save" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
+                <toolkit:SettingsCard Header="关于与诊断" Description="应用信息、GitHub 仓库、开源许可与诊断" IsClickEnabled="True" IsActionIconVisible="True" Tag="about" Click="Category_Click" HorizontalAlignment="Stretch"><toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Info" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon></toolkit:SettingsCard>
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="AppearancePage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
                 <toolkit:SettingsCard Header="应用主题" Description="跟随系统或固定使用浅色、深色外观。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsThemeIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Color" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <ComboBox x:Name="ThemeComboBox" SelectedIndex="0" SelectionChanged="ThemeComboBox_SelectionChanged" MinWidth="220">
                     <ComboBoxItem Content="系统" /><ComboBoxItem Content="浅色" /><ComboBoxItem Content="深色" />
                 </ComboBox></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="背景效果" Description="选择窗口背景材质。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsBackgroundIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Image" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <ComboBox x:Name="BackdropMaterialComboBox" SelectedIndex="0" SelectionChanged="BackdropMaterialComboBox_SelectionChanged" MinWidth="220">
                     <ComboBoxItem Content="Mica（云母）" /><ComboBoxItem Content="亚克力" />
                 </ComboBox></toolkit:SettingsCard>
@@ -49,81 +70,100 @@
         <ScrollViewer x:Name="TerminalColorsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
                 <toolkit:SettingsCard Header="终端字号" Description="设置终端文字大小。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsFontSizeIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="TextFontSize" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <NumberBox x:Name="TerminalFontSizeBox" Value="14" Minimum="11" Maximum="24" SpinButtonPlacementMode="Inline" ValueChanged="TerminalFontSizeBox_ValueChanged" MinWidth="220" /></toolkit:SettingsCard>
                 <StackPanel x:Name="TerminalOptions" Spacing="4" />
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
-                    <PathIcon Data="{Binding Source={StaticResource SettingsThemeIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" />
+                    <icons:SymbolIcon Symbol="Color" Style="{StaticResource SettingsOptionIconStyle}" />
                     <TextBlock Text="自定义配色" FontWeight="SemiBold" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBlock Text="点击色块打开 ColorDialog。颜色修改需点击“保存配色”，其他终端选项即时保存。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
                 <Expander x:Name="LightColorsExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <PathIcon Data="{Binding Source={StaticResource SettingsLightIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" />
+                            <icons:SymbolIcon Symbol="WeatherSunny" Style="{StaticResource SettingsOptionIconStyle}" />
                             <TextBlock Text="浅色终端配色" VerticalAlignment="Center" />
                         </StackPanel>
                     </Expander.Header>
-                    <StackPanel x:Name="LightColorsPanel" Spacing="8" />
+                    <Grid x:Name="LightColorsLayout" ColumnSpacing="24" RowSpacing="16" SizeChanged="ColorsLayout_SizeChanged">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="终端颜色" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <StackPanel x:Name="LightTerminalColorsPanel" Spacing="4" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="ANSI 颜色" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <Grid x:Name="LightAnsiColorsPanel" ColumnSpacing="16" RowSpacing="4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            </Grid>
+                        </StackPanel>
+                        <Button x:Name="ResetLightColorsButton" Grid.Row="1" Grid.ColumnSpan="2" Content="恢复浅色默认配色" Tag="light" Click="ResetColors_Click" HorizontalAlignment="Left" />
+                    </Grid>
                 </Expander>
                 <Expander x:Name="DarkColorsExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <Expander.Header>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <PathIcon Data="{Binding Source={StaticResource SettingsDarkIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" />
+                            <icons:SymbolIcon Symbol="WeatherMoon" Style="{StaticResource SettingsOptionIconStyle}" />
                             <TextBlock Text="深色终端配色" VerticalAlignment="Center" />
                         </StackPanel>
                     </Expander.Header>
-                    <StackPanel x:Name="DarkColorsPanel" Spacing="8" />
+                    <Grid x:Name="DarkColorsLayout" ColumnSpacing="24" RowSpacing="16" SizeChanged="ColorsLayout_SizeChanged">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="终端颜色" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <StackPanel x:Name="DarkTerminalColorsPanel" Spacing="4" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="ANSI 颜色" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <Grid x:Name="DarkAnsiColorsPanel" ColumnSpacing="16" RowSpacing="4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            </Grid>
+                        </StackPanel>
+                        <Button x:Name="ResetDarkColorsButton" Grid.Row="1" Grid.ColumnSpan="2" Content="恢复深色默认配色" Tag="dark" Click="ResetColors_Click" HorizontalAlignment="Left" />
+                    </Grid>
                 </Expander>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="保存配色" Click="SaveColors_Click" />
-                    <Button Content="恢复默认配色" Click="ResetColors_Click" />
-                </StackPanel>
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="ConnectionPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
-                <TextBlock Text="连接超时和保活间隔在新建或重新连接时生效；0 次重连表示关闭自动重连。主机密钥校验始终保留。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
                 <StackPanel x:Name="ConnectionOptions" Spacing="4" />
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="TransferSettingsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
                 <toolkit:SettingsCard Header="默认下载目录">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsFolderIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Folder" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
 
                     <toolkit:SettingsCard.Description><TextBlock x:Name="DownloadDirectoryBox" TextWrapping="Wrap" /></toolkit:SettingsCard.Description>
                     <Button Content="选择目录" Click="ChooseDownloadDirectoryButton_Click" />
                 </toolkit:SettingsCard>
                 <StackPanel x:Name="TransferOptions" Spacing="4" />
-                <TextBlock Text="并发上限作用于不同会话的传输批次；单个会话仍按顺序使用独立传输通道。冲突策略从下一批传输开始生效。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="ShortcutSettingsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
-                <TextBlock Text="点击快捷键后按下 Ctrl + Shift + 字母进行录入。各操作须使用不同组合，避免占用远端 Shell 的常用快捷键。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
                 <TextBlock x:Name="ShortcutError" Visibility="Collapsed" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 <StackPanel x:Name="ShortcutOptions" Spacing="4" />
             </StackPanel>
         </ScrollViewer>
         <ScrollViewer x:Name="DataSettingsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="8" HorizontalAlignment="Stretch" Padding="0,0,0,28">
-                <TextBlock x:Name="DataLocationText" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
-                <toolkit:SettingsCard Header="数据目录" Description="在资源管理器中查看本地应用数据。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsFolderIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                <toolkit:SettingsCard Header="数据目录">
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Folder" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.Description><TextBlock x:Name="DataLocationText" TextWrapping="Wrap" IsTextSelectionEnabled="True" /></toolkit:SettingsCard.Description>
                     <Button Content="打开数据目录" Click="OpenDataFolder_Click" /></toolkit:SettingsCard>
-                <TextBlock Text="导入、导出和恢复默认仅针对应用设置，不包含或更改服务器配置、主机指纹及凭据。" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" />
                 <toolkit:SettingsCard Header="导出应用设置" Description="保存主题、终端配色和偏好设置，不包含凭据。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsExportIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="ArrowUpload" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="导出应用设置" Click="ExportSettings_Click" /></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="导入应用设置" Description="从 JSON 文件恢复应用偏好设置。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDownloadIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="ArrowDownload" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="导入应用设置" Click="ImportSettings_Click" /></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="恢复默认设置" Description="重置应用偏好设置，保留服务器配置和凭据。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsResetIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="ArrowUndo" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="恢复默认设置" Click="ResetSettings_Click" /></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="清除本地数据" Description="删除已保存服务器、主机指纹和凭据。此操作将再次确认。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDeleteIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Delete" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="清除服务器配置与本地数据…" Click="ClearLocalDataButton_Click" /></toolkit:SettingsCard>
             </StackPanel>
         </ScrollViewer>
@@ -143,41 +183,40 @@
 
                 <TextBlock Text="项目与支持" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
                 <toolkit:SettingsCard Header="GitHub 仓库" Description="Kaurisss/FluentShell · 查看源码与参与贡献。">
-                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Link" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Link" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="RepositoryLink" Style="{StaticResource AboutProjectLinkStyle}" Content="打开仓库" NavigateUri="https://github.com/Kaurisss/FluentShell" AutomationProperties.Name="在浏览器中打开 FluentShell GitHub 仓库" />
                 </toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="版本发布" Description="查看发布记录并下载新版本。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDownloadIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="ArrowDownload" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="ReleasesLink" Style="{StaticResource AboutProjectLinkStyle}" Content="查看发布" NavigateUri="https://github.com/Kaurisss/FluentShell/releases" AutomationProperties.Name="在浏览器中查看 FluentShell 版本发布" />
                 </toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="问题反馈" Description="报告问题或提出功能建议，帮助改进 FluentShell。">
-                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="Message" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Chat" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="IssuesLink" Style="{StaticResource AboutProjectLinkStyle}" Content="前往 Issues" NavigateUri="https://github.com/Kaurisss/FluentShell/issues" AutomationProperties.Name="在浏览器中打开 FluentShell GitHub Issues" />
                 </toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="使用文档" Description="了解安装步骤、主要功能和使用方法。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsLogsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Document" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="DocumentationLink" Style="{StaticResource AboutProjectLinkStyle}" Content="阅读文档" NavigateUri="https://github.com/Kaurisss/FluentShell#readme" AutomationProperties.Name="在浏览器中阅读 FluentShell 使用文档" />
                 </toolkit:SettingsCard>
 
                 <TextBlock Text="开源与致谢" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
                 <toolkit:SettingsCard Header="MIT 许可证" Description="由 Kaurisss 开发，以 MIT 许可证开放源码。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsConfirmIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="CheckboxChecked" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="LicenseLink" Style="{StaticResource AboutProjectLinkStyle}" Content="查看许可" NavigateUri="https://github.com/Kaurisss/FluentShell/blob/main/LICENSE" AutomationProperties.Name="在浏览器中查看 FluentShell MIT 许可证" />
                 </toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="第三方组件" Description="感谢开源社区；查看图标、终端及其他第三方组件的许可说明。">
-                    <toolkit:SettingsCard.HeaderIcon><SymbolIcon Symbol="People" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="People" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <HyperlinkButton x:Name="ThirdPartyNoticesLink" Style="{StaticResource AboutProjectLinkStyle}" Content="许可与致谢" NavigateUri="https://github.com/Kaurisss/FluentShell/blob/main/THIRD-PARTY-NOTICES.md" AutomationProperties.Name="在浏览器中查看 FluentShell 第三方组件许可与致谢" />
                 </toolkit:SettingsCard>
 
                 <TextBlock Text="日志与诊断" Style="{StaticResource SectionHeadingStyle}" Margin="0,16,0,4" />
                 <toolkit:SettingsCard Header="日志目录" Description="查看应用运行日志，协助排查问题。">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsLogsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Document" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <Button Content="打开日志目录" Click="OpenLogsFolder_Click" /></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="诊断信息">
-                    <toolkit:SettingsCard.HeaderIcon><PathIcon Data="{Binding Source={StaticResource SettingsDiagnosticsIconData}, Converter={StaticResource SettingsIconGeometryConverter}}" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
+                    <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Bug" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
                     <toolkit:SettingsCard.Description><TextBlock x:Name="DiagnosticSummaryText" TextWrapping="Wrap" IsTextSelectionEnabled="True" /></toolkit:SettingsCard.Description>
                     <Button Content="复制诊断信息" Click="CopyDiagnostics_Click" /></toolkit:SettingsCard>
-                <TextBlock Text="诊断信息包含应用版本、操作系统、进程架构和 .NET 版本，可在反馈问题时附上。日志不记录凭据或终端内容。" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock Text="© 2026 Kaurisss" FontSize="12" Margin="0,12,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </ScrollViewer>

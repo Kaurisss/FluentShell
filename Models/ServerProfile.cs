@@ -103,7 +103,6 @@ public sealed partial class RemoteFileItem
 {
     public string Name { get; init; } = string.Empty;
     public string SortName => (IsDirectory ? "0" : "1") + Name;
-    public string IconGlyph => IsDirectory ? "\uE8B7" : "\uE8A5";
     public string TypeLabel { get; init; } = string.Empty;
     public long SizeBytes { get; init; }
     public string SizeLabel { get; init; } = string.Empty;

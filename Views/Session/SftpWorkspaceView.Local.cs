@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Input;
 using Syncfusion.UI.Xaml.DataGrid;
 using Syncfusion.UI.Xaml.Grids;
 using System.Collections.ObjectModel;
+using FluentSymbol = FluentIcons.Common.Symbol;
 
 namespace FluentShell.Views.Session;
 
@@ -161,17 +162,17 @@ public sealed partial class SftpWorkspaceView
     private MenuFlyout BuildLocalRowMenu()
     {
         var menu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
+        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon(FluentSymbol.ArrowClockwise) };
         refresh.Click += (_, _) => RefreshLocalDirectory();
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = CreateMenuIcon("FolderOpen") };
+        var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = CreateMenuIcon(FluentSymbol.FolderOpen) };
         open.Click += async (_, _) => await OpenLocalItemAsync();
         menu.Items.Add(open);
-        var edit = new MenuFlyoutItem { Text = "查看/编辑文本", Icon = CreateMenuIcon("DocumentEdit") };
+        var edit = new MenuFlyoutItem { Text = "查看/编辑文本", Icon = CreateMenuIcon(FluentSymbol.DocumentEdit) };
         edit.Click += async (_, _) => await OpenLocalItemAsync();
         menu.Items.Add(edit);
-        var upload = new MenuFlyoutItem { Text = "上传", Icon = CreateMenuIcon("Upload") };
+        var upload = new MenuFlyoutItem { Text = "上传", Icon = CreateMenuIcon(FluentSymbol.ArrowUpload) };
         menu.Opened += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
@@ -194,22 +195,22 @@ public sealed partial class SftpWorkspaceView
             UploadSelectionRequested?.Invoke(this, files);
         };
         menu.Items.Add(upload);
-        var copy = new MenuFlyoutItem { Text = "复制本地路径", Icon = CreateMenuIcon("Copy") };
+        var copy = new MenuFlyoutItem { Text = "复制本地路径", Icon = CreateMenuIcon(FluentSymbol.Copy) };
         copy.Click += (_, _) => CopyLocalPaths(LocalFiles.SelectedItems.Cast<LocalPaneItem>().Select(item => item.FullPath));
         menu.Items.Add(copy);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var rename = new MenuFlyoutItem { Text = "重命名", Icon = CreateMenuIcon("Rename") };
+        var rename = new MenuFlyoutItem { Text = "重命名", Icon = CreateMenuIcon(FluentSymbol.Rename) };
         rename.Click += async (_, _) => await RenameLocalItemAsync();
         menu.Items.Add(rename);
-        var delete = new MenuFlyoutItem { Text = "删除", Icon = CreateMenuIcon("Delete") };
+        var delete = new MenuFlyoutItem { Text = "删除", Icon = CreateMenuIcon(FluentSymbol.Delete) };
         delete.Click += async (_, _) => await DeleteLocalItemsAsync();
         menu.Items.Add(delete);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon("FolderAdd") };
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon(FluentSymbol.FolderAdd) };
         newFolder.Click += async (_, _) => await CreateLocalFolderAsync();
         menu.Items.Add(newFolder);
         menu.Items.Add(new MenuFlyoutSeparator());
-        var properties = new MenuFlyoutItem { Text = "属性", Icon = CreateMenuIcon("Info") };
+        var properties = new MenuFlyoutItem { Text = "属性", Icon = CreateMenuIcon(FluentSymbol.Info) };
         properties.Click += async (_, _) => await ShowLocalPropertiesAsync();
         menu.Items.Add(properties);
         menu.Opened += (_, _) =>
@@ -239,7 +240,6 @@ public sealed partial class SftpWorkspaceView
         public static LocalPaneItem? ParentOf(string path) => Directory.GetParent(path) is { } parent
             ? new LocalPaneItem("..", parent.FullName, true, 0, default) : null;
 
-        public string IconGlyph => IsDirectory ? "\uE8B7" : "\uE8A5";
         public string SortName => Name == ".." ? "0" : $"{(IsDirectory ? 1 : 2)}{Name}";
         public string ModifiedLabel => Name == ".." ? string.Empty : ModifiedAt.ToString("yyyy-MM-dd HH:mm");
         public string SizeLabel => IsDirectory ? "—" : SizeBytes switch

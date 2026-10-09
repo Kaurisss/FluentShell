@@ -53,6 +53,18 @@ internal sealed partial class SmokeApp
         foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
         {
             root.RequestedTheme = theme;
+            var navigation = (NavigationView)root.FindName("RootNavigationView");
+            var paneWasOpen = navigation.IsPaneOpen;
+            var paneToggle = (Button)root.FindName("PaneToggleButton");
+            foreach (var open in new[] { true, false })
+            {
+                navigation.IsPaneOpen = open;
+                await Task.Delay(250);
+                root.UpdateLayout();
+                await CaptureAsync(paneToggle, Program.ReportPath + $".{theme}.panel.{(open ? "open" : "closed")}.png");
+            }
+            navigation.IsPaneOpen = paneWasOpen;
+            await Task.Delay(250);
             shell.SelectSession(first);
             await Task.Delay(400);
             NewTab();
@@ -83,7 +95,6 @@ internal sealed partial class SmokeApp
 
             NewTab();
             await Task.Delay(400);
-            var navigation = (NavigationView)root.FindName("RootNavigationView");
             navigation.SelectedItem = root.FindName("SettingsNavItem");
             await Task.Delay(60);
             if (scale.ScaleX != 1 || scale.ScaleY != 1 || (animationsEnabled && scale.TranslateY <= 0))

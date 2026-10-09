@@ -1,5 +1,6 @@
 using FluentShell.Core;
-using FluentShell.Views.Converters;
+using FluentSymbol = FluentIcons.Common.Symbol;
+using FluentSymbolIcon = FluentIcons.WinUI.SymbolIcon;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,9 +16,6 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetPhysicalCursorPos(out PointInt32 point);
-    // Official Fluent System Icons: caret_left_12_filled and caret_right_12_filled.
-    private const string CaretLeftPath = "M6.29863 3.28162C6.93081 2.65918 8.00024 3.10702 8.00024 3.99419V8.0062C8.00024 8.89338 6.9308 9.34122 6.29863 8.71877L4.26129 6.71276C3.86342 6.32102 3.86343 5.67936 4.26129 5.28763L6.29863 3.28162Z";
-    private const string CaretRightPath = "M5.7016 3.28162C5.06943 2.65918 4 3.10702 4 3.99419V8.0062C4 8.89338 5.06944 9.34122 5.70161 8.71877L7.73895 6.71276C8.13681 6.32102 8.13681 5.67936 7.73895 5.28763L5.7016 3.28162Z";
     private readonly Dictionary<IShellSession, ToggleButton> _tabButtons = [];
     private readonly Dictionary<IShellSession, Grid> _tabContainers = [];
     private bool _updatingSelection;
@@ -29,8 +27,6 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
     public SessionTabStrip()
     {
         InitializeComponent();
-        CaretLeftIcon.Data = IconGeometryConverter.Parse(CaretLeftPath, 12);
-        CaretRightIcon.Data = IconGeometryConverter.Parse(CaretRightPath, 12);
     }
 
     public event EventHandler? NewSessionRequested;
@@ -72,7 +68,7 @@ public sealed partial class SessionTabStrip : UserControl, ISessionTabStrip
         var closeButton = new Button
         {
             Tag = session,
-            Content = new FontIcon { Glyph = "\uE711", FontSize = 10 },
+            Content = new FluentSymbolIcon { Symbol = FluentSymbol.Dismiss, Width = 10, Height = 10, FontSize = 10 },
             Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"],
             Width = 28,
             Height = 32,

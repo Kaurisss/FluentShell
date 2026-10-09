@@ -1,5 +1,20 @@
 # Offline theme regression
 
+For terminal color settings, pass `--terminal-colors-smoke` after the report path.
+It exercises the actual color picker save, cancel and per-color default actions,
+persists only temporary settings, and checks independent light/dark resets.
+It captures both expanded palettes in light/dark themes and verifies side-by-side
+groups, narrow layouts, all 21 color fields and keyboard focus without clipping.
+
+For settings icons, pass `--settings-icons-smoke` after the report path.
+It checks all eight settings pages in light and dark themes, verifies
+20 x 20 FluentIcons card headers, captures each page, and exercises the hint
+flyout. It also checks the compact hint button (24 x 24) and its centered
+FluentIcons artwork (16 x 16). No saved profiles or SSH servers are used.
+The hint uses the original FluentIcon size-16 artwork at font size 14 inside its
+16 x 16 box to leave room for antialiasing. It checks its four edges
+at 100%, 125%, and 150% render scales.
+
 For new-tab motion, pass `--navigation-animation-smoke`. It uses the production
 `MainWindow` with profile loading disabled and two offline workspaces. It checks
 the actual add button from an active session, intermediate scale/opacity,

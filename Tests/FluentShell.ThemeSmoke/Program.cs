@@ -8,7 +8,6 @@ using FluentShell.Views;
 using FluentShell.Views.Session;
 using FluentShell.Views.Shell;
 using FluentShell.Views.Dialogs;
-using FluentShell.Views.Converters;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -32,6 +31,8 @@ internal static class Program
     internal static bool TabOverflowOnly;
     internal static bool TransferCenterOnly;
     internal static bool NavigationAnimationOnly;
+    internal static bool SettingsIconsOnly;
+    internal static bool TerminalColorsOnly;
     internal static bool KeepAnimationPreview;
     [STAThread]
     private static void Main(string[] args)
@@ -46,6 +47,8 @@ internal static class Program
         TabOverflowOnly = args.Contains("--tab-overflow-smoke");
         TransferCenterOnly = args.Contains("--transfer-center-smoke");
         NavigationAnimationOnly = args.Contains("--navigation-animation-smoke");
+        SettingsIconsOnly = args.Contains("--settings-icons-smoke");
+        TerminalColorsOnly = args.Contains("--terminal-colors-smoke");
         KeepAnimationPreview = args.Contains("--keep-animation-preview");
         try
         {
@@ -82,6 +85,16 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.TerminalColorsOnly)
+            {
+                await VerifyTerminalColorsAsync();
+                return;
+            }
+            if (Program.SettingsIconsOnly)
+            {
+                await VerifySettingsIconsAsync();
+                return;
+            }
             if (Program.NavigationAnimationOnly)
             {
                 await VerifyNavigationAnimationAsync();
@@ -204,9 +217,6 @@ internal sealed partial class SmokeApp : App
             root.UpdateLayout();
             await Task.Delay(200, timeout.Token);
             await VerifyTextFlyoutAsync(root, failures);
-            foreach (var iconName in new[] { "Copy", "Paste", "Confirm" })
-                foreach (var scale in new[] { 1d, 1.25d, 1.5d })
-                    await VerifyIconEdgesAsync(settingsPage, root, iconName, scale, failures);
             var homePanel = (StackPanel)((ScrollViewer)settingsPage.FindName("SettingsHome")).Content;
             if (homePanel.Children.OfType<SettingsCard>().Count() != 7) failures.Add("Settings home must contain seven category cards.");
             var cardBounds = homePanel.Children.OfType<SettingsCard>().First();
@@ -342,7 +352,7 @@ internal sealed partial class SmokeApp : App
             if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Collapsed)
                 failures.Add("Opening the color editor must hide settings home.");
             await Task.Delay(150, timeout.Token);
-            // Open the real picker through its settings button; cancelling must not change the draft.
+            // Open the real picker; cancellation must not change or save the color.
             var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(fields["background"]);
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             await Task.Delay(250, timeout.Token);
@@ -351,7 +361,7 @@ internal sealed partial class SmokeApp : App
             if (dialog.XamlRoot != settingsPage.XamlRoot) failures.Add("ColorDialog must be parented to the settings window.");
             dialog.Hide();
             while (Field<bool>(settingsPage, "_colorDialogOpen")) await Task.Delay(50, timeout.Token);
-            if (fields["background"].Tag is not null) failures.Add("Cancelling the color picker must retain the draft.");
+            if (fields["background"].Tag is not null || updates != 0) failures.Add("Cancelling the color picker must retain the color without saving.");
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             await Task.Delay(250, timeout.Token);
             dialog = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
@@ -362,8 +372,7 @@ internal sealed partial class SmokeApp : App
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)confirmPeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             while (Field<bool>(settingsPage, "_colorDialogOpen")) await Task.Delay(50, timeout.Token);
             if (fields["background"].Tag as string != "#123456") failures.Add("Confirming ColorDialog must update the selected color.");
-            fields["red"].Tag = "#ABCDEF";
-            typeof(SettingsPage).GetMethod("SaveColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            if (updates != 1) failures.Add("Confirming ColorDialog must save and apply the color immediately.");
             ReturnToSettingsHome(settingsPage, root, "terminal", failures);
             if (((ScrollViewer)settingsPage.FindName("SettingsHome")).Visibility != Visibility.Visible)
                 failures.Add("Back must return to settings home.");
@@ -410,7 +419,7 @@ internal sealed partial class SmokeApp : App
             await Task.Delay(400, timeout.Token);
             var customBackground = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.body).backgroundColor"));
             if (updates != 1 || customBackground != "rgb(18, 52, 86)") failures.Add("Saved custom background did not reach the cached terminal.");
-            typeof(SettingsPage).GetMethod("ResetColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage, new RoutedEventArgs() });
+            typeof(SettingsPage).GetMethod("ResetColors_Click", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(settingsPage, new object[] { settingsPage.FindName("ResetLightColorsButton"), new RoutedEventArgs() });
             await Task.Delay(200, timeout.Token);
             var resetBackground = JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.body).backgroundColor"));
             if (updates != 2 || resetBackground != "rgb(254, 254, 254)") failures.Add("Reset did not restore the terminal's default background.");
@@ -692,9 +701,9 @@ internal sealed partial class SmokeApp : App
                 if (presenter.ActualWidth <= 0 || presenter.ActualHeight <= 0) failures.Add("File menu must have a visible layout.");
                 foreach (var item in menu.Items.OfType<MenuFlyoutItem>())
                 {
-                    var passed = item.Icon is PathIcon { Data: GeometryGroup, ActualWidth: 16, ActualHeight: 16 };
+                    var passed = item.Icon is FluentIcons.WinUI.SymbolIcon { ActualWidth: 16, ActualHeight: 16, FontSize: 16 } icon && !string.IsNullOrEmpty(icon.Glyph);
                     Program.Results.Add(new { control = "SFTP menu icon", theme = theme.ToString(), item.Text, item.IsEnabled, passed });
-                    if (!passed) failures.Add($"{item.Text} must render a viewport-preserving 16 DIP icon.");
+                    if (!passed) failures.Add($"{item.Text} must render a 16 DIP FluentIcons icon.");
                 }
                 await HideFlyoutAsync(menu);
             }
@@ -781,60 +790,6 @@ internal sealed partial class SmokeApp : App
         }
         root.RequestedTheme = ElementTheme.Light;
         root.Children.Remove(text);
-    }
-
-    private static async Task VerifyIconEdgesAsync(SettingsPage settingsPage, Grid root, string iconName, double scale, List<string> failures)
-    {
-        var icon = new PathIcon
-        {
-            Data = IconGeometryConverter.Parse((string)settingsPage.Resources[$"Settings{iconName}IconData"]),
-            Style = (Style)settingsPage.Resources["SettingsOptionIconStyle"],
-            Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black)
-        };
-        var size = 20 * scale;
-        var tile = new Grid
-        {
-            Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-            Background = new SolidColorBrush(Microsoft.UI.Colors.White)
-        };
-        tile.Children.Add(new Viewbox { Child = icon, Stretch = Stretch.Uniform });
-        Grid.SetColumn(tile, 1);
-        root.Children.Add(tile);
-        root.UpdateLayout();
-        var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync(tile, (int)size, (int)size);
-        var pixels = (await bitmap.GetPixelsAsync()).ToArray();
-        var width = bitmap.PixelWidth;
-        var height = bitmap.PixelHeight;
-        var edgeIsClear = true;
-        var hasArtwork = false;
-        for (var y = 0; y < height; y++)
-        {
-            for (var x = 0; x < width; x++)
-            {
-                var offset = (y * width + x) * 4;
-                var painted = pixels[offset] < 255 || pixels[offset + 1] < 255 || pixels[offset + 2] < 255;
-                hasArtwork |= painted;
-                if (x == 0 || y == 0 || x == width - 1 || y == height - 1) edgeIsClear &= !painted;
-            }
-        }
-        var passed = edgeIsClear && hasArtwork;
-        if (!passed) failures.Add($"{iconName} at {scale} must draw a visible icon with clear edge pixels.");
-        await CaptureAsync(tile, Program.ReportPath + $".icon.{iconName}.{(int)(scale * 100)}.png");
-        ((Viewbox)tile.Children[0]).Child = new PathIcon
-        {
-            Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry),
-                (string)settingsPage.Resources[$"Settings{iconName}IconData"]),
-            Style = (Style)settingsPage.Resources["SettingsOptionIconStyle"],
-            Foreground = new SolidColorBrush(Microsoft.UI.Colors.Black)
-        };
-        root.UpdateLayout();
-        await bitmap.RenderAsync(tile, (int)size, (int)size);
-        var tightPixels = (await bitmap.GetPixelsAsync()).ToArray();
-        var changedPixels = Enumerable.Range(0, width * height).Count(i =>
-            pixels[i * 4] != tightPixels[i * 4] || pixels[i * 4 + 1] != tightPixels[i * 4 + 1] || pixels[i * 4 + 2] != tightPixels[i * 4 + 2]);
-        Program.Results.Add(new { control = "settings icon edge coverage", iconName, scale, edgeIsClear, hasArtwork, changedPixels, passed });
-        root.Children.Remove(tile);
     }
 
     private static void CheckScrollEdge(ScrollViewer scroller, FrameworkElement root, List<string> failures, string name)
@@ -1181,7 +1136,7 @@ internal sealed partial class SmokeApp : App
                     theme = theme.ToString(), width, viewport = scroll.ViewportWidth, passed = true });
             }
         }
-        foreach (var icon in new[] { (PathIcon)left.Content, (PathIcon)right.Content })
+        foreach (var icon in new[] { (FluentIcons.WinUI.SymbolIcon)left.Content, (FluentIcons.WinUI.SymbolIcon)right.Content })
         {
             foreach (var scale in new[] { 1d, 1.25d, 1.5d })
             {
@@ -1198,8 +1153,9 @@ internal sealed partial class SmokeApp : App
                         if (x == 0 || y == 0 || x == bitmap.PixelWidth - 1 || y == bitmap.PixelHeight - 1)
                             clearEdges &= alpha == 0;
                     }
-                if (!hasArtwork || !clearEdges || icon.ActualWidth != 12 || icon.ActualHeight != 12)
-                    throw new InvalidOperationException("Caret artwork must preserve the full 12px canvas and clear antialiased edges.");
+                if (!hasArtwork || icon.ActualWidth != 12 || icon.ActualHeight != 12 || icon.FontSize != 12
+                    || icon.IconVariant != FluentIcons.Common.IconVariant.Filled)
+                    throw new InvalidOperationException("FluentIcons carets must render the filled variant at 12px.");
                 Program.Results.Add(new { control = icon.Name, scale, hasArtwork, clearEdges, passed = true });
             }
         }

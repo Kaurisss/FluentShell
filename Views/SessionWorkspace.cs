@@ -6,7 +6,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Markup;
+using FluentSymbol = FluentIcons.Common.Symbol;
+using FluentSymbolIcon = FluentIcons.WinUI.SymbolIcon;
 
 namespace FluentShell.Views;
 
@@ -23,8 +24,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
 
     /// <summary>越过 SFTP 最小高度后还要再往下拖这么多，才认定用户是想折叠而不是手抖。</summary>
     private const double CollapseOvershoot = 60;
-
-    private const string PanelBottomExpandPath = "M10.5 8.82585L11.3737 9.82437C11.5556 10.0322 11.8714 10.0532 12.0793 9.87141C12.2871 9.68956 12.3081 9.37368 12.1263 9.16586L10.3763 7.16586C10.2814 7.05736 10.1442 6.99512 10 6.99512C9.85583 6.99512 9.71866 7.05736 9.62372 7.16586L7.87372 9.16586C7.69188 9.37368 7.71294 9.68956 7.92075 9.87141C8.12857 10.0532 8.44445 10.0322 8.6263 9.82437L9.50001 8.82583L9.50001 12.5049C9.50001 12.781 9.72387 13.0049 10 13.0049C10.2762 13.0049 10.5 12.781 10.5 12.5049L10.5 8.82585ZM4 4C2.89543 4 2 4.89543 2 6V14C2 15.1046 2.89543 16 4 16H16C17.1046 16 18 15.1046 18 14V6C18 4.89543 17.1046 4 16 4H4ZM3 6C3 5.44772 3.44772 5 4 5H16C16.5523 5 17 5.44772 17 6V11H11.5V12H17V14C17 14.5523 16.5523 15 16 15H4C3.44772 15 3 14.5523 3 14V12H8.50003V11H3V6Z";
 
     private readonly ServerProfile _profile;
     private readonly DispatcherQueue _dispatcherQueue;
@@ -160,7 +159,7 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
         // 这一行是 Auto 高：留白挂在按钮上而不是行上，SFTP 展开时按钮隐藏，整行就真的塌成 0。
         var restoreRow = new Grid();
         _sftpRestoreButton.Margin = new Thickness(0, 4, 0, 4);
-        _sftpRestoreButton.Content = CreateFluentPathIcon(PanelBottomExpandPath);
+        _sftpRestoreButton.Content = new FluentSymbolIcon { Symbol = FluentSymbol.PanelBottomExpand };
         _sftpRestoreButton.Style = (Style)Application.Current.Resources["TitleBarSessionIconButtonStyle"];
         _sftpRestoreButton.HorizontalAlignment = HorizontalAlignment.Left;
         ToolTipService.SetToolTip(_sftpRestoreButton, "展开 SFTP 文件管理器");
@@ -301,10 +300,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
         _workspaceGrid.RowDefinitions[0].Height = new GridLength(terminalHeight, GridUnitType.Star);
         _workspaceGrid.RowDefinitions[1].Height = new GridLength(total - terminalHeight, GridUnitType.Star);
     }
-
-    private static PathIcon CreateFluentPathIcon(string pathData) =>
-        (PathIcon)XamlReader.Load(
-            $"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\"{pathData}\" Width=\"20\" Height=\"20\" />");
 
     public async ValueTask DisposeAsync()
     {

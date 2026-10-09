@@ -23,7 +23,7 @@ public sealed class ColorDialog : ContentDialog
             IsColorChannelTextInputVisible = true
         };
         Content = new ScrollViewer { Content = _picker, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        PrimaryButtonText = "确定";
+        PrimaryButtonText = "保存";
         SecondaryButtonText = "使用默认";
         CloseButtonText = "取消";
         DefaultButton = ContentDialogButton.Primary;

@@ -3,6 +3,7 @@
     x:Class="FluentShell.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:icons="using:FluentIcons.WinUI"
     xmlns:shell="using:FluentShell.Views.Shell"
     Title="FluentShell">
 
@@ -64,16 +65,16 @@
             PaneOpening="RootNavigationView_PaneOpening"
             PaneClosing="RootNavigationView_PaneClosing">
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="OverviewNavItem" Content="概览" Tag="overview"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers"><NavigationViewItem.Icon><FontIcon Glyph="&#xE968;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="OverviewNavItem" Content="概览" Tag="overview"><NavigationViewItem.Icon><icons:SymbolIcon Symbol="Home" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="ServersNavItem" Content="已保存的服务器" Tag="servers"><NavigationViewItem.Icon><icons:SymbolIcon Symbol="Server" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem x:Name="TransfersNavItem" Content="传输任务" SelectsOnInvoked="False" Visibility="Collapsed"
                                     AutomationProperties.Name="传输任务" ToolTipService.ToolTip="查看所有连接的传输任务">
-                    <NavigationViewItem.Icon><SymbolIcon Symbol="Switch" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><icons:SymbolIcon Symbol="ArrowSwap" /></NavigationViewItem.Icon>
                     <NavigationViewItem.InfoBadge><InfoBadge x:Name="TransfersBadge" Visibility="Collapsed" /></NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="SettingsNavItem" Content="设置" Tag="settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="SettingsNavItem" Content="设置" Tag="settings"><NavigationViewItem.Icon><icons:SymbolIcon Symbol="Settings" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.FooterMenuItems>
             <NavigationView.PaneCustomContent>
                 <shell:ConnectedServerSidebar x:Name="ConnectedSidebar" Visibility="Collapsed" VerticalAlignment="Stretch" />

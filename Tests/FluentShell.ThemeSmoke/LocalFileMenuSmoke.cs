@@ -1,5 +1,6 @@
 using System.Reflection;
 using FluentShell.Core;
+using FluentShell.Models;
 using FluentShell.Views.Session;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -77,7 +78,22 @@ internal sealed partial class SmokeApp
             foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 root.RequestedTheme = theme;
-                view.Render(new SftpSessionSnapshot(SftpSessionState.Idle, SftpDirectoryListing.Empty("/"), true, true, false, "", null));
+                view.Render(new SftpSessionSnapshot(SftpSessionState.Idle, new SftpDirectoryListing("/", [
+                    new RemoteFileItem { Name = "remote-folder", IsDirectory = true, FullPath = "/remote-folder" },
+                    new RemoteFileItem { Name = "remote-file.txt", FullPath = "/remote-file.txt" }
+                ]), true, true, false, "", null));
+                await Task.Delay(120, timeout.Token);
+                root.UpdateLayout();
+                foreach (var table in new[] { local, (SfDataGrid)view.FindName("RemoteTable") })
+                {
+                    var icons = Descendants(table).OfType<FluentIcons.WinUI.SymbolIcon>().ToArray();
+                    Check(icons.Any(icon => icon.Symbol == FluentIcons.Common.Symbol.Folder)
+                        && icons.Any(icon => icon.Symbol == FluentIcons.Common.Symbol.Document)
+                        && icons.All(icon => icon.ActualWidth == 16 && icon.ActualHeight == 16
+                            && icon.FontSize == 16 && !string.IsNullOrEmpty(icon.Glyph)),
+                        $"{theme}: {table.Name} renders distinct FluentIcons for folders and files at 16 DIPs");
+                }
+                await CaptureAsync(root, Program.ReportPath + $".{theme}.files.png");
                 Select("文件.txt");
                 await OpenMenu(menu);
                 Check(Command("重命名").IsEnabled && Command("删除").IsEnabled && Command("属性").IsEnabled &&

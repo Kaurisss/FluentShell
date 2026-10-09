@@ -2,6 +2,7 @@ using System.ComponentModel;
 using FluentShell.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using FluentSymbol = FluentIcons.Common.Symbol;
 
 namespace FluentShell.Views.Shell;
 
@@ -69,19 +70,19 @@ public sealed partial class TransferTaskCard : UserControl
     private Visibility CurrentPathVisibility(TransferQueue? queue) =>
         string.IsNullOrEmpty(CurrentPath(queue)) ? Visibility.Collapsed : Visibility.Visible;
     private Visibility OutcomeVisibility(bool isActive) => isActive ? Visibility.Collapsed : Visibility.Visible;
-    private Symbol PauseSymbol(TransferTaskState state) => state == TransferTaskState.Paused ? Symbol.Play : Symbol.Pause;
-    private Symbol ItemSymbol(TransferTaskKind kind) => kind switch
+    private FluentSymbol PauseSymbol(TransferTaskState state) => state == TransferTaskState.Paused ? FluentSymbol.Play : FluentSymbol.Pause;
+    private FluentSymbol ItemSymbol(TransferTaskKind kind) => kind switch
     {
-        TransferTaskKind.Folder => Symbol.Folder,
-        TransferTaskKind.Batch => Symbol.Copy,
-        _ => Symbol.Document
+        TransferTaskKind.Folder => FluentSymbol.Folder,
+        TransferTaskKind.Batch => FluentSymbol.Copy,
+        _ => FluentSymbol.Document
     };
-    private Symbol StatusSymbol(TransferTaskState state) => state switch
+    private FluentSymbol StatusSymbol(TransferTaskState state) => state switch
     {
-        TransferTaskState.Paused => Symbol.Pause,
-        TransferTaskState.Completed => Symbol.Accept,
-        TransferTaskState.Failed or TransferTaskState.Disconnected => Symbol.Important,
-        TransferTaskState.Discarded => Symbol.Delete,
-        _ => Symbol.Sync
+        TransferTaskState.Paused => FluentSymbol.Pause,
+        TransferTaskState.Completed => FluentSymbol.Checkmark,
+        TransferTaskState.Failed or TransferTaskState.Disconnected => FluentSymbol.ErrorCircle,
+        TransferTaskState.Discarded => FluentSymbol.Delete,
+        _ => FluentSymbol.ArrowSync
     };
 }
