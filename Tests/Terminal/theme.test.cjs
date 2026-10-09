@@ -8,13 +8,14 @@ const { test } = require('node:test');
 
 const html = readFileSync(join(__dirname, '../../Assets/Terminal/index.html'), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-function page() {
+function page(search = '') {
     let terminal, receive;
     const document = {
         body: { style: {} }, documentElement: { style: {} }, getElementById: () => ({ addEventListener() {}, focus() {} })
     };
     const context = {
         document,
+        URLSearchParams,
         Terminal: class {
             constructor(options) { this.options = options; this.output = ''; terminal = this; }
             loadAddon() {} open() {} onData() {} onResize() {} focus() {}
@@ -25,7 +26,7 @@ function page() {
         FitAddon: { FitAddon: class { fit() {} } },
         SearchAddon: { SearchAddon: class { findNext() {} } },
         ResizeObserver: class { observe() {} }, requestAnimationFrame: callback => callback(),
-        window: { chrome: { webview: {
+        window: { location: { search }, chrome: { webview: {
             postMessage() {}, addEventListener: (_, callback) => { receive = callback; }
         } } }
     };
@@ -119,4 +120,32 @@ test('ANSI foreground, background, indexed and truecolor escapes reach xterm int
         + '\x1b[38;5;208mindexed\x1b[0m \x1b[38;2;255;128;0mtruecolor\x1b[0m';
     send({ type: 'write', data: output });
     assert.equal(terminal.output, output);
+});
+
+test('backdrop opt-in keeps page and xterm transparent across themes and color overrides', () => {
+    const { terminal, document, send } = page('?backdrop=1');
+    assert.equal(terminal.options.allowTransparency, true);
+    assert.equal(document.body.className, 'terminal-backdrop');
+    assert.equal(terminal.options.theme.background, '#00000000');
+    assert.equal(document.body.style.backgroundColor, 'transparent');
+    send({ type: 'write', data: '\x1b[44mANSI cell background\x1b[0m' });
+    for (const value of ['dark', 'light', 'dark']) {
+        send({ type: 'theme', value, colors: { background: '#112233', red: '#abcdef' } });
+        assert.equal(terminal.options.theme.background, '#00000000');
+        assert.equal(document.body.style.backgroundColor, '#00000000');
+        assert.equal(terminal.options.theme.red, '#abcdef');
+        assert.equal(document.documentElement.style.colorScheme, value);
+        assert.equal(terminal.output, '\x1b[44mANSI cell background\x1b[0m');
+    }
+});
+
+test('normal sessions and unrecognized backdrop values retain opaque backgrounds', () => {
+    for (const search of ['', '?backdrop=0', '?backdrop=true']) {
+        const { terminal, document, send } = page(search);
+        assert.equal(terminal.options.allowTransparency, false);
+        assert.equal(document.body.className, '');
+        send({ type: 'theme', value: 'dark', colors: { background: '#112233' } });
+        assert.equal(terminal.options.theme.background, '#112233');
+        assert.equal(document.body.style.backgroundColor, '#112233');
+    }
 });

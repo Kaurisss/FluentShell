@@ -21,6 +21,10 @@
         #terminal {
             outline: none;
         }
+        /* The shipped viewport stylesheet has a black fallback background. */
+        .terminal-backdrop .xterm-viewport {
+            background-color: transparent !important;
+        }
         #search { position: fixed; right: 16px; top: 16px; z-index: 2; padding: 8px; background: Canvas; color: CanvasText; border: 1px solid GrayText; }
     </style>
 </head>
@@ -32,6 +36,9 @@
     <script src="addon-search.js"></script>
     <script>
         (() => {
+            // Opt-in for the offline Windows backdrop prototype. Normal sessions stay opaque.
+            const useBackdrop = new URLSearchParams(window.location.search).get('backdrop') === '1';
+            document.body.className = useBackdrop ? 'terminal-backdrop' : '';
             const themes = {
                 light: {
                     background: '#FEFEFE', foreground: '#17212B',
@@ -54,14 +61,16 @@
             };
             const terminal = new Terminal({
                 allowProposedApi: true,
+                allowTransparency: useBackdrop,
                 convertEol: false,
                 cursorBlink: true,
                 cursorStyle: 'bar',
                 fontFamily: 'Cascadia Mono, Consolas, monospace',
                 fontSize: 14,
                 scrollback: 20000,
-                theme: themes.light
+                theme: { ...themes.light, background: useBackdrop ? '#00000000' : themes.light.background }
             });
+            document.body.style.backgroundColor = useBackdrop ? 'transparent' : themes.light.background;
             const fitAddon = new FitAddon.FitAddon();
             terminal.loadAddon(fitAddon);
             terminal.open(document.getElementById('terminal'));
@@ -118,6 +127,7 @@
                         if (colors && typeof colors[key] === 'string' && /^#[0-9a-f]{6}$/i.test(colors[key]))
                             theme[key] = colors[key];
                     }
+                    if (useBackdrop) theme.background = '#00000000';
                     terminal.options.theme = theme;
                     document.body.style.backgroundColor = theme.background;
                     document.documentElement.style.colorScheme = value === 'light' ? 'light' : 'dark';

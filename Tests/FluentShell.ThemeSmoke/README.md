@@ -1,5 +1,42 @@
 # Offline theme regression
 
+For the xterm Windows backdrop prototype, pass `--terminal-backdrop-smoke`.
+It compares the stock WinUI WebView2 control with a directly hosted HWND WebView2,
+both using the shipped terminal page with the opt-in `?backdrop=1` URL. Normal
+sessions keep their opaque backgrounds and saved terminal colors. The prototype
+uses separate temporary browser profiles, synthetic terminal output and local
+input echo; it never connects to SSH or loads saved application settings.
+
+```powershell
+New-Item -ItemType Directory .tmp/terminal-backdrop -Force | Out-Null
+dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
+Start-Process -FilePath Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe -ArgumentList '.tmp/terminal-backdrop/result.json', '--terminal-backdrop-smoke' -WindowStyle Hidden -Wait
+```
+
+Add `--keep-backdrop-preview` and omit `-Wait` to leave the checked window open
+for manual material/theme/background switching and typing. The JSON report is
+written after the checks finish. This desktop check needs `winapp` on PATH and
+briefly foregrounds only its own window for native screenshots and keyboard input.
+The harness uses the application's PerMonitorV2 manifest so viewport positioning
+and screen samples agree at 150% DPI.
+
+The check measures actual screen pixels over two changing XAML background colors,
+captures Mica and Desktop Acrylic in light/dark themes, verifies output retention,
+real keyboard input and local echo, resize, and an opaque fallback. Screen captures
+are required because RenderTargetBitmap omits WebView and system materials.
+
+Verified on Windows 11 build 26200, WebView2 154.0.4258.62, Windows App SDK 2.3.1,
+at 150% scaling: the HWND host reveals both diagnostic colors and the window's
+Mica/Acrylic material; the stock WinUI control retains its solid theme surface.
+The shipped xterm viewport's black CSS fallback also needs a scoped transparent
+override, which is enabled only for the prototype URL.
+
+This is a feasibility prototype, not a production replacement for TerminalPane.
+A browser HWND must be kept above WinUI's child island and cannot participate in
+normal XAML clipping, overlays and z-order. Production adoption still needs
+session detach/reattach, dialogs/flyouts, IME, accessibility, and multiple-monitor
+DPI verification, or a Composition host that integrates those behaviors.
+
 For terminal color settings, pass `--terminal-colors-smoke` after the report path.
 It exercises the actual color picker save, cancel and per-color default actions,
 persists only temporary settings, and checks independent light/dark resets.

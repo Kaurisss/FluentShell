@@ -34,6 +34,8 @@ internal static class Program
     internal static bool SettingsIconsOnly;
     internal static bool TerminalColorsOnly;
     internal static bool KeepAnimationPreview;
+    internal static bool TerminalBackdropOnly;
+    internal static bool KeepBackdropPreview;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -50,6 +52,8 @@ internal static class Program
         SettingsIconsOnly = args.Contains("--settings-icons-smoke");
         TerminalColorsOnly = args.Contains("--terminal-colors-smoke");
         KeepAnimationPreview = args.Contains("--keep-animation-preview");
+        TerminalBackdropOnly = args.Contains("--terminal-backdrop-smoke");
+        KeepBackdropPreview = args.Contains("--keep-backdrop-preview");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -85,6 +89,11 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.TerminalBackdropOnly)
+            {
+                await VerifyTerminalBackdropAsync();
+                return;
+            }
             if (Program.TerminalColorsOnly)
             {
                 await VerifyTerminalColorsAsync();
