@@ -53,6 +53,12 @@ public interface ISftpPaneTransferView
 
 public sealed record SftpPaneDownload(IReadOnlyList<RemoteFileItem> Items, string Destination);
 
+/// <summary>拖放上传固定到松手时的远程目录；解除工作区时清除回调。</summary>
+public interface ISftpDropUploadView
+{
+    void SetUploadDropHandler(Func<IReadOnlyList<SftpUploadEntry>, string, Task>? handler);
+}
+
 /// <summary>属性窗口按需计算目录大小；窗口关闭时由视图取消请求。</summary>
 public interface ISftpPropertiesView
 {

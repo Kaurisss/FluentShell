@@ -1,5 +1,6 @@
 ﻿using FluentShell.Core;
 using FluentShell.Models;
+using FluentShell.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,6 +16,9 @@ public sealed partial class SftpWorkspaceView
     private string? _localPath;
     private int _localReadVersion;
     private bool _localLoaded;
+    private readonly LocalFileService _localFileService = new();
+    private bool _localOperationBusy;
+    private ContentDialog? _localOperationDialog;
     public event EventHandler<IReadOnlyList<SftpUploadEntry>>? UploadSelectionRequested;
     public event EventHandler<SftpPaneDownload>? DownloadToLocalRequested;
     public event EventHandler<IReadOnlyList<RemoteFileItem>>? DownloadSelectionRequested;
@@ -26,11 +30,7 @@ public sealed partial class SftpWorkspaceView
         LocalFiles.CellDoubleTapped += LocalFiles_DoubleTapped;
         LocalFiles.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(LocalFiles_KeyDown), true);
         LocalFiles.RecordContextFlyout = BuildLocalRowMenu();
-        var emptyAreaMenu = new MenuFlyout();
-        var refresh = new MenuFlyoutItem { Text = "刷新", Icon = CreateMenuIcon("Refresh") };
-        refresh.Click += (_, _) => RefreshLocalDirectory();
-        emptyAreaMenu.Items.Add(refresh);
-        ApplyChineseMenuFont(emptyAreaMenu);
+        var emptyAreaMenu = BuildLocalEmptyAreaMenu();
         LocalFiles.RightTapped += (_, e) =>
         {
             if (e.OriginalSource is DependencyObject source && IsOnRowOrChrome(source, LocalFiles)) return;
@@ -45,7 +45,7 @@ public sealed partial class SftpWorkspaceView
         LocalFiles.Columns.Add(new GridTemplateColumn
         {
             HeaderText = "名称", MappingName = nameof(LocalPaneItem.SortName),
-            CellTemplate = (DataTemplate)Resources["RemoteFileNameCellTemplate"],
+            CellTemplate = (DataTemplate)Resources["LocalFileNameCellTemplate"],
             ColumnWidthMode = ColumnWidthMode.AutoLastColumnFill, MinimumWidth = 120
         });
         LocalFiles.Columns.Add(new GridTemplateColumn
@@ -69,12 +69,12 @@ public sealed partial class SftpWorkspaceView
             _localLoaded = true;
             _ = NavigateLocalAsync(_localPath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         };
-        Unloaded += (_, _) => { _localLoaded = false; ++_localReadVersion; };
+        Unloaded += (_, _) => { _localLoaded = false; ++_localReadVersion; _localOperationDialog?.Hide(); };
     }
 
     public void RefreshLocalDirectory()
     {
-        if (_localLoaded && _localPath is not null) _ = NavigateLocalAsync(_localPath);
+        if (_localLoaded && !_localOperationBusy && _localPath is not null) _ = NavigateLocalAsync(_localPath);
     }
 
     private async Task NavigateLocalAsync(string path)
@@ -91,7 +91,8 @@ public sealed partial class SftpWorkspaceView
                     .Where(info => _preferences.ShowHiddenFiles || (!info.Name.StartsWith('.') && (info.Attributes & FileAttributes.Hidden) == 0))
                     .Select(info => new LocalPaneItem(info.Name, info.FullName,
                         (info.Attributes & FileAttributes.Directory) != 0,
-                        info is FileInfo file ? file.Length : 0, info.LastWriteTime))
+                        info is FileInfo file ? file.Length : 0, info.LastWriteTime)
+                    { IsLink = (info.Attributes & FileAttributes.ReparsePoint) != 0 })
                     .OrderByDescending(item => item.IsDirectory)
                     .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
                 return (fullPath, entries);
@@ -112,12 +113,13 @@ public sealed partial class SftpWorkspaceView
         }
         finally
         {
-            if (version == _localReadVersion) LocalFiles.IsEnabled = true;
+            if (version == _localReadVersion) LocalFiles.IsEnabled = !_localOperationBusy;
         }
     }
 
     private async void LocalPath_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_localOperationBusy) return;
         if (e.Key != Windows.System.VirtualKey.Enter) return;
         e.Handled = true;
         await NavigateLocalAsync(LocalPathBox.Text);
@@ -133,6 +135,7 @@ public sealed partial class SftpWorkspaceView
 
     private async void LocalFiles_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_localOperationBusy) return;
         if (e.Key == Windows.System.VirtualKey.Enter && LocalFiles.SelectedItem is LocalPaneItem)
         {
             e.Handled = true;
@@ -143,6 +146,16 @@ public sealed partial class SftpWorkspaceView
             e.Handled = true;
             await NavigateLocalParentAsync();
         }
+        else if (e.Key == Windows.System.VirtualKey.F2)
+        {
+            e.Handled = true;
+            await RenameLocalItemAsync();
+        }
+        else if (e.Key == Windows.System.VirtualKey.Delete)
+        {
+            e.Handled = true;
+            await DeleteLocalItemsAsync();
+        }
     }
 
     private MenuFlyout BuildLocalRowMenu()
@@ -152,6 +165,9 @@ public sealed partial class SftpWorkspaceView
         refresh.Click += (_, _) => RefreshLocalDirectory();
         menu.Items.Add(refresh);
         menu.Items.Add(new MenuFlyoutSeparator());
+        var open = new MenuFlyoutItem { Text = "打开文件夹", Icon = CreateMenuIcon("FolderOpen") };
+        open.Click += async (_, _) => await OpenLocalItemAsync();
+        menu.Items.Add(open);
         var edit = new MenuFlyoutItem { Text = "查看/编辑文本", Icon = CreateMenuIcon("DocumentEdit") };
         edit.Click += async (_, _) => await OpenLocalItemAsync();
         menu.Items.Add(edit);
@@ -159,13 +175,17 @@ public sealed partial class SftpWorkspaceView
         menu.Opened += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
-            edit.IsEnabled = selected.Length == 1 && !selected[0].IsDirectory;
-            upload.IsEnabled = _snapshot.CanTransfer && selected.Length > 0 && selected.All(file => file.Name != "..");
+            var ready = LocalFiles.IsEnabled && !_localOperationBusy;
+            refresh.IsEnabled = ready;
+            open.IsEnabled = ready && selected.Length == 1 && selected[0].IsDirectory;
+            edit.IsEnabled = ready && selected.Length == 1 && !selected[0].IsDirectory;
+            upload.Text = selected.Length == 1 && selected[0].IsDirectory ? "上传文件夹" : "上传";
+            upload.IsEnabled = ready && _snapshot.CanTransfer && selected.Length > 0 && selected.All(file => file.Name != "..");
         };
         upload.Click += (_, _) =>
         {
             var selected = LocalFiles.SelectedItems.Cast<LocalPaneItem>().ToArray();
-            if (!_snapshot.CanTransfer || selected.Length == 0 || selected.Any(file => file.Name == "..")) return;
+            if (_localOperationBusy || !LocalFiles.IsEnabled || !_snapshot.CanTransfer || selected.Length == 0 || selected.Any(file => file.Name == "..")) return;
             var files = selected.Select(file => file.IsDirectory
                 ? (SftpUploadEntry)new SftpUploadDirectory(file.Name, file.FullPath)
                 : new SftpUploadFile(file.Name,
@@ -174,6 +194,34 @@ public sealed partial class SftpWorkspaceView
             UploadSelectionRequested?.Invoke(this, files);
         };
         menu.Items.Add(upload);
+        var copy = new MenuFlyoutItem { Text = "复制本地路径", Icon = CreateMenuIcon("Copy") };
+        copy.Click += (_, _) => CopyLocalPaths(LocalFiles.SelectedItems.Cast<LocalPaneItem>().Select(item => item.FullPath));
+        menu.Items.Add(copy);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var rename = new MenuFlyoutItem { Text = "重命名", Icon = CreateMenuIcon("Rename") };
+        rename.Click += async (_, _) => await RenameLocalItemAsync();
+        menu.Items.Add(rename);
+        var delete = new MenuFlyoutItem { Text = "删除", Icon = CreateMenuIcon("Delete") };
+        delete.Click += async (_, _) => await DeleteLocalItemsAsync();
+        menu.Items.Add(delete);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var newFolder = new MenuFlyoutItem { Text = "新建文件夹", Icon = CreateMenuIcon("FolderAdd") };
+        newFolder.Click += async (_, _) => await CreateLocalFolderAsync();
+        menu.Items.Add(newFolder);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var properties = new MenuFlyoutItem { Text = "属性", Icon = CreateMenuIcon("Info") };
+        properties.Click += async (_, _) => await ShowLocalPropertiesAsync();
+        menu.Items.Add(properties);
+        menu.Opened += (_, _) =>
+        {
+            var selected = GetLocalSelection();
+            var ready = LocalFiles.IsEnabled && !_localOperationBusy;
+            copy.IsEnabled = LocalFiles.SelectedItems.Count > 0;
+            rename.IsEnabled = ready && selected.Count == 1;
+            delete.IsEnabled = ready && selected.Count > 0 && selected.All(item => !item.IsLink);
+            newFolder.IsEnabled = ready && _localPath is not null;
+            properties.IsEnabled = ready && selected.Count == 1;
+        };
         ApplyChineseMenuFont(menu);
         return menu;
     }
@@ -187,6 +235,7 @@ public sealed partial class SftpWorkspaceView
 
     public sealed record LocalPaneItem(string Name, string FullPath, bool IsDirectory, long SizeBytes, DateTime ModifiedAt)
     {
+        public bool IsLink { get; init; }
         public static LocalPaneItem? ParentOf(string path) => Directory.GetParent(path) is { } parent
             ? new LocalPaneItem("..", parent.FullName, true, 0, default) : null;
 

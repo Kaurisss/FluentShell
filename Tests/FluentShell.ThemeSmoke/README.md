@@ -1,5 +1,17 @@
 # Offline theme regression
 
+For local context menus and file operations, use `--local-file-menu-smoke` after
+the report path. It checks file/folder/multiple/parent selection, disconnected
+states, blank-area commands, properties, new folders, renaming, cancellation and
+dialog teardown in light and dark themes. Only temporary fixture files are changed;
+native Recycle Bin dispatch is covered through the file service's test seam.
+
+For SFTP file/folder drop ingestion, run with `--sftp-upload-drop-smoke` after the
+report path. It uses real Windows StorageItems and synthetic connection state,
+checks mixed selection, local pane drag data, copy semantics, fixed targets, busy/disconnected states,
+late data and view disposal in light and dark themes, and captures the SFTP pane.
+It does not connect to a server; Explorer's native drag gesture still needs a manual check.
+
 Windows/x64 interactive desktop check using the real WinUI session, sidebar, SFTP controls and WebView2 page. The test-only executable is unpackaged; the application's deployment model is unchanged. It reuses `App` resources but overrides startup so it never opens `MainWindow`, loads saved profiles, or connects to an SSH server. The local file pane performs its normal read-only directory listing.
 
 ```powershell

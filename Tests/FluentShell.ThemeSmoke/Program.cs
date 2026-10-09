@@ -25,6 +25,8 @@ internal static class Program
     internal static string ReportPath = Path.GetFullPath("theme-smoke.json");
     internal static bool SftpDeleteOnly;
     internal static bool SftpPropertiesOnly;
+    internal static bool SftpUploadDropOnly;
+    internal static bool LocalFileMenuOnly;
     internal static bool TextEditorOnly;
     internal static bool MultiSessionOnly;
     internal static bool TabOverflowOnly;
@@ -35,6 +37,8 @@ internal static class Program
         if (args.Length > 0) ReportPath = Path.GetFullPath(args[0]);
         SftpDeleteOnly = args.Contains("--sftp-delete-smoke");
         SftpPropertiesOnly = args.Contains("--sftp-properties-smoke");
+        SftpUploadDropOnly = args.Contains("--sftp-upload-drop-smoke");
+        LocalFileMenuOnly = args.Contains("--local-file-menu-smoke");
         TextEditorOnly = args.Contains("--text-editor-smoke");
         MultiSessionOnly = args.Contains("--multi-session-smoke");
         TabOverflowOnly = args.Contains("--tab-overflow-smoke");
@@ -74,6 +78,16 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.LocalFileMenuOnly)
+            {
+                await VerifyLocalFileMenuAsync();
+                return;
+            }
+            if (Program.SftpUploadDropOnly)
+            {
+                await VerifySftpUploadDropAsync();
+                return;
+            }
             if (Program.TransferCenterOnly)
             {
                 await VerifyTransferCenterAsync();

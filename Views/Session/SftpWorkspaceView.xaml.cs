@@ -16,7 +16,7 @@ using WinRT.Interop;
 
 namespace FluentShell.Views.Session;
 
-public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView, ISftpPropertiesView, ISftpTextEditorView
+public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView, ISftpPaneTransferView, ISftpDropUploadView, ISftpPropertiesView, ISftpTextEditorView
 {
     private UserPreferences _preferences = new();
     public void SetPreferences(UserPreferences preferences)
@@ -49,6 +49,7 @@ public sealed partial class SftpWorkspaceView : UserControl, ISftpWorkspaceView,
         UploadFolderMenuItem.Icon = CreateMenuIcon("Upload");
         ConfigureRemoteTable();
         InitializeLocalPane();
+        InitializeUploadDropTarget();
         Unloaded += (_, _) =>
         {
             _directorySizeCancellation?.Cancel();

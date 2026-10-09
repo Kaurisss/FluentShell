@@ -65,6 +65,8 @@ public sealed class SftpWorkspace : IDisposable
             properties.SetDirectorySizeProvider(_controller.GetDirectorySizeAsync);
         if (_view is ISftpTextEditorView editor)
             editor.SetTextFileService(_transferService as ITextFileService);
+        if (_view is ISftpDropUploadView drop)
+            drop.SetUploadDropHandler(UploadDroppedAsync);
         _view.RefreshRequested += View_RefreshRequested;
         _view.NavigateRequested += View_NavigateRequested;
         _view.NewFolderRequested += View_NewFolderRequested;
@@ -102,7 +104,11 @@ public sealed class SftpWorkspace : IDisposable
     public Task UploadFolderAsync() => PickAndUploadAsync(async () =>
         await _view.PickUploadFolderAsync() is { } folder ? [folder] : []);
 
-    private async Task PickAndUploadAsync(Func<Task<IReadOnlyList<SftpUploadEntry>>> pick)
+    private Task UploadDroppedAsync(IReadOnlyList<SftpUploadEntry> entries, string targetPath) =>
+        !_controller.Snapshot.CanTransfer ? Task.CompletedTask :
+        PickAndUploadAsync(() => Task.FromResult<IReadOnlyList<SftpUploadEntry>>(entries.ToArray()), targetPath);
+
+    private async Task PickAndUploadAsync(Func<Task<IReadOnlyList<SftpUploadEntry>>> pick, string? targetPath = null)
     {
         if (_disposed || _batchRunning || _picking) return;
         _picking = true;
@@ -111,7 +117,7 @@ public sealed class SftpWorkspace : IDisposable
             var files = await pick();
             if (files.Count == 0 || _disposed) return;
             // Capture the target once: browsing another directory must not redirect later files.
-            var target = _controller.Snapshot.DirectoryListing.Path;
+            var target = targetPath ?? _controller.Snapshot.DirectoryListing.Path;
             TransferTask? task = null;
             async Task Run() => await RunBatchAsync(task!, () =>
                 _controller.UploadEntriesAsync(files, ConfirmOverwriteAsync, target));
@@ -273,6 +279,8 @@ public sealed class SftpWorkspace : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        if (_view is ISftpDropUploadView drop)
+            drop.SetUploadDropHandler(null);
         if (_view is ISftpTextEditorView editor)
             editor.SetTextFileService(null);
         if (_view is ISftpPropertiesView properties)

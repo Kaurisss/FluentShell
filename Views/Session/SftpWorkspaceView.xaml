@@ -87,6 +87,18 @@
                     VerticalAlignment="Center" />
             </Grid>
         </DataTemplate>
+        <DataTemplate x:Key="LocalFileNameCellTemplate">
+            <Grid Margin="8,0,0,0" ColumnSpacing="6" Background="Transparent"
+                  CanDrag="True" DragStarting="LocalItem_DragStarting">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="13" Text="{Binding IconGlyph}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid ColumnSpacing="6">
@@ -112,7 +124,8 @@
                 FontSize="13" ColumnWidthMode="AutoLastColumnFill"
                 AutomationProperties.Name="本地文件" />
         </Grid>
-    <Grid Grid.Column="1" Padding="0,6,0,0" RowSpacing="6">
+    <Grid x:Name="RemotePane" Grid.Column="1" Padding="0,6,0,0" RowSpacing="6"
+          Background="Transparent" AllowDrop="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="34" />
             <RowDefinition Height="*" />

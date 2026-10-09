@@ -469,8 +469,110 @@ public sealed class SftpWorkspaceTests
     private static SftpUploadFile CreateUploadFile(string name) =>
         new(name, () => Task.FromResult<Stream>(new MemoryStream([1, 2, 3])));
 
-    private sealed class RecordingSftpWorkspaceView : ISftpWorkspaceView, ISftpPropertiesView
+    [TestMethod]
+    public async Task Dropped_mixed_selection_uses_one_batch_and_keeps_target_for_retry()
     {
+        var path = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "FluentShell-drop-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(path, "文件.txt"), "content");
+            Directory.CreateDirectory(Path.Combine(path, "空目录"));
+            var browse = new FakeSftpFileService();
+            var transfer = new FakeSftpFileService { UploadHandler = _ => Task.FromException(new IOException("临时失败")) };
+            var view = new RecordingSftpWorkspaceView();
+            var center = new TransferCenter();
+            using var workspace = new SftpWorkspace(browse, view, transferFileService: transfer, transfers: center);
+            await workspace.NavigateToAsync("/其他目录");
+            await view.UploadDropHandler!([new SftpUploadDirectory("资料", path), CreateUploadFile("独立.txt")], "/拖放目标");
+            var task = center.Groups[0][0];
+            Assert.HasCount(1, center.Groups[0]);
+            Assert.AreEqual(TransferTaskKind.Batch, task.Kind);
+            Assert.AreEqual("/拖放目标", task.Target);
+            Assert.AreEqual(0, view.UploadPickerCalls);
+            Assert.AreEqual(0, browse.UploadCallCount);
+            Assert.IsTrue(task.CanRetry);
+
+            await workspace.NavigateToAsync("/新目录");
+            transfer.UploadHandler = null;
+            await task.RetryAsync();
+
+            Assert.AreEqual(TransferTaskState.Completed, task.State);
+            Assert.AreEqual(4, task.Queue.CompletedCount);
+            CollectionAssert.AreEqual(new[] { "/拖放目标/资料/文件.txt", "/拖放目标/独立.txt",
+                "/拖放目标/资料/文件.txt", "/拖放目标/独立.txt" }, transfer.UploadPaths);
+            CollectionAssert.AreEqual(new[] { "/拖放目标/资料", "/拖放目标/资料/空目录",
+                "/拖放目标/资料", "/拖放目标/资料/空目录" }, transfer.CreatedDirectories);
+        }
+        finally { Directory.Delete(path, recursive: true); }
+    }
+
+    [TestMethod]
+    public async Task Dropped_upload_respects_overwrite_decisions()
+    {
+        var service = new FakeSftpFileService { FileExists = true };
+        var view = new RecordingSftpWorkspaceView { OverwriteAnswer = false };
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, view, transfers: center);
+        await view.UploadDropHandler!([CreateUploadFile("甲.txt"), CreateUploadFile("乙.txt")], "/目标");
+        Assert.AreEqual(2, view.OverwriteConfirmations);
+        Assert.AreEqual(0, service.UploadCallCount);
+        Assert.AreEqual(2, center.Groups[0][0].Queue.SkippedCount);
+    }
+
+    [TestMethod]
+    public async Task Dropped_upload_rejects_concurrent_disconnected_and_disposed_requests()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new FakeSftpFileService { UploadHandler = async token =>
+        {
+            started.TrySetResult();
+            await release.Task.WaitAsync(token);
+        } };
+        var view = new RecordingSftpWorkspaceView();
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, view, transfers: center);
+        var handler = view.UploadDropHandler!;
+        var upload = handler([CreateUploadFile("首个.txt")], "/目标");
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await handler([CreateUploadFile("重复.txt")], "/目标");
+            Assert.HasCount(1, center.Groups[0]);
+        }
+        finally { release.TrySetResult(); await upload.WaitAsync(TimeSpan.FromSeconds(5)); }
+        service.IsConnected = false;
+        await handler([CreateUploadFile("断开.txt")], "/目标");
+        Assert.HasCount(1, center.Groups[0]);
+        workspace.Dispose();
+        Assert.IsNull(view.UploadDropHandler);
+        service.IsConnected = true;
+        await handler([CreateUploadFile("关闭.txt")], "/目标");
+        Assert.AreEqual(1, service.UploadCallCount);
+    }
+
+    [TestMethod]
+    public async Task Dropped_upload_cancellation_stops_the_batch()
+    {
+        var service = new FakeSftpFileService();
+        var view = new RecordingSftpWorkspaceView();
+        var center = new TransferCenter();
+        using var workspace = new SftpWorkspace(service, view, transfers: center);
+        service.UploadHandler = token =>
+        {
+            center.Discard(center.Groups[0][0]);
+            token.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        };
+        await view.UploadDropHandler!([CreateUploadFile("首个.txt"), CreateUploadFile("剩余.txt")], "/目标");
+        Assert.AreEqual(1, service.UploadCallCount);
+        Assert.AreEqual(SftpTransferState.Cancelled, view.LastSnapshot.Transfer.State);
+    }
+
+    private sealed class RecordingSftpWorkspaceView : ISftpWorkspaceView, ISftpPropertiesView, ISftpDropUploadView
+    {
+        public Func<IReadOnlyList<SftpUploadEntry>, string, Task>? UploadDropHandler { get; private set; }
+        public void SetUploadDropHandler(Func<IReadOnlyList<SftpUploadEntry>, string, Task>? handler) => UploadDropHandler = handler;
         public Func<RemoteFileItem, CancellationToken, Task<long>>? DirectorySizeProvider { get; private set; }
         public void SetDirectorySizeProvider(Func<RemoteFileItem, CancellationToken, Task<long>>? provider) => DirectorySizeProvider = provider;
         public string PromptAnswer { get; set; } = string.Empty;
@@ -481,6 +583,7 @@ public sealed class SftpWorkspaceTests
         public string? DownloadDirectory { get; set; } = "C:\\下载";
         public int DeleteConfirmations { get; private set; }
         public int UploadPickerCalls { get; private set; }
+        public int OverwriteConfirmations { get; private set; }
         public int DownloadPickerCalls { get; private set; }
         public SftpSessionSnapshot LastSnapshot { get; private set; } = null!;
         public Action<SftpSessionSnapshot>? OnRender { get; set; }
@@ -505,7 +608,7 @@ public sealed class SftpWorkspaceTests
             return Task.FromResult(PromptAnswer);
         }
 
-        public Task<bool> ConfirmOverwriteAsync(string name) => Task.FromResult(OverwriteAnswer);
+        public Task<bool> ConfirmOverwriteAsync(string name) { OverwriteConfirmations++; return Task.FromResult(OverwriteAnswer); }
 
         public Task<bool> ConfirmDeleteAsync(RemoteFileItem item)
         {
@@ -544,6 +647,8 @@ public sealed class SftpWorkspaceTests
         public Func<CancellationToken, Task>? DownloadHandler { get; set; }
         public Dictionary<string, IReadOnlyList<RemoteFileItem>> ListingsByPath { get; } = [];
         public int UploadCallCount { get; private set; }
+        public List<string> UploadPaths { get; } = [];
+        public List<string> CreatedDirectories { get; } = [];
         public int DownloadCallCount { get; private set; }
         public int DeleteCallCount { get; private set; }
         public int RenameCallCount { get; private set; }
@@ -555,6 +660,7 @@ public sealed class SftpWorkspaceTests
         public Task CreateDirectoryAsync(string path)
         {
             CreateDirectoryCallCount++;
+            CreatedDirectories.Add(path);
             return Task.CompletedTask;
         }
 
@@ -565,6 +671,7 @@ public sealed class SftpWorkspaceTests
         public Task UploadAsync(Stream input, string remotePath, CancellationToken cancellationToken)
         {
             UploadCallCount++;
+            UploadPaths.Add(remotePath);
             return UploadHandler?.Invoke(cancellationToken) ?? Task.CompletedTask;
         }
 

@@ -33,7 +33,7 @@ public sealed partial class SftpWorkspaceView
 
     private Task OpenLocalItemAsync()
     {
-        if (LocalFiles.SelectedItem is not LocalPaneItem item) return Task.CompletedTask;
+        if (_localOperationBusy || !LocalFiles.IsEnabled || LocalFiles.SelectedItem is not LocalPaneItem item) return Task.CompletedTask;
         return item.IsDirectory ? NavigateLocalAsync(item.FullPath)
             : ShowTextEditorAsync(new LocalTextFileService(), item.FullPath, item.Name, false);
     }
