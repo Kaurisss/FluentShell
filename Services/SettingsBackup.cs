@@ -17,7 +17,8 @@ public static class SettingsBackup
     public static AppSettings Normalize(AppSettings settings)
     {
         settings.Theme = settings.Theme is "浅色" or "深色" ? settings.Theme : "系统";
-        settings.BackdropMaterial = settings.BackdropMaterial == "亚克力" ? "亚克力" : "Mica";
+        settings.BackdropMaterial = settings.BackdropMaterial is "Mica Alt" or "亚克力" or "Acrylic Thin"
+            ? settings.BackdropMaterial : "Mica";
         settings.TerminalFontSize = double.IsFinite(settings.TerminalFontSize) ? Math.Clamp(settings.TerminalFontSize, 11, 24) : 14;
         settings.TerminalColors = (settings.TerminalColors ?? new()).Normalize();
         settings.Preferences = (settings.Preferences ?? new()).Normalize();

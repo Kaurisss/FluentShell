@@ -16,7 +16,8 @@
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="#B3F3F3F3" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="#CCFFFFFF" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="#5C5C5C" />
-                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="#18000000" />
+                    <Color x:Key="SubtleStrokeColor">#18000000</Color>
+                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="{ThemeResource SubtleStrokeColor}" />
                     <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent" />
                     <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
                 </ResourceDictionary>
@@ -24,7 +25,8 @@
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="#B3202020" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="#CC2B2B2B" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="#B5B5B5" />
-                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="#26FFFFFF" />
+                    <Color x:Key="SubtleStrokeColor">#26FFFFFF</Color>
+                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="{ThemeResource SubtleStrokeColor}" />
                     <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent" />
                     <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
                 </ResourceDictionary>
@@ -32,7 +34,8 @@
                     <SolidColorBrush x:Key="PageSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="PanelSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="MutedTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <StaticResource x:Key="SubtleStrokeColor" ResourceKey="SystemColorWindowTextColor" />
+                    <SolidColorBrush x:Key="SubtleStrokeBrush" Color="{ThemeResource SubtleStrokeColor}" />
                     <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="{ThemeResource SystemColorWindowColor}" />
                 </ResourceDictionary>

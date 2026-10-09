@@ -149,3 +149,26 @@ test('normal sessions and unrecognized backdrop values retain opaque backgrounds
         assert.equal(document.body.style.backgroundColor, '#112233');
     }
 });
+
+test('host switches backdrop to opaque fallback and back without reopening or clearing ANSI output', () => {
+    const { terminal, document, send } = page('?backdrop=1');
+    const output = '\x1b[44mANSI background\x1b[0m existing SSH output';
+    send({ type: 'write', data: output });
+    for (const backdrop of [false, true, false, true]) {
+        send({ type: 'theme', value: 'dark', colors: { background: '#112233', red: '#abcdef' }, backdrop });
+        assert.equal(terminal.options.allowTransparency, true);
+        assert.equal(terminal.options.theme.background, backdrop ? '#00000000' : '#112233');
+        assert.equal(document.body.className, backdrop ? 'terminal-backdrop' : '');
+        assert.equal(terminal.options.theme.red, '#abcdef');
+        assert.equal(terminal.output, output);
+    }
+    send({ type: 'theme', value: 'light', backdrop: false });
+    assert.equal(document.body.style.backgroundColor, '#FEFEFE');
+});
+
+test('host backdrop messages cannot enable transparency without initial opt-in', () => {
+    const { terminal, document, send } = page();
+    send({ type: 'theme', value: 'dark', backdrop: true });
+    assert.equal(terminal.options.theme.background, '#363636');
+    assert.equal(document.body.className, '');
+});

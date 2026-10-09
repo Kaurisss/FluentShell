@@ -59,7 +59,8 @@ public sealed partial class SettingsPage : UserControl
             "深色" => 2,
             _ => 0
         };
-        BackdropMaterialComboBox.SelectedIndex = settings.BackdropMaterial == "亚克力" ? 1 : 0;
+        BackdropMaterialComboBox.SelectedItem = BackdropMaterialComboBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag as string == settings.BackdropMaterial) ?? BackdropMaterialComboBox.Items[0];
         TerminalFontSizeBox.Value = settings.TerminalFontSize;
         DownloadDirectoryBox.Text = settings.DownloadDirectory;
         DataLocationText.Text = dataFolder;
@@ -88,7 +89,7 @@ public sealed partial class SettingsPage : UserControl
     private Dictionary<string, (ScrollViewer Page, string Title, string HelpText)> CategoryPages() => new()
     {
         ["appearance"] = (AppearancePage, "外观", string.Empty),
-        ["terminal"] = (TerminalColorsPage, "终端", "点击色块选择颜色，在颜色选择器中点击“保存”或“使用默认”即保存并应用。浅色和深色配色可分别恢复默认，其他终端选项即时保存。"),
+        ["terminal"] = (TerminalColorsPage, "终端", "终端默认使用外观设置中的窗口背景材质。关闭材质、设置自定义背景色、终端主题与应用主题不同或开启高对比度时，使用实色背景。切换背景保留会话输出，远端 ANSI 背景色照常显示。\n\n点击色块选择颜色，在颜色选择器中点击“保存”或“使用默认”即保存并应用。浅色和深色配色可分别恢复默认，其他终端选项即时保存。"),
         ["connection"] = (ConnectionPage, "连接", "连接超时和保活间隔在新建或重新连接时生效；0 次重连表示关闭自动重连。主机密钥校验始终保留。"),
         ["transfer"] = (TransferSettingsPage, "文件传输", "并发上限作用于不同会话的传输批次；单个会话仍按顺序使用独立传输通道。冲突策略从下一批传输开始生效。"),
         ["shortcuts"] = (ShortcutSettingsPage, "快捷键", "点击快捷键后按下 Ctrl + Shift + 字母进行录入。各操作须使用不同组合，避免占用远端 Shell 的常用快捷键。"),
@@ -303,9 +304,8 @@ public sealed partial class SettingsPage : UserControl
 
     private void BackdropMaterialComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loading) return;
-        SettingsChanged?.Invoke(this, new AppSettingsUpdate(
-            BackdropMaterial: BackdropMaterialComboBox.SelectedIndex == 1 ? "亚克力" : "Mica"));
+        if (_loading || BackdropMaterialComboBox.SelectedItem is not ComboBoxItem { Tag: string material }) return;
+        SettingsChanged?.Invoke(this, new AppSettingsUpdate(BackdropMaterial: material));
     }
 
     private void TerminalFontSizeBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)

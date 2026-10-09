@@ -35,6 +35,9 @@ internal static class Program
     internal static bool TerminalColorsOnly;
     internal static bool KeepAnimationPreview;
     internal static bool TerminalBackdropOnly;
+    internal static bool BackdropMaterialsOnly;
+    internal static bool SessionBackdropOnly;
+    internal static bool SessionAppearanceOnly;
     internal static bool KeepBackdropPreview;
     [STAThread]
     private static void Main(string[] args)
@@ -53,6 +56,9 @@ internal static class Program
         TerminalColorsOnly = args.Contains("--terminal-colors-smoke");
         KeepAnimationPreview = args.Contains("--keep-animation-preview");
         TerminalBackdropOnly = args.Contains("--terminal-backdrop-smoke");
+        BackdropMaterialsOnly = args.Contains("--backdrop-materials-smoke");
+        SessionAppearanceOnly = args.Contains("--session-appearance-smoke");
+        SessionBackdropOnly = SessionAppearanceOnly || args.Contains("--session-backdrop-smoke");
         KeepBackdropPreview = args.Contains("--keep-backdrop-preview");
         try
         {
@@ -89,6 +95,16 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.BackdropMaterialsOnly)
+            {
+                await VerifyBackdropMaterialsAsync();
+                return;
+            }
+            if (Program.SessionBackdropOnly)
+            {
+                await VerifySessionBackdropAsync();
+                return;
+            }
             if (Program.TerminalBackdropOnly)
             {
                 await VerifyTerminalBackdropAsync();
@@ -163,6 +179,8 @@ internal sealed partial class SmokeApp : App
             var workspace = new SessionWorkspace(profile, WinRT.Interop.WindowNative.GetWindowHandle(_window),
                 (_, _) => Task.FromResult<ISshConnection?>(null), _ => Task.FromResult(false),
                 () => Task.FromResult<string?>(null));
+            // This color/theme fixture has no window material; cover the opaque fallback.
+            workspace.SetPreferences(new UserPreferences { TerminalBackdrop = false }, Path.GetDirectoryName(Program.ReportPath)!);
             Grid.SetColumn(workspace, 1);
             root.Children.Add(workspace);
             _window.Activate();

@@ -11,6 +11,7 @@ public sealed record UserPreferences
     public bool RightClickPaste { get; init; }
     public bool ConfirmMultilinePaste { get; init; } = true;
     public string TerminalTheme { get; init; } = "system";
+    public bool TerminalBackdrop { get; init; } = true;
     public bool SidebarOpen { get; init; } = true;
     public int ConnectionTimeoutSeconds { get; init; } = 12;
     public int KeepAliveSeconds { get; init; } = 30;

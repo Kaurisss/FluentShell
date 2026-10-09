@@ -25,6 +25,16 @@
         .terminal-backdrop .xterm-viewport {
             background-color: transparent !important;
         }
+        /* Hide only the scrollbar chrome; xterm retains its wheel/scrollback handler. */
+        #terminal .xterm-scrollable-element > .scrollbar {
+            display: none !important;
+        }
+        #terminal .xterm-viewport {
+            scrollbar-width: none;
+        }
+        #terminal .xterm-viewport::-webkit-scrollbar {
+            display: none;
+        }
         #search { position: fixed; right: 16px; top: 16px; z-index: 2; padding: 8px; background: Canvas; color: CanvasText; border: 1px solid GrayText; }
     </style>
 </head>
@@ -36,7 +46,7 @@
     <script src="addon-search.js"></script>
     <script>
         (() => {
-            // Opt-in for the offline Windows backdrop prototype. Normal sessions stay opaque.
+            // The host opts in before open; theme messages can then switch to an opaque fallback.
             const useBackdrop = new URLSearchParams(window.location.search).get('backdrop') === '1';
             document.body.className = useBackdrop ? 'terminal-backdrop' : '';
             const themes = {
@@ -120,14 +130,16 @@
             terminal.onResize(size => post({ type: 'resize', cols: size.cols, rows: size.rows }));
 
       window.fluentShellTerminal = {
-                setTheme: (value, colors) => {
+                setTheme: (value, colors, backdrop = useBackdrop) => {
                     const theme = { ...(value === 'light' ? themes.light : themes.dark) };
                     // Accept only known theme colors; never treat saved values as CSS or HTML.
                     for (const key of Object.keys(theme)) {
                         if (colors && typeof colors[key] === 'string' && /^#[0-9a-f]{6}$/i.test(colors[key]))
                             theme[key] = colors[key];
                     }
-                    if (useBackdrop) theme.background = '#00000000';
+                    const transparent = useBackdrop && backdrop === true;
+                    if (transparent) theme.background = '#00000000';
+                    document.body.className = transparent ? 'terminal-backdrop' : '';
                     terminal.options.theme = theme;
                     document.body.style.backgroundColor = theme.background;
                     document.documentElement.style.colorScheme = value === 'light' ? 'light' : 'dark';
@@ -149,7 +161,7 @@
         if (message.type === 'write') window.fluentShellTerminal.write(message.data);
         if (message.type === 'focus') window.fluentShellTerminal.focus();
         if (message.type === 'fontSize') window.fluentShellTerminal.setFontSize(message.value);
-        if (message.type === 'theme') window.fluentShellTerminal.setTheme(message.value, message.colors);
+        if (message.type === 'theme') window.fluentShellTerminal.setTheme(message.value, message.colors, message.backdrop);
         if (message.type === 'paste') terminal.paste(message.data || '');
         if (message.type === 'search') showSearch();
         if (message.type === 'preferences' && message.value) {

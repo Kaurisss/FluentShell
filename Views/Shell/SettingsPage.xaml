@@ -61,8 +61,12 @@
                 </ComboBox></toolkit:SettingsCard>
                 <toolkit:SettingsCard Header="背景效果" Description="选择窗口背景材质。">
                     <toolkit:SettingsCard.HeaderIcon><icons:SymbolIcon Symbol="Image" Style="{StaticResource SettingsOptionIconStyle}" /></toolkit:SettingsCard.HeaderIcon>
-                    <ComboBox x:Name="BackdropMaterialComboBox" SelectedIndex="0" SelectionChanged="BackdropMaterialComboBox_SelectionChanged" MinWidth="220">
-                    <ComboBoxItem Content="Mica（云母）" /><ComboBoxItem Content="亚克力" />
+                    <ComboBox x:Name="BackdropMaterialComboBox" SelectedIndex="0" SelectionChanged="BackdropMaterialComboBox_SelectionChanged" MinWidth="220"
+                              AutomationProperties.Name="背景效果" AutomationProperties.AutomationId="BackdropMaterial">
+                    <ComboBoxItem Content="Mica（云母）" Tag="Mica" />
+                    <ComboBoxItem Content="Mica Alt（云母变体）" Tag="Mica Alt" />
+                    <ComboBoxItem Content="亚克力" Tag="亚克力" />
+                    <ComboBoxItem Content="Acrylic Thin（薄亚克力）" Tag="Acrylic Thin" />
                 </ComboBox></toolkit:SettingsCard>
                 <StackPanel x:Name="AppearanceOptions" Spacing="4" />
             </StackPanel>

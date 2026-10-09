@@ -84,6 +84,7 @@ public sealed partial class SettingsPage
         Toggle(AppearanceOptions, "侧栏默认展开", Symbol.PanelLeft, p => p.SidebarOpen, (p, v) => p with { SidebarOpen = v });
         Choice(TerminalOptions, "终端字体", Symbol.TextFont, [("Cascadia Mono", "Cascadia Mono"), ("Consolas", "Consolas"), ("Courier New", "Courier New")], p => p.FontFamily, (p, v) => p with { FontFamily = v });
         Choice(TerminalOptions, "终端主题", Symbol.Color, [("system", "跟随应用主题"), ("light", "固定浅色"), ("dark", "固定深色")], p => p.TerminalTheme, (p, v) => p with { TerminalTheme = v });
+        Toggle(TerminalOptions, "终端使用窗口背景材质", Symbol.Image, p => p.TerminalBackdrop, (p, v) => p with { TerminalBackdrop = v });
         Choice(TerminalOptions, "光标样式", Symbol.Cursor, [("bar", "竖线"), ("block", "方块"), ("underline", "下划线")], p => p.CursorStyle, (p, v) => p with { CursorStyle = v });
         Toggle(TerminalOptions, "光标闪烁", Symbol.Eye, p => p.CursorBlink, (p, v) => p with { CursorBlink = v });
         Number(TerminalOptions, "滚动缓冲行数（减少会丢弃较早输出）", Symbol.TextBulletList, 1000, 100000, p => p.Scrollback, (p, v) => p with { Scrollback = v });

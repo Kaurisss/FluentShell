@@ -4,6 +4,7 @@ using FluentShell.Services;
 using FluentShell.Views;
 using FluentShell.Views.Shell;
 using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -296,9 +297,13 @@ public sealed partial class MainWindow : Window
         WindowChrome.ApplyTheme(_appWindow, RootNavigationView, _dispatcherQueue, theme);
     }
 
-    private void ApplyBackdrop(string material) => SystemBackdrop = material == "亚克力"
-        ? new DesktopAcrylicBackdrop()
-        : new MicaBackdrop();
+    private void ApplyBackdrop(string material) => SystemBackdrop = material switch
+    {
+        "Mica Alt" => new MicaBackdrop { Kind = MicaKind.BaseAlt },
+        "亚克力" => new DesktopAcrylicBackdrop(),
+        "Acrylic Thin" => new ThinAcrylicBackdrop(),
+        _ => new MicaBackdrop()
+    };
 
     private void RootNavigationView_Loaded(object sender, RoutedEventArgs e) =>
         UpdateResponsiveLayout(RootGrid.ActualWidth);

@@ -17,13 +17,14 @@ public sealed class UserPreferencesTests
         Assert.AreEqual("bar", settings.Preferences.CursorStyle);
         Assert.IsTrue(settings.Preferences.HasUniqueShortcuts);
         Assert.IsTrue(settings.Preferences.ConfirmMultilinePaste);
+        Assert.IsTrue(settings.Preferences.TerminalBackdrop);
         Assert.IsEmpty(settings.TerminalColors.Light);
     }
 
     [TestMethod]
     public void Settings_backup_roundtrips_preferences_and_colors()
     {
-        var original = new AppSettings { Preferences = new() { FontFamily = "Consolas", ReconnectAttempts = 2, ShowHiddenFiles = false, ConflictPolicy = "skip" }, TerminalColors = new() { Light = new() { ["red"] = "#123456" } } };
+        var original = new AppSettings { Preferences = new() { FontFamily = "Consolas", ReconnectAttempts = 2, ShowHiddenFiles = false, ConflictPolicy = "skip", TerminalBackdrop = false }, TerminalColors = new() { Light = new() { ["red"] = "#123456" } } };
         var restored = SettingsBackup.Import(SettingsBackup.Export(original));
         Assert.AreEqual(original.Preferences, restored.Preferences);
         Assert.AreEqual("#123456", restored.TerminalColors.Light["red"]);

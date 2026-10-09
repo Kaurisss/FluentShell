@@ -260,7 +260,7 @@ internal sealed partial class SmokeApp
 
     private static void Post(CoreWebView2 web, object message) => web.PostWebMessageAsJson(JsonSerializer.Serialize(message));
 
-    private static async Task BackdropUiAsync(IntPtr hwnd, string command, params string[] arguments)
+    private static async Task<string> BackdropUiAsync(IntPtr hwnd, string command, params string[] arguments)
     {
         var start = new ProcessStartInfo("winapp")
         {
@@ -280,6 +280,7 @@ internal sealed partial class SmokeApp
         var output = await stdout;
         var diagnostic = await stderr;
         if (process.ExitCode != 0) throw new InvalidOperationException($"winapp ui {command}: {output} {diagnostic}");
+        return output;
     }
 
     private static uint BackdropSample(Grid root, FrameworkElement element)

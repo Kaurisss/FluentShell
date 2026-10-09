@@ -1,9 +1,50 @@
 # Offline theme regression
 
+For the four window material options, pass `--backdrop-materials-smoke`. It
+exercises the production settings page and MainWindow with an isolated temporary
+store, checks Mica, Mica Alt, Acrylic and Acrylic Thin in both themes, restores
+the selected option after reload, and verifies Thin controller disposal on changes.
+It captures the appearance settings with each material; no user data is loaded.
+
+For the production SSH session integration, pass `--session-backdrop-smoke`.
+It uses the real MainWindow, TerminalPane and SessionConnection with two fake SSH
+transports and separate fake SFTP channels. It checks real keyboard input, PTY
+resize, background output, tab switching, settings detach/reattach, SFTP collapse,
+dialogs, the connection overlay, constrained navigation, and disposal. It captures
+Mica/Acrylic in both themes, measures the actual opaque/material screen pixels, and
+compares terminal and adjacent ContentRoot pixels for the same surface tint.
+It also measures the terminal's two physical border pixels on every edge at the
+current display scaling, and checks matching path/grid border brushes in both
+themes, including path-input hover and the native focused accent underline.
+For appearance-only changes, use `--session-appearance-smoke` instead. It checks
+the same real session controls, rounded corner pixels and hidden scrollbar with
+scrollback/wheel events, without injecting native pointer or keyboard input.
+No saved profiles, credentials or real servers are loaded.
+
+```powershell
+dotnet build Tests/FluentShell.ThemeSmoke/FluentShell.ThemeSmoke.csproj -a x64
+Start-Process -FilePath Tests/FluentShell.ThemeSmoke/bin/Debug/net8.0-windows10.0.19041.0/win-x64/FluentShell.ThemeSmoke.exe -ArgumentList '.tmp/terminal-backdrop/session.json', '--session-backdrop-smoke' -WindowStyle Hidden -Wait
+```
+
+Sessions now default to the window material. The terminal settings switch disables
+it immediately without losing scrollback. A custom background color, a fixed
+terminal theme different from the application, or high contrast uses an opaque
+fallback. High contrast also uses the Windows foreground/background colors.
+This integration targets Windows 11; platforms without Mica support retain the
+opaque terminal, including when the window's material is unavailable.
+
+The production implementation retains the WinUI WebView2 control. Windows App SDK
+2.3.1's internal `BrushForThemeBackgroundColor` resource is locally supplied as a
+brush using `LayerFillColorDefault`, matching NavigationView's translucent content
+background. The terminal page itself remains fully transparent, so the tint is
+applied once. The SDK's high-contrast resource is left intact. This is an implementation-dependent
+workaround, not a documented transparency API; rerun the screen-based smoke test
+when upgrading Windows App SDK. See the upstream
+[WebView2 implementation](https://github.com/microsoft/microsoft-ui-xaml/blob/main/dev/WebView2/WebView2.cpp).
+
 For the xterm Windows backdrop prototype, pass `--terminal-backdrop-smoke`.
 It compares the stock WinUI WebView2 control with a directly hosted HWND WebView2,
-both using the shipped terminal page with the opt-in `?backdrop=1` URL. Normal
-sessions keep their opaque backgrounds and saved terminal colors. The prototype
+both using the shipped terminal page with the opt-in `?backdrop=1` URL. The prototype
 uses separate temporary browser profiles, synthetic terminal output and local
 input echo; it never connects to SSH or loads saved application settings.
 

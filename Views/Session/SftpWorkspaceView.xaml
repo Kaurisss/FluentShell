@@ -6,6 +6,9 @@
     xmlns:converters="using:FluentShell.Views.Converters"
     xmlns:syncfusion="using:Syncfusion.UI.Xaml.DataGrid">
     <UserControl.Resources>
+        <!-- Keep the path fields' hover stroke consistent with the file grids.
+             The stock focused accent stroke and disabled state remain native. -->
+        <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="{ThemeResource SubtleStrokeColor}" />
         <converters:FileIconSymbolConverter x:Key="FileIconSymbolConverter" />
         <Style x:Key="SftpMenuIconStyle" TargetType="icons:SymbolIcon">
             <Setter Property="Width" Value="16" />
@@ -19,6 +22,7 @@
         <!-- The stock TextBox presenter uses Padding rather than the control's
              VerticalContentAlignment. Keep both single-line path fields identical. -->
         <Style x:Key="SftpPathInputStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+            <Setter Property="BorderBrush" Value="{ThemeResource SubtleStrokeBrush}" />
             <Setter Property="Height" Value="34" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="FontSize" Value="13" />
@@ -96,8 +100,11 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <TextBox Style="{StaticResource SftpPathInputStyle}" x:Name="LocalPathBox" PlaceholderText="本地路径" KeyDown="LocalPath_KeyDown" AutomationProperties.Name="本地路径" />
+            <Border x:Name="LocalFilesFrame" Grid.Row="1" BorderThickness="1"
+                    BorderBrush="{ThemeResource SubtleStrokeBrush}" CornerRadius="{ThemeResource ControlCornerRadius}">
             <syncfusion:SfDataGrid
-                x:Name="LocalFiles" Grid.Row="1"
+                x:Name="LocalFiles" BorderThickness="0"
+                BorderBrush="{ThemeResource SubtleStrokeBrush}"
                 AutoGenerateColumns="False" IsReadOnly="True"
                 SelectionMode="Extended" SelectionUnit="Row"
                 CurrentCellBorderThickness="0"
@@ -107,6 +114,7 @@
                 ShowRowHeader="False" HeaderRowHeight="34" RowHeight="34"
                 FontSize="13" ColumnWidthMode="AutoLastColumnFill"
                 AutomationProperties.Name="本地文件" />
+            </Border>
         </Grid>
     <Grid x:Name="RemotePane" Grid.Column="1" Padding="0,6,0,0" RowSpacing="6"
           Background="Transparent" AllowDrop="True">
@@ -139,9 +147,12 @@
             </StackPanel>
         </Grid>
 
+        <Border x:Name="RemoteTableFrame" Grid.Row="1" BorderThickness="1"
+                BorderBrush="{ThemeResource SubtleStrokeBrush}" CornerRadius="{ThemeResource ControlCornerRadius}">
         <syncfusion:SfDataGrid
             x:Name="RemoteTable"
-            Grid.Row="1"
+            BorderBrush="{ThemeResource SubtleStrokeBrush}"
+            BorderThickness="0"
             AutoGenerateColumns="False"
             IsReadOnly="True"
             SelectionMode="Extended"
@@ -158,6 +169,7 @@
             RowHeight="34"
             FontSize="13"
             ColumnWidthMode="AutoLastColumnFill" />
+        </Border>
 
         <!-- Cover both the path toolbar and the file list without changing their layout. -->
         <Grid x:Name="DirectoryLoadingOverlay" Grid.RowSpan="2"
