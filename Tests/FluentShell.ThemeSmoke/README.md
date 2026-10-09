@@ -1,5 +1,13 @@
 # Offline theme regression
 
+For new-tab motion, pass `--navigation-animation-smoke`. It uses the production
+`MainWindow` with profile loading disabled and two offline workspaces. It checks
+the actual add button from an active session, intermediate scale/opacity,
+the default sidebar entrance, settings sliding from the right in both directions,
+animation completion and rapid switching in light and dark themes. Add
+`--keep-animation-preview` to leave the checked window open for manual preview;
+the JSON report is still written. No SSH connection is opened.
+
 For local context menus and file operations, use `--local-file-menu-smoke` after
 the report path. It checks file/folder/multiple/parent selection, disconnected
 states, blank-area commands, properties, new folders, renaming, cancellation and

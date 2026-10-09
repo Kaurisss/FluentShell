@@ -80,12 +80,16 @@
             </NavigationView.PaneCustomContent>
             <Grid x:Name="ContentRoot" Background="Transparent">
                 <Grid x:Name="ContentHost" Padding="30,24,0,28">
-                    <ContentPresenter x:Name="PageContentPresenter">
+                    <ContentPresenter x:Name="PageContentPresenter" RenderTransformOrigin="0.5,0.5">
                         <ContentPresenter.RenderTransform>
-                            <TranslateTransform x:Name="PageContentTransform" />
+                            <CompositeTransform />
                         </ContentPresenter.RenderTransform>
                     </ContentPresenter>
-                    <ContentPresenter x:Name="SessionContentPresenter" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                    <ContentPresenter x:Name="SessionContentPresenter" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" RenderTransformOrigin="0.5,0.5">
+                        <ContentPresenter.RenderTransform>
+                            <ScaleTransform />
+                        </ContentPresenter.RenderTransform>
+                    </ContentPresenter>
                 </Grid>
             </Grid>
         </NavigationView>

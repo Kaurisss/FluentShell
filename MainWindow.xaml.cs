@@ -35,7 +35,7 @@ public sealed partial class MainWindow : Window
     private readonly ServerCatalogPage _serverCatalogPage;
     private readonly SettingsPage _settingsPage;
     private readonly ShellLayoutMode _layout = new();
-    private Storyboard? _pageEntranceStoryboard;
+    private Storyboard? _contentEntranceStoryboard;
     private bool _loaded;
     private bool _isSessionLayout;
     private bool _hasDisplayedPage;
@@ -99,7 +99,11 @@ public sealed partial class MainWindow : Window
         };
         RootGrid.SizeChanged += RootGrid_SizeChanged;
         Activated += (_, _) => _ = LoadAsync();
-        Closed += (_, _) => _serverCatalogPage.CloseEditorWindows();
+        Closed += (_, _) =>
+        {
+            StopContentEntranceAnimation();
+            _serverCatalogPage.CloseEditorWindows();
+        };
         _appWindow.Closing += (_, args) =>
         {
             if (_shell.Sessions.OfType<SessionWorkspace>().Any(workspace => !workspace.TryCloseTextEditor()))
@@ -135,13 +139,21 @@ public sealed partial class MainWindow : Window
         _sessionHost.NewSessionRequested += (_, _) =>
         {
             _sessionHost.Select(null);
-            ShowUnconnectedLayout("overview");
+            ShowUnconnectedLayout("overview", drillIn: true);
         };
         _sessionHost.SessionSelected += (_, session) => _shell.SelectSession(session);
         _sessionHost.SessionCloseRequested += async (_, session) =>
             await _shell.CloseSessionAsync(session, ConfirmCloseSessionAsync);
         _sessionHost.ContentChanged += (_, session) =>
-            SessionContentPresenter.Content = session?.ContentElement;
+        {
+            var content = session?.ContentElement;
+            if (ReferenceEquals(SessionContentPresenter.Content, content)) return;
+
+            StopContentEntranceAnimation();
+            SessionContentPresenter.Content = content;
+            if (_isSessionLayout && content is not null)
+                PlayContentEntranceAnimation(SessionContentPresenter);
+        };
         ConnectedSidebar.ReconnectRequested += ConnectedSidebar_ReconnectRequested;
 
         _overviewPage.ConnectRequested += async (_, profile) => await _shell.ConnectAsync(profile);
@@ -260,7 +272,7 @@ public sealed partial class MainWindow : Window
 
     private async Task ExecuteShortcutAsync(string action)
     {
-        if (action == "new") { _sessionHost.Select(null); ShowUnconnectedLayout("overview"); }
+        if (action == "new") { _sessionHost.Select(null); ShowUnconnectedLayout("overview", drillIn: true); }
         else if (action == "close" && _shell.SelectedSession is { } selected)
             await _shell.CloseSessionAsync(selected, ConfirmCloseSessionAsync);
         else if (action == "next")
@@ -339,7 +351,7 @@ public sealed partial class MainWindow : Window
         _serverCatalogPage.UpdateResponsiveLayout(pageSpacing);
     }
 
-    private void NavigateTo(string page)
+    private void NavigateTo(string page, bool drillIn = false)
     {
         var shouldAnimate = _hasDisplayedPage && !string.Equals(_currentPage, page, StringComparison.Ordinal);
 
@@ -352,43 +364,86 @@ public sealed partial class MainWindow : Window
         _currentPage = page;
         _hasDisplayedPage = true;
         if (shouldAnimate)
-            PlayPageEntranceAnimation();
+        {
+            if (drillIn) PlayContentEntranceAnimation(PageContentPresenter);
+            else PlayPageEntranceAnimation();
+        }
+    }
+
+    private void StopContentEntranceAnimation()
+    {
+        _contentEntranceStoryboard?.Stop();
+        _contentEntranceStoryboard = null;
+    }
+
+    private void PlayContentEntranceAnimation(FrameworkElement target)
+    {
+        StopContentEntranceAnimation();
+        if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
+
+        // Use explicit DrillIn motion on the host, including when a collapsed
+        // cached page is revealed by the new-tab button. Base values stay at 1
+        // so completion and interruption both restore fully visible content.
+        var scale = target.RenderTransform;
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        _contentEntranceStoryboard = new Storyboard { FillBehavior = FillBehavior.Stop };
+        foreach (var property in new[] { "ScaleX", "ScaleY" })
+        {
+            var zoom = new DoubleAnimation
+            {
+                From = 0.92,
+                To = 1,
+                Duration = new Duration(TimeSpan.FromMilliseconds(300)),
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(zoom, scale);
+            Storyboard.SetTargetProperty(zoom, property);
+            _contentEntranceStoryboard.Children.Add(zoom);
+        }
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+            EasingFunction = easing
+        };
+        Storyboard.SetTarget(fade, target);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        _contentEntranceStoryboard.Children.Add(fade);
+        _contentEntranceStoryboard.Begin();
     }
 
     private void PlayPageEntranceAnimation()
     {
-        _pageEntranceStoryboard?.Stop();
-
-        PageContentTransform.Y = 28;
-        PageContentPresenter.Opacity = 0;
+        StopContentEntranceAnimation();
+        if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
 
         var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var offsetAnimation = new DoubleAnimation
+        var slide = new DoubleAnimation
         {
-            To = 0,
+            From = 28, To = 0,
             Duration = new Duration(TimeSpan.FromMilliseconds(260)),
             EasingFunction = easing
         };
-        var opacityAnimation = new DoubleAnimation
+        var fade = new DoubleAnimation
         {
-            To = 1,
+            From = 0, To = 1,
             Duration = new Duration(TimeSpan.FromMilliseconds(180)),
             EasingFunction = easing
         };
-
-        Storyboard.SetTarget(offsetAnimation, PageContentTransform);
-        Storyboard.SetTargetProperty(offsetAnimation, "Y");
-        Storyboard.SetTarget(opacityAnimation, PageContentPresenter);
-        Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
-
-        _pageEntranceStoryboard = new Storyboard();
-        _pageEntranceStoryboard.Children.Add(offsetAnimation);
-        _pageEntranceStoryboard.Children.Add(opacityAnimation);
-        _pageEntranceStoryboard.Begin();
+        Storyboard.SetTarget(slide, PageContentPresenter.RenderTransform);
+        Storyboard.SetTargetProperty(slide, "TranslateY");
+        Storyboard.SetTarget(fade, PageContentPresenter);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        _contentEntranceStoryboard = new Storyboard { FillBehavior = FillBehavior.Stop };
+        _contentEntranceStoryboard.Children.Add(slide);
+        _contentEntranceStoryboard.Children.Add(fade);
+        _contentEntranceStoryboard.Begin();
     }
 
     private void ShowConnectedLayout()
     {
+        var shouldAnimate = !_isSessionLayout && _hasDisplayedPage;
         _isSessionLayout = true;
         ApplyContentSpacing();
         PageContentPresenter.Visibility = Visibility.Collapsed;
@@ -400,10 +455,17 @@ public sealed partial class MainWindow : Window
         TransfersNavItem.Visibility = Visibility.Visible;
         ConnectedSidebar.Visibility = Visibility.Visible;
         ConnectedSidebar.SetPaneOpen(RootNavigationView.IsPaneOpen);
+        if (shouldAnimate)
+            PlayContentEntranceAnimation(SessionContentPresenter);
     }
 
-    private void ShowUnconnectedLayout(string page)
+    private void ShowUnconnectedLayout(string page, bool drillIn = false)
     {
+        if (_isSessionLayout)
+        {
+            StopContentEntranceAnimation();
+            _currentPage = null;
+        }
         _isSessionLayout = false;
         ApplyContentSpacing();
         PageContentPresenter.Visibility = Visibility.Visible;
@@ -416,13 +478,15 @@ public sealed partial class MainWindow : Window
         _transferFlyout.Hide();
         TransfersNavItem.Visibility = Visibility.Collapsed;
         ConnectedSidebar.Visibility = Visibility.Collapsed;
+        // Render with the requested motion before selection raises a duplicate
+        // NavigateTo call, so the add button retains its DrillIn transition.
+        NavigateTo(page, drillIn);
         RootNavigationView.SelectedItem = page switch
         {
             "servers" => ServersNavItem,
             "settings" => SettingsNavItem,
             _ => OverviewNavItem
         };
-        NavigateTo(page);
     }
 
     private void RootNavigationView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)

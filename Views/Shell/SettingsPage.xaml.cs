@@ -128,10 +128,10 @@ public sealed partial class SettingsPage : UserControl
             card?.Focus(FocusState.Programmatic);
         }
         else SettingsBreadcrumb.Focus(FocusState.Programmatic);
-        AnimateNavigation(target, key is null);
+        AnimateNavigation(target);
     }
 
-    private void AnimateNavigation(FrameworkElement target, bool back)
+    private void AnimateNavigation(FrameworkElement target)
     {
         _animatedPage = target;
         if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled) return;
@@ -140,7 +140,7 @@ public sealed partial class SettingsPage : UserControl
         var easing = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut };
         var slide = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
         {
-            From = back ? -24 : 24, To = 0, Duration = TimeSpan.FromMilliseconds(220), EasingFunction = easing
+            From = 56, To = 0, Duration = TimeSpan.FromMilliseconds(250), EasingFunction = easing
         };
         var fade = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
         {
@@ -150,7 +150,7 @@ public sealed partial class SettingsPage : UserControl
         Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(slide, "X");
         Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fade, target);
         Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fade, "Opacity");
-        _navigationAnimation = new();
+        _navigationAnimation = new() { FillBehavior = Microsoft.UI.Xaml.Media.Animation.FillBehavior.Stop };
         _navigationAnimation.Children.Add(slide);
         _navigationAnimation.Children.Add(fade);
         _navigationAnimation.Begin();

@@ -31,6 +31,8 @@ internal static class Program
     internal static bool MultiSessionOnly;
     internal static bool TabOverflowOnly;
     internal static bool TransferCenterOnly;
+    internal static bool NavigationAnimationOnly;
+    internal static bool KeepAnimationPreview;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -43,6 +45,8 @@ internal static class Program
         MultiSessionOnly = args.Contains("--multi-session-smoke");
         TabOverflowOnly = args.Contains("--tab-overflow-smoke");
         TransferCenterOnly = args.Contains("--transfer-center-smoke");
+        NavigationAnimationOnly = args.Contains("--navigation-animation-smoke");
+        KeepAnimationPreview = args.Contains("--keep-animation-preview");
         try
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
@@ -78,6 +82,11 @@ internal sealed partial class SmokeApp : App
         };
         try
         {
+            if (Program.NavigationAnimationOnly)
+            {
+                await VerifyNavigationAnimationAsync();
+                return;
+            }
             if (Program.LocalFileMenuOnly)
             {
                 await VerifyLocalFileMenuAsync();
