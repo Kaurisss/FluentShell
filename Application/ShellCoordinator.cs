@@ -52,7 +52,8 @@ public sealed record AppSettingsUpdate(
     string? DownloadDirectory = null,
     TerminalColors? TerminalColors = null,
     UserPreferences? Preferences = null,
-    AppSettings? Replacement = null);
+    AppSettings? Replacement = null,
+    TextEditorPreferences? TextEditor = null);
 public sealed class ShellCoordinator
 {
     private readonly ILocalStore _localStore;
@@ -218,11 +219,12 @@ public sealed class ShellCoordinator
             {
                 Theme = source.Theme, BackdropMaterial = source.BackdropMaterial,
                 TerminalFontSize = source.TerminalFontSize, TerminalColors = source.TerminalColors,
-                Preferences = source.Preferences, DownloadDirectory = source.DownloadDirectory,
+                Preferences = source.Preferences, TextEditor = source.TextEditor, DownloadDirectory = source.DownloadDirectory,
                 HasCustomDownloadDirectory = source.HasCustomDownloadDirectory
             };
             if (update.Replacement is not null) next = SettingsBackup.Normalize(next);
             if (update.Preferences is not null) next.Preferences = update.Preferences.Normalize();
+            if (update.TextEditor is not null) next.TextEditor = update.TextEditor.Normalize();
             if (!next.Preferences.HasUniqueShortcuts) throw new ArgumentException("快捷键重复。");
             if (update.TerminalColors is not null) next.TerminalColors = update.TerminalColors.Normalize();
             if (update.Theme is not null) next.Theme = update.Theme;

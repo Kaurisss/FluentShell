@@ -35,8 +35,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
     private readonly SftpWorkspaceView _sftpView;
     private readonly SftpWorkspace _sftpWorkspace;
     private readonly WorkspaceSplitter _splitter = new();
-    private Border? _terminalFrame;
-    private XamlRoot? _terminalXamlRoot;
     private bool _isSftpCollapsed;
     private double _previousTerminalHeight = 65;
     private double _previousSftpHeight = 35;
@@ -179,45 +177,16 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
     private Grid BuildTerminalGrid()
     {
         var grid = new Grid();
-        _terminalFrame = (Border)XamlReader.Load(
-            "<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' BorderThickness='2' BorderBrush='{ThemeResource SubtleStrokeBrush}' CornerRadius='{ThemeResource ControlCornerRadius}' />");
-        _terminalFrame.Child = _terminalPane;
-        _terminalFrame.Loaded += TerminalFrame_Loaded;
-        _terminalFrame.Unloaded += TerminalFrame_Unloaded;
-        grid.Children.Add(_terminalFrame);
+        // Match the native input/file-grid outline in DIPs; WinUI handles DPI scaling.
+        var terminalFrame = (Border)XamlReader.Load(
+            "<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' BorderThickness='{ThemeResource TextControlBorderThemeThickness}' BorderBrush='{ThemeResource SubtleStrokeBrush}' CornerRadius='{ThemeResource ControlCornerRadius}' />");
+        terminalFrame.Child = _terminalPane;
+        grid.Children.Add(terminalFrame);
         _splitter.Height = TerminalBottomDragHeight;
         _splitter.VerticalAlignment = VerticalAlignment.Bottom;
         Canvas.SetZIndex(_splitter, 1);
         grid.Children.Add(_splitter);
         return grid;
-    }
-
-    private void TerminalFrame_Loaded(object sender, RoutedEventArgs e)
-    {
-        DetachTerminalXamlRoot();
-        _terminalXamlRoot = _terminalFrame?.XamlRoot;
-        if (_terminalXamlRoot is not null)
-            _terminalXamlRoot.Changed += TerminalXamlRoot_Changed;
-        UpdateTerminalBorderThickness();
-    }
-
-    private void TerminalFrame_Unloaded(object sender, RoutedEventArgs e) => DetachTerminalXamlRoot();
-
-    private void TerminalXamlRoot_Changed(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateTerminalBorderThickness();
-
-    private void UpdateTerminalBorderThickness()
-    {
-        // BorderThickness is measured in DIPs; keep the stroke at two physical
-        // pixels when Windows scales the window or moves it to another display.
-        if (_terminalFrame is not null && _terminalXamlRoot is not null)
-            _terminalFrame.BorderThickness = new Thickness(2 / _terminalXamlRoot.RasterizationScale);
-    }
-
-    private void DetachTerminalXamlRoot()
-    {
-        if (_terminalXamlRoot is not null)
-            _terminalXamlRoot.Changed -= TerminalXamlRoot_Changed;
-        _terminalXamlRoot = null;
     }
 
     private void Connection_Output(object? sender, string text) =>
@@ -353,12 +322,6 @@ public sealed class SessionWorkspace : UserControl, IShellSession, IShellSession
         _splitter.DragStarted -= Splitter_DragStarted;
         _splitter.DragDelta -= Splitter_DragDelta;
         _splitter.DoubleTapped -= Splitter_DoubleTapped;
-        if (_terminalFrame is not null)
-        {
-            _terminalFrame.Loaded -= TerminalFrame_Loaded;
-            _terminalFrame.Unloaded -= TerminalFrame_Unloaded;
-        }
-        DetachTerminalXamlRoot();
         _terminalPane.Dispose();
         _sftpWorkspace.Dispose();
     }

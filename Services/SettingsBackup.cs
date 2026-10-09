@@ -22,6 +22,7 @@ public static class SettingsBackup
         settings.TerminalFontSize = double.IsFinite(settings.TerminalFontSize) ? Math.Clamp(settings.TerminalFontSize, 11, 24) : 14;
         settings.TerminalColors = (settings.TerminalColors ?? new()).Normalize();
         settings.Preferences = (settings.Preferences ?? new()).Normalize();
+        settings.TextEditor = (settings.TextEditor ?? new()).Normalize();
         if (!settings.Preferences.HasUniqueShortcuts) settings.Preferences = settings.Preferences with
         { NewSessionKey = "T", CloseSessionKey = "W", NextSessionKey = "N", SearchTerminalKey = "F", ToggleFilesKey = "E" };
         if (string.IsNullOrWhiteSpace(settings.DownloadDirectory) || !Path.IsPathFullyQualified(settings.DownloadDirectory))

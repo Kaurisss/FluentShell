@@ -23,6 +23,8 @@ public sealed partial class TextFileEditorWindow : Window
     private readonly CancellationToken _token;
     private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly FrameworkElement? _ownerRoot;
+    private readonly long _ownerBackdropToken;
+    private bool _editorPreferencesReady;
     private TextFileDocument? _document;
     private bool _saving;
     private bool _closed;
@@ -46,10 +48,15 @@ public sealed partial class TextFileEditorWindow : Window
         _remote = remote;
         _token = _lifetime.Token;
         InitializeComponent();
-        SystemBackdrop = new MicaBackdrop();
         _ownerRoot = ownerRoot.Content as FrameworkElement;
-        if (_ownerRoot is not null) _ownerRoot.ActualThemeChanged += OwnerTheme_Changed;
+        if (_ownerRoot is not null)
+        {
+            _ownerRoot.ActualThemeChanged += OwnerTheme_Changed;
+            _ownerBackdropToken = _ownerRoot.RegisterPropertyChangedCallback(WindowBackdrop.MaterialProperty, OwnerBackdrop_Changed);
+        }
         ApplyTheme();
+        ApplyBackdrop();
+        LoadEditorPreferences();
         RootGrid.ActualThemeChanged += RootTheme_Changed;
         PathText.Text = $"{(remote ? "远程文件" : "本地文件")} · {path}";
         ToolTipService.SetToolTip(PathText, path);
@@ -92,12 +99,43 @@ public sealed partial class TextFileEditorWindow : Window
         _ => ""
     };
 
-    private void OwnerTheme_Changed(FrameworkElement sender, object args) => ApplyTheme();
+    private void OwnerTheme_Changed(FrameworkElement sender, object args) => DispatcherQueue.TryEnqueue(() => { if (!_closed) ApplyTheme(); });
+    private void OwnerBackdrop_Changed(DependencyObject sender, DependencyProperty property) => DispatcherQueue.TryEnqueue(() => { if (!_closed) ApplyBackdrop(); });
+    private void ApplyBackdrop() => WindowBackdrop.Apply(this, _ownerRoot is null ? "Mica" : WindowBackdrop.GetMaterial(_ownerRoot));
     private void RootTheme_Changed(FrameworkElement sender, object args) => WindowChrome.ApplyTitleBarColors(AppWindow, RootGrid.ActualTheme, "系统");
     private void ApplyTheme()
     {
         if (_ownerRoot is not null) RootGrid.RequestedTheme = _ownerRoot.ActualTheme;
         WindowChrome.ApplyTitleBarColors(AppWindow, RootGrid.ActualTheme, "系统");
+    }
+
+    private void LoadEditorPreferences()
+    {
+        var preferences = TextEditorSettings.GetPreferences(_ownerRoot);
+        ReadOnlyBox.IsChecked = preferences.ReadOnly;
+        WrapBox.IsChecked = preferences.WordWrap;
+        LineNumbersBox.IsChecked = preferences.ShowLineNumbers;
+        WhitespaceBox.IsChecked = preferences.ShowWhitespace;
+        IndentWidthBox.SelectedIndex = preferences.IndentWidth switch { 2 => 0, 8 => 2, _ => 1 };
+        UseTabsBox.IsChecked = preferences.UseTabs;
+        _editorPreferencesReady = true;
+    }
+
+    private async void SaveEditorPreferences()
+    {
+        if (!_editorPreferencesReady || _closed) return;
+        var preferences = new TextEditorPreferences
+        {
+            ReadOnly = ReadOnlyBox.IsChecked == true, WordWrap = WrapBox.IsChecked == true,
+            ShowLineNumbers = LineNumbersBox.IsChecked == true, ShowWhitespace = WhitespaceBox.IsChecked == true,
+            IndentWidth = IndentWidthBox.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 }, UseTabs = UseTabsBox.IsChecked == true
+        };
+        try { await TextEditorSettings.SaveAsync(_ownerRoot, preferences); }
+        catch (Exception exception)
+        {
+            DiagnosticLog.Record("TextEditorSettingsSaveFailed");
+            if (!_closed) ShowNotice($"编辑器设置保存失败：{exception.Message}", InfoBarSeverity.Error);
+        }
     }
 
     private async void Root_Loaded(object sender, RoutedEventArgs args)
@@ -207,7 +245,11 @@ public sealed partial class TextFileEditorWindow : Window
         _lifetime.Cancel();
         _lifetime.Dispose();
         AppWindow.Closing -= Window_Closing;
-        if (_ownerRoot is not null) _ownerRoot.ActualThemeChanged -= OwnerTheme_Changed;
+        if (_ownerRoot is not null)
+        {
+            _ownerRoot.ActualThemeChanged -= OwnerTheme_Changed;
+            _ownerRoot.UnregisterPropertyChangedCallback(WindowBackdrop.MaterialProperty, _ownerBackdropToken);
+        }
         RootGrid.ActualThemeChanged -= RootTheme_Changed;
         CodeEditor.Editor.Modified -= Editor_Modified;
         CodeEditor.Editor.UpdateUI -= Editor_UpdateUI;
@@ -262,14 +304,20 @@ public sealed partial class TextFileEditorWindow : Window
         editor.ScrollCaret();
         CodeEditor.Focus(FocusState.Programmatic);
     }
-    private void ReadOnly_Changed(object sender, RoutedEventArgs args) { if (CodeEditor is not null && FileStatus is not null) UpdateState(); }
+    private void ReadOnly_Changed(object sender, RoutedEventArgs args)
+    {
+        if (CodeEditor is not null && FileStatus is not null) UpdateState();
+        SaveEditorPreferences();
+    }
     private void Wrap_Changed(object sender, RoutedEventArgs args)
     {
         if (CodeEditor is not null) CodeEditor.Editor.WrapMode = WrapBox.IsChecked == true ? Wrap.Word : Wrap.None;
+        SaveEditorPreferences();
     }
     private void LineNumbers_Changed(object sender, RoutedEventArgs args)
     {
         if (CodeEditor is not null) ApplyLineNumberVisibility();
+        SaveEditorPreferences();
     }
     private void ApplyLineNumberVisibility()
     {
@@ -303,9 +351,18 @@ public sealed partial class TextFileEditorWindow : Window
     private void Whitespace_Changed(object sender, RoutedEventArgs args)
     {
         if (CodeEditor is not null) CodeEditor.Editor.ViewWS = WhitespaceBox.IsChecked == true ? WhiteSpace.VisibleAlways : WhiteSpace.Invisible;
+        SaveEditorPreferences();
     }
-    private void IndentWidth_Changed(object sender, SelectionChangedEventArgs args) { if (CodeEditor is not null) ApplyIndentationSettings(); }
-    private void UseTabs_Changed(object sender, RoutedEventArgs args) { if (CodeEditor is not null) ApplyIndentationSettings(); }
+    private void IndentWidth_Changed(object sender, SelectionChangedEventArgs args)
+    {
+        if (CodeEditor is not null) ApplyIndentationSettings();
+        SaveEditorPreferences();
+    }
+    private void UseTabs_Changed(object sender, RoutedEventArgs args)
+    {
+        if (CodeEditor is not null) ApplyIndentationSettings();
+        SaveEditorPreferences();
+    }
     private void ApplyIndentationSettings()
     {
         var width = IndentWidthBox.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 };

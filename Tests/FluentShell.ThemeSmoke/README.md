@@ -4,6 +4,11 @@ For the four window material options, pass `--backdrop-materials-smoke`. It
 exercises the production settings page and MainWindow with an isolated temporary
 store, checks Mica, Mica Alt, Acrylic and Acrylic Thin in both themes, restores
 the selected option after reload, and verifies Thin controller disposal on changes.
+Local and remote editor windows inherit the selected material at opening, follow
+live changes with independent controllers, preserve unsaved drafts, and detach
+their appearance notifications on close.
+The check also persists all six editor options through the coordinator, reloads
+them from disk, and verifies the native controls in newly opened local/remote editors.
 It captures the appearance settings with each material; no user data is loaded.
 
 For the production SSH session integration, pass `--session-backdrop-smoke`.
@@ -13,9 +18,10 @@ resize, background output, tab switching, settings detach/reattach, SFTP collaps
 dialogs, the connection overlay, constrained navigation, and disposal. It captures
 Mica/Acrylic in both themes, measures the actual opaque/material screen pixels, and
 compares terminal and adjacent ContentRoot pixels for the same surface tint.
-It also measures the terminal's two physical border pixels on every edge at the
-current display scaling, and checks matching path/grid border brushes in both
-themes, including path-input hover and the native focused accent underline.
+It also checks that the terminal and file grids share the path inputs' native
+1-DIP outline, with automatic DPI scaling and pixel-aligned layout, and checks
+matching border brushes in both themes, including path-input hover and the native
+focused accent underline.
 For appearance-only changes, use `--session-appearance-smoke` instead. It checks
 the same real session controls, rounded corner pixels and hidden scrollbar with
 scrollback/wheel events, without injecting native pointer or keyboard input.

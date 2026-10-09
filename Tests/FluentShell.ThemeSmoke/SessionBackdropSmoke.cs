@@ -71,6 +71,25 @@ internal sealed partial class SmokeApp
                 }
             }
         }
+        async Task<Func<int, int, uint>> ScreenPixels(string phase)
+        {
+            await Screen(phase);
+            using var imageFile = File.OpenRead(Program.ReportPath + $".{phase}.png");
+            using var imageStream = imageFile.AsRandomAccessStream();
+            var decoder = await BitmapDecoder.CreateAsync(imageStream);
+            var width = (int)decoder.PixelWidth;
+            var imageData = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight,
+                new BitmapTransform(), ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage)).DetachPixelData();
+            Check(BackdropGetWindowRect(hwnd, out var windowBounds) &&
+                width == windowBounds.Right - windowBounds.Left &&
+                decoder.PixelHeight == windowBounds.Bottom - windowBounds.Top,
+                "Screen capture matches the verification window's physical bounds");
+            return (x, y) =>
+            {
+                var offset = checked(((y - windowBounds.Top) * width + x - windowBounds.Left) * 4);
+                return (uint)(imageData[offset + 2] | imageData[offset + 1] << 8 | imageData[offset] << 16);
+            };
+        }
         // The production page is inspected, rather than a second test implementation.
         async Task<string?> ReadScript(WebView2 web, string script) =>
             JsonSerializer.Deserialize<string>(await web.CoreWebView2.ExecuteScriptAsync(script));
@@ -139,15 +158,29 @@ internal sealed partial class SmokeApp
             thickness = terminalFrame.BorderThickness.Left, origin = new { terminalOrigin.X, terminalOrigin.Y },
             frame = new { terminalFrame.ActualWidth, terminalFrame.ActualHeight },
             terminal = new { firstTerminal.ActualWidth, firstTerminal.ActualHeight } });
-        Check(Math.Abs(terminalFrame.BorderThickness.Left * scale - 2) < 0.001 &&
-            Math.Abs(terminalOrigin.X * scale - 2) < 0.1 && Math.Abs(terminalOrigin.Y * scale - 2) < 0.1 &&
-            Math.Abs((terminalFrame.ActualWidth - firstTerminal.ActualWidth) * scale - 4) < 0.1 &&
-            Math.Abs((terminalFrame.ActualHeight - firstTerminal.ActualHeight) * scale - 4) < 0.1,
-            $"Terminal frame occupies exactly 2 physical pixels on all four sides at {scale:P0} scaling");
         var sftp = Field<SftpWorkspaceView>(first, "_sftpView");
         var pathFields = new[] { (TextBox)sftp.FindName("LocalPathBox"), (TextBox)sftp.FindName("PathBox") };
         var tables = new[] { (Control)sftp.FindName("LocalFiles"), (Control)sftp.FindName("RemoteTable") };
         var tableFrames = new[] { (Border)sftp.FindName("LocalFilesFrame"), (Border)sftp.FindName("RemoteTableFrame") };
+        double[] BorderInsets(Border frame, FrameworkElement child)
+        {
+            var origin = child.TransformToVisual(frame).TransformPoint(new Windows.Foundation.Point());
+            var rasterizationScale = root.XamlRoot.RasterizationScale;
+            return [origin.X * rasterizationScale,
+                (frame.ActualWidth - origin.X - child.ActualWidth) * rasterizationScale, origin.Y * rasterizationScale,
+                (frame.ActualHeight - origin.Y - child.ActualHeight) * rasterizationScale];
+        }
+        var terminalInsets = BorderInsets(terminalFrame, firstTerminal);
+        var tableInsets = tableFrames.Select((frame, index) => BorderInsets(frame, tables[index])).ToArray();
+        Check(terminalFrame.BorderThickness == new Thickness(1) &&
+            pathFields.All(path => path.BorderThickness == terminalFrame.BorderThickness) &&
+            tableFrames.All(frame => frame.BorderThickness == terminalFrame.BorderThickness),
+            "Terminal, path inputs and file-grid frames share the native one-DIP border thickness");
+        Check(terminalInsets.All(inset => Math.Abs(inset - Math.Round(inset)) < 0.1 &&
+                Math.Abs(inset - terminalFrame.BorderThickness.Left * scale) <= 0.51) &&
+            tableInsets.All(insets => insets.Zip(terminalInsets).All(pair => Math.Abs(pair.First - pair.Second) < 0.1)),
+            $"Terminal and file-grid content insets align to the same physical pixels at {scale:P0} scaling");
+        Program.Results.Add(new { control = "native frame content insets", scale, terminalInsets, tableInsets });
         Check(terminalFrame.CornerRadius == pathFields[0].CornerRadius && terminalFrame.CornerRadius.TopLeft > 0 &&
             tableFrames.All(frame => frame.CornerRadius == terminalFrame.CornerRadius) &&
             tables.All(table => table.BorderThickness == new Thickness(0)),
@@ -232,6 +265,9 @@ internal sealed partial class SmokeApp
                     tableFrames.All(frame => frame.BorderBrush is SolidColorBrush brush && brush.Color == stroke) &&
                     pathFields.All(path => path.BorderBrush is SolidColorBrush brush && brush.Color == stroke),
                     "Terminal, both path inputs and both file grids share the current theme's border color");
+                Check(pathFields.All(path => path.BorderThickness == terminalFrame.BorderThickness) &&
+                    tableFrames.All(frame => frame.BorderThickness == terminalFrame.BorderThickness),
+                    "Terminal and file-grid frames follow the current theme's native path-input border thickness");
                 foreach (var path in pathFields)
                 {
                     var border = Descendants(path).OfType<Border>().Single(element => element.Name == "BorderElement");
@@ -256,38 +292,35 @@ internal sealed partial class SmokeApp
                 Check(await ReadScript(firstWeb, "getComputedStyle([...document.querySelectorAll('.xterm-rows span')].find(e=>e.textContent.includes('ANSI'))).backgroundColor") != "rgba(0, 0, 0, 0)",
                     "Explicit remote ANSI cell backgrounds remain opaque");
                 var phase = $"{(acrylic ? "Acrylic" : "Mica")}.{theme}";
-                await Screen(phase);
-                using var imageFile = File.OpenRead(Program.ReportPath + $".{phase}.png");
-                using var imageStream = imageFile.AsRandomAccessStream();
-                var decoder = await BitmapDecoder.CreateAsync(imageStream);
-                var imageData = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight,
-                    new BitmapTransform(), ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage)).DetachPixelData();
-                Check(BackdropGetWindowRect(hwnd, out var windowBounds) &&
-                    decoder.PixelWidth == windowBounds.Right - windowBounds.Left &&
-                    decoder.PixelHeight == windowBounds.Bottom - windowBounds.Top,
-                    "Screen capture matches the verification window's physical bounds");
-                uint Pixel(int x, int y)
-                {
-                    var offset = checked(((y - windowBounds.Top) * (int)decoder.PixelWidth + x - windowBounds.Left) * 4);
-                    return (uint)(imageData[offset + 2] | imageData[offset + 1] << 8 | imageData[offset] << 16);
-                }
+                var Pixel = await ScreenPixels(phase);
                 var topLeft = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(
                     terminalFrame.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point()));
                 var bottomRight = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(
                     terminalFrame.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(terminalFrame.ActualWidth, terminalFrame.ActualHeight)));
+                var contentTopLeft = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(
+                    firstTerminal.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point()));
+                var contentBottomRight = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(
+                    firstTerminal.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(firstTerminal.ActualWidth, firstTerminal.ActualHeight)));
                 var midX = (topLeft.X + bottomRight.X) / 2;
                 var midY = (topLeft.Y + bottomRight.Y) / 2;
+                var strokeWidths = new[] { contentTopLeft.X - topLeft.X, bottomRight.X - contentBottomRight.X,
+                    contentTopLeft.Y - topLeft.Y, bottomRight.Y - contentBottomRight.Y };
+                Check(strokeWidths.All(width => width > 0) &&
+                    strokeWidths.Zip(terminalInsets).All(pair => Math.Abs(pair.First - pair.Second) < 0.1),
+                    "Screen-coordinate stroke widths match the frame's aligned content insets");
                 var edges = new[]
                 {
-                    Enumerable.Range(0, 3).Select(offset => Pixel(topLeft.X + offset, midY)).ToArray(),
-                    Enumerable.Range(0, 3).Select(offset => Pixel(bottomRight.X - 1 - offset, midY)).ToArray(),
-                    Enumerable.Range(0, 3).Select(offset => Pixel(midX, topLeft.Y + offset)).ToArray(),
-                    Enumerable.Range(0, 3).Select(offset => Pixel(midX, bottomRight.Y - 1 - offset)).ToArray()
+                    Enumerable.Range(0, strokeWidths[0] + 2).Select(offset => Pixel(topLeft.X + offset, midY)).ToArray(),
+                    Enumerable.Range(0, strokeWidths[1] + 2).Select(offset => Pixel(bottomRight.X - 1 - offset, midY)).ToArray(),
+                    Enumerable.Range(0, strokeWidths[2] + 2).Select(offset => Pixel(midX, topLeft.Y + offset)).ToArray(),
+                    Enumerable.Range(0, strokeWidths[3] + 2).Select(offset => Pixel(midX, bottomRight.Y - 1 - offset)).ToArray()
                 };
                 Program.Results.Add(new { control = "physical terminal border pixels", scale, theme = theme.ToString(), acrylic,
+                    strokeWidths,
                     edges = edges.Select(edge => edge.Select(pixel => pixel.ToString("X6")).ToArray()).ToArray() });
-                Check(edges.All(edge => BackdropColorDistance(edge[0], edge[1]) <= 1 && BackdropColorDistance(edge[1], edge[2]) > 8),
-                    "Screen pixels show exactly two stroke pixels followed by the terminal surface on every edge");
+                Check(edges.Select((edge, index) => edge.Take(strokeWidths[index]).All(pixel => BackdropColorDistance(pixel, edge[^2]) > 8) &&
+                    BackdropColorDistance(edge[^2], edge[^1]) <= 2).All(passed => passed),
+                    "Screen pixels show the aligned native stroke followed by the terminal surface on every edge");
                 Check(BackdropColorDistance(Pixel(topLeft.X, topLeft.Y), Pixel(topLeft.X - 2, topLeft.Y)) <= 8 &&
                     BackdropColorDistance(Pixel(topLeft.X, topLeft.Y), edges[0][0]) > 8,
                     "Terminal outer corner is rounded in the actual screen capture");
@@ -343,7 +376,7 @@ internal sealed partial class SmokeApp
         typeof(MainWindow).GetMethod("ShowUnconnectedLayout", flags)!.Invoke(window, ["settings", false]);
         await Task.Delay(250, timeout.Token);
         Check(presenter.Visibility == Visibility.Collapsed && presenter.Content is null, "Navigating to settings detaches the terminal");
-        Check(Field<XamlRoot?>(first, "_terminalXamlRoot") is null, "Detached terminal releases the display-scale subscription");
+        Check(!terminalFrame.IsLoaded, "Detached terminal frame leaves the active visual tree");
         var settings = Field<SettingsPage>(window, "_settingsPage");
         typeof(SettingsPage).GetMethod("NavigateCategory", flags)!.Invoke(settings, ["terminal"]);
         await Task.Delay(300, timeout.Token);
@@ -361,9 +394,9 @@ internal sealed partial class SmokeApp
         await Task.Delay(350, timeout.Token);
         Check(firstTerminal.ActualTheme == ElementTheme.Light && await ReadScript(firstWeb, "document.documentElement.style.colorScheme") == "light",
             "Cached terminal inherits the new theme when returning from settings");
-        Check(Field<XamlRoot?>(first, "_terminalXamlRoot") == root.XamlRoot &&
-            Math.Abs(terminalFrame.BorderThickness.Left * root.XamlRoot.RasterizationScale - 2) < 0.001,
-            "Reattached terminal restores its display-scale subscription and two-physical-pixel stroke");
+        Check(terminalFrame.IsLoaded && terminalFrame.BorderThickness == new Thickness(1) &&
+            tableFrames.All(frame => frame.BorderThickness == terminalFrame.BorderThickness),
+            "Reattached terminal retains the file grids' native logical border thickness");
         await Background(firstWeb, "rgba(0, 0, 0, 0)");
         first.ExecuteShortcut("files");
         await Task.Delay(150, timeout.Token);
@@ -374,11 +407,15 @@ internal sealed partial class SmokeApp
             "SFTP restores below the terminal without overlapping it");
 
         var overlay = (FrameworkElement)root.FindName("ConnectionDialogOverlay");
-        var beforeOverlay = BackdropSample(root, firstWeb);
+        var overlayPoint = root.XamlRoot.CoordinateConverter.ConvertLocalToScreen(
+            firstWeb.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(firstWeb.ActualWidth / 2, firstWeb.ActualHeight - 40)));
+        var beforeOverlayPixels = await ScreenPixels("before-connection-overlay");
+        var beforeOverlay = beforeOverlayPixels(overlayPoint.X, overlayPoint.Y);
         overlay.Visibility = Visibility.Visible;
         await Task.Delay(150, timeout.Token);
-        if (!Program.SessionAppearanceOnly) await Screen("connection-overlay");
-        Check(BackdropColorDistance(BackdropSample(root, firstWeb), beforeOverlay) > 8, "Connection overlay participates in XAML z-order above the terminal");
+        var overlayPixels = await ScreenPixels("connection-overlay");
+        Check(BackdropColorDistance(overlayPixels(overlayPoint.X, overlayPoint.Y), beforeOverlay) > 8,
+            "Connection overlay participates in XAML z-order above the terminal");
         overlay.Visibility = Visibility.Collapsed;
         var dialog = new ContentDialog { XamlRoot = root.XamlRoot, Title = "会话材质回归", Content = "终端会话保持连接", CloseButtonText = "关闭" };
         var showing = dialog.ShowAsync();
@@ -401,7 +438,6 @@ internal sealed partial class SmokeApp
         foreach (var session in new[] { first, second })
             typeof(ShellCoordinator).GetMethod("UnsubscribeSession", flags)!.Invoke(shell, [session]);
         Check(firstConnection.Disposed && secondConnection.Disposed && !Field<bool>(firstTerminal, "_ready"), "Closing sessions releases transports and WebView lifetimes");
-        Check(Field<XamlRoot?>(first, "_terminalXamlRoot") is null, "Closing the terminal releases the display-scale subscription");
         window.Close();
         Program.Finish();
     }

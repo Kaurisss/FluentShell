@@ -100,7 +100,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <TextBox Style="{StaticResource SftpPathInputStyle}" x:Name="LocalPathBox" PlaceholderText="本地路径" KeyDown="LocalPath_KeyDown" AutomationProperties.Name="本地路径" />
-            <Border x:Name="LocalFilesFrame" Grid.Row="1" BorderThickness="1"
+            <Border x:Name="LocalFilesFrame" Grid.Row="1" BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
                     BorderBrush="{ThemeResource SubtleStrokeBrush}" CornerRadius="{ThemeResource ControlCornerRadius}">
             <syncfusion:SfDataGrid
                 x:Name="LocalFiles" BorderThickness="0"
@@ -147,7 +147,7 @@
             </StackPanel>
         </Grid>
 
-        <Border x:Name="RemoteTableFrame" Grid.Row="1" BorderThickness="1"
+        <Border x:Name="RemoteTableFrame" Grid.Row="1" BorderThickness="{ThemeResource TextControlBorderThemeThickness}"
                 BorderBrush="{ThemeResource SubtleStrokeBrush}" CornerRadius="{ThemeResource ControlCornerRadius}">
         <syncfusion:SfDataGrid
             x:Name="RemoteTable"
